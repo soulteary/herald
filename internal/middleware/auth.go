@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -63,7 +62,7 @@ func RequireAuth() fiber.Handler {
 			// Verify HMAC signature
 			body := string(c.Body())
 			expectedSig := computeHMAC(timestamp, service, body, config.HMACSecret)
-			
+
 			if !hmac.Equal([]byte(signature), []byte(expectedSig)) {
 				logrus.Debugf("HMAC signature mismatch. Expected: %s, Got: %s", expectedSig, signature)
 				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{

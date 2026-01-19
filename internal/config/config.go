@@ -28,15 +28,15 @@ var (
 	APIKey = getEnv("API_KEY", "")
 
 	// Challenge config
-	ChallengeExpiry    = getEnvDuration("CHALLENGE_EXPIRY", 5*time.Minute)
-	MaxAttempts        = getEnvInt("MAX_ATTEMPTS", 5)
-	ResendCooldown     = getEnvDuration("RESEND_COOLDOWN", 60*time.Second)
-	CodeLength         = getEnvInt("CODE_LENGTH", 6)
-	LockoutDuration    = getEnvDuration("LOCKOUT_DURATION", 10*time.Minute)
+	ChallengeExpiry = getEnvDuration("CHALLENGE_EXPIRY", 5*time.Minute)
+	MaxAttempts     = getEnvInt("MAX_ATTEMPTS", 5)
+	ResendCooldown  = getEnvDuration("RESEND_COOLDOWN", 60*time.Second)
+	CodeLength      = getEnvInt("CODE_LENGTH", 6)
+	LockoutDuration = getEnvDuration("LOCKOUT_DURATION", 10*time.Minute)
 
 	// Rate limiting config
-	RateLimitPerUser      = getEnvInt("RATE_LIMIT_PER_USER", 10)        // per hour
-	RateLimitPerIP        = getEnvInt("RATE_LIMIT_PER_IP", 5)           // per minute
+	RateLimitPerUser        = getEnvInt("RATE_LIMIT_PER_USER", 10)        // per hour
+	RateLimitPerIP          = getEnvInt("RATE_LIMIT_PER_IP", 5)           // per minute
 	RateLimitPerDestination = getEnvInt("RATE_LIMIT_PER_DESTINATION", 10) // per hour
 
 	// Provider config
@@ -47,14 +47,14 @@ var (
 	SMTPFrom     = getEnv("SMTP_FROM", "")
 
 	// SMS Provider config (example: Aliyun)
-	SMSProvider     = getEnv("SMS_PROVIDER", "") // "aliyun", "tencent", etc.
-	AliyunAccessKey = getEnv("ALIYUN_ACCESS_KEY", "")
-	AliyunSecretKey = getEnv("ALIYUN_SECRET_KEY", "")
-	AliyunSignName  = getEnv("ALIYUN_SIGN_NAME", "")
+	SMSProvider        = getEnv("SMS_PROVIDER", "") // "aliyun", "tencent", etc.
+	AliyunAccessKey    = getEnv("ALIYUN_ACCESS_KEY", "")
+	AliyunSecretKey    = getEnv("ALIYUN_SECRET_KEY", "")
+	AliyunSignName     = getEnv("ALIYUN_SIGN_NAME", "")
 	AliyunTemplateCode = getEnv("ALIYUN_TEMPLATE_CODE", "")
 
 	// Service authentication (HMAC)
-	HMACSecret = getEnv("HMAC_SECRET", "")
+	HMACSecret  = getEnv("HMAC_SECRET", "")
 	ServiceName = getEnv("SERVICE_NAME", "herald")
 )
 

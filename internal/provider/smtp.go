@@ -80,12 +80,12 @@ func FormatVerificationEmail(code string, locale string) (subject, body string) 
 	// Simple template - can be enhanced with i18n
 	subject = "Verification Code"
 	body = fmt.Sprintf("Your verification code is: %s\n\nThis code will expire in 5 minutes.", code)
-	
+
 	// Add locale-specific formatting if needed
 	if strings.HasPrefix(locale, "zh") {
 		subject = "验证码"
 		body = fmt.Sprintf("您的验证码是：%s\n\n此验证码将在5分钟后过期。", code)
 	}
-	
+
 	return subject, body
 }

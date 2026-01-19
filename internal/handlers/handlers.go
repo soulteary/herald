@@ -80,7 +80,7 @@ func (h *Handlers) HealthCheck(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"status": "ok",
+		"status":  "ok",
 		"service": "herald",
 	})
 }
@@ -90,10 +90,10 @@ type CreateChallengeRequest struct {
 	UserID      string `json:"user_id"`
 	Channel     string `json:"channel"` // "sms" | "email"
 	Destination string `json:"destination"`
-	Purpose      string `json:"purpose"`
-	Locale       string `json:"locale"`
-	ClientIP     string `json:"client_ip"`
-	UA           string `json:"ua"`
+	Purpose     string `json:"purpose"`
+	Locale      string `json:"locale"`
+	ClientIP    string `json:"client_ip"`
+	UA          string `json:"ua"`
 }
 
 // CreateChallenge handles challenge creation
@@ -236,9 +236,9 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 
 	// Return response
 	return c.JSON(fiber.Map{
-		"challenge_id":    ch.ID,
-		"expires_in":      int(config.ChallengeExpiry.Seconds()),
-		"next_resend_in":  int(config.ResendCooldown.Seconds()),
+		"challenge_id":   ch.ID,
+		"expires_in":     int(config.ChallengeExpiry.Seconds()),
+		"next_resend_in": int(config.ResendCooldown.Seconds()),
 	})
 }
 
@@ -287,7 +287,7 @@ func (h *Handlers) VerifyChallenge(c *fiber.Ctx) error {
 	valid, ch, err := h.challengeManager.VerifyChallenge(ctx, req.ChallengeID, req.Code, req.ClientIP)
 	if err != nil {
 		logrus.Debugf("Challenge verification failed: %v", err)
-		
+
 		// Determine error reason
 		reason := "verification_failed"
 		errStr := err.Error()

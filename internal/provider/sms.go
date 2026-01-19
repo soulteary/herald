@@ -30,7 +30,7 @@ func (p *SMSProvider) Validate() error {
 	if p.provider == "" {
 		return fmt.Errorf("SMS_PROVIDER is not configured")
 	}
-	
+
 	// Validate provider-specific configs
 	switch p.provider {
 	case "aliyun":
@@ -43,7 +43,7 @@ func (p *SMSProvider) Validate() error {
 	default:
 		return fmt.Errorf("unsupported SMS provider: %s", p.provider)
 	}
-	
+
 	return nil
 }
 
@@ -78,7 +78,7 @@ func (p *SMSProvider) sendAliyunSMS(ctx context.Context, msg *Message) error {
 	//     TemplateCode: config.AliyunTemplateCode,
 	//     TemplateParam: fmt.Sprintf(`{"code":"%s"}`, msg.Code),
 	// })
-	
+
 	// Placeholder: just log for now
 	fmt.Printf("[PLACEHOLDER] Would send SMS to %s with code: %s\n", msg.To, msg.Code)
 	return nil
@@ -88,10 +88,10 @@ func (p *SMSProvider) sendAliyunSMS(ctx context.Context, msg *Message) error {
 func FormatVerificationSMS(code string, locale string) string {
 	// Simple template - can be enhanced with i18n
 	message := fmt.Sprintf("Your verification code is: %s. Valid for 5 minutes.", code)
-	
+
 	if locale == "zh-CN" || locale == "zh" {
 		message = fmt.Sprintf("您的验证码是：%s，5分钟内有效。", code)
 	}
-	
+
 	return message
 }

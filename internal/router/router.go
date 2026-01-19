@@ -1,6 +1,8 @@
 package router
 
 import (
+	"context"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
@@ -36,7 +38,7 @@ func NewRouter() *fiber.App {
 	})
 
 	// Test Redis connection
-	if err := redisClient.Ping(redisClient.Context()).Err(); err != nil {
+	if err := redisClient.Ping(context.Background()).Err(); err != nil {
 		logrus.Fatalf("Failed to connect to Redis: %v", err)
 	}
 
@@ -48,7 +50,7 @@ func NewRouter() *fiber.App {
 
 	// API routes
 	api := app.Group("/v1")
-	
+
 	// OTP routes
 	otp := api.Group("/otp")
 	otp.Post("/challenges", middleware.RequireAuth(), h.CreateChallenge)

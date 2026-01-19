@@ -20,7 +20,7 @@ func main() {
 	// Create and start server
 	app := router.NewRouter()
 	port := config.GetPort()
-	
+
 	logrus.Infof("Herald service starting on port %s", port)
 	if err := app.Listen(port); err != nil {
 		logrus.Fatalf("Failed to start server: %v", err)

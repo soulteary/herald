@@ -35,9 +35,9 @@ type Challenge struct {
 
 // ChallengeResponse represents the response when creating a challenge
 type ChallengeResponse struct {
-	ChallengeID   string `json:"challenge_id"`
-	ExpiresIn     int    `json:"expires_in"`      // seconds
-	NextResendIn  int    `json:"next_resend_in"` // seconds
+	ChallengeID  string `json:"challenge_id"`
+	ExpiresIn    int    `json:"expires_in"`     // seconds
+	NextResendIn int    `json:"next_resend_in"` // seconds
 }
 
 // Manager handles challenge operations
