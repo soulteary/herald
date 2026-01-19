@@ -11,36 +11,36 @@ env:
   DOCKER_BUILDKIT: 1
 
 jobs:
-  # 代码格式检查
+  # Code formatting check
   fmt:
-    name: 代码格式检查
+    name: Code Formatting Check
     runs-on: ubuntu-latest
     steps:
-      - name: 检出代码
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: 设置 Go 环境
+      - name: Set up Go environment
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: 检查代码格式
+      - name: Check code formatting
         run: |
           if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
-            echo "以下文件格式不正确:"
+            echo "The following files have incorrect formatting:"
             gofmt -s -d .
             exit 1
           fi
 
-  # 代码静态检查
+  # Code static analysis
   vet:
-    name: 代码静态检查
+    name: Code Static Analysis
     runs-on: ubuntu-latest
     steps:
-      - name: 检出代码
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: 设置 Go 环境
+      - name: Set up Go environment
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -55,24 +55,24 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: 下载依赖
+      - name: Download dependencies
         run: go mod download
 
-      - name: 运行 go vet
+      - name: Run go vet
         run: go vet ./...
 
-  # 代码测试
+  # Code testing
   test:
-    name: 代码测试
+    name: Code Testing
     runs-on: ubuntu-latest
     strategy:
       matrix:
         go-version: ['1.25']
     steps:
-      - name: 检出代码
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: 设置 Go 环境
+      - name: Set up Go environment
         uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
@@ -87,66 +87,66 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: 下载依赖
+      - name: Download dependencies
         run: go mod download
 
-      - name: 运行测试
+      - name: Run tests
         run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
 
-      - name: 生成覆盖率报告
+      - name: Generate coverage report
         run: go tool cover -html=coverage.out -o coverage.html
 
-      - name: 上传覆盖率报告
+      - name: Upload coverage report
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: coverage.html
 
-      - name: 显示覆盖率摘要
+      - name: Display coverage summary
         run: go tool cover -func=coverage.out
 
-  # 代码质量检查（使用 golangci-lint）
+  # Code quality check (using golangci-lint)
   lint:
-    name: 代码质量检查
+    name: Code Quality Check
     runs-on: ubuntu-latest
     steps:
-      - name: 检出代码
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: 设置 Go 环境（临时使用 1.24 以匹配 golangci-lint）
+      - name: Set up Go environment (temporarily use 1.24 to match golangci-lint)
         uses: actions/setup-go@v5
         with:
           go-version: '1.24'
 
-      - name: 临时修改 go.mod 以匹配 golangci-lint 的 Go 版本
+      - name: Temporarily modify go.mod to match golangci-lint's Go version
         run: |
           cp go.mod go.mod.backup
           sed -i 's/^go 1\.25$/go 1.24/' go.mod
 
-      - name: 下载依赖
+      - name: Download dependencies
         run: go mod download
 
-      - name: 运行 golangci-lint
+      - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
           version: latest
           args: --timeout=5m
           only-new-issues: false
 
-      - name: 恢复 go.mod
+      - name: Restore go.mod
         if: always()
         run: |
           mv go.mod.backup go.mod
 
-  # 依赖项安全扫描
+  # Dependency security scan
   security-scan:
-    name: 依赖项安全扫描
+    name: Dependency Security Scan
     runs-on: ubuntu-latest
     steps:
-      - name: 检出代码
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: 设置 Go 环境
+      - name: Set up Go environment
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -161,35 +161,35 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: 下载依赖
+      - name: Download dependencies
         run: go mod download
 
-      - name: 安装 govulncheck
+      - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
-      - name: 运行安全扫描
+      - name: Run security scan
         run: govulncheck ./...
 
-  # Docker 构建
+  # Docker build
   docker-build:
-    name: Docker 构建
+    name: Docker Build
     runs-on: ubuntu-latest
     needs: [test]
     steps:
-      - name: 检出代码
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: 设置 Docker Buildx
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: 获取版本信息
+      - name: Get version information
         id: version
         run: |
           VERSION="dev-$(git rev-parse --short HEAD)"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "最近版本: $VERSION"
+          echo "Latest version: $VERSION"
 
-      - name: 构建 Docker 镜像
+      - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -200,24 +200,24 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: 验证镜像
+      - name: Verify image
         run: |
           docker images herald:test
           docker inspect herald:test
 
-  # 完整构建检查
+  # Full build check
   build:
-    name: 构建检查
+    name: Build Check
     runs-on: ubuntu-latest
     strategy:
       matrix:
         go-version: ['1.25']
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      - name: 检出代码
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: 设置 Go 环境
+      - name: Set up Go environment
         uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
@@ -232,34 +232,34 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: 下载依赖
+      - name: Download dependencies
         run: go mod download
 
-      - name: 获取版本信息
+      - name: Get version information
         id: version
         run: |
           VERSION="dev-$(git rev-parse --short HEAD)"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: 构建项目
+      - name: Build project
         run: |
           VERSION=${{ steps.version.outputs.version }}
           LDFLAGS="-s -w -X github.com/soulteary/herald/internal/config.Version=${VERSION}"
           CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o herald${{ matrix.os == 'windows-latest' && '.exe' || '' }} ./main.go
 
-      - name: 验证构建产物
+      - name: Verify build artifacts
         if: matrix.os == 'ubuntu-latest'
         run: |
           if [ -f herald ]; then
-            echo "构建成功，文件存在"
+            echo "Build successful, file exists"
             ls -lh herald
             file herald
           else
-            echo "构建失败，文件不存在"
+            echo "Build failed, file does not exist"
             exit 1
           fi
 
-      - name: 上传构建产物
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: herald-binary-${{ matrix.os }}
