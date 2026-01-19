@@ -25,8 +25,8 @@ go build -o herald main.go
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
-| `PORT` | Server port | `:8082` | No |
-| `REDIS_ADDR` | Redis address | `localhost:6379` | Yes |
+| `PORT` | Server port (can be with or without leading colon, e.g., `8082` or `:8082`) | `:8082` | No |
+| `REDIS_ADDR` | Redis address | `localhost:6379` | No |
 | `REDIS_PASSWORD` | Redis password | `` | No |
 | `REDIS_DB` | Redis database | `0` | No |
 | `API_KEY` | API key for authentication | `` | Recommended |
@@ -38,6 +38,9 @@ go build -o herald main.go
 | `CODE_LENGTH` | Verification code length | `6` | No |
 | `RATE_LIMIT_PER_USER` | Rate limit per user/hour | `10` | No |
 | `RATE_LIMIT_PER_IP` | Rate limit per IP/minute | `5` | No |
+| `RATE_LIMIT_PER_DESTINATION` | Rate limit per destination/hour | `10` | No |
+| `LOCKOUT_DURATION` | User lockout duration after max attempts | `10m` | No |
+| `SERVICE_NAME` | Service identifier for HMAC auth | `herald` | No |
 | `SMTP_HOST` | SMTP server host | `` | For email |
 | `SMTP_PORT` | SMTP server port | `587` | For email |
 | `SMTP_USER` | SMTP username | `` | For email |
@@ -46,6 +49,8 @@ go build -o herald main.go
 | `SMS_PROVIDER` | SMS provider | `` | For SMS |
 | `ALIYUN_ACCESS_KEY` | Aliyun access key | `` | For Aliyun SMS |
 | `ALIYUN_SECRET_KEY` | Aliyun secret key | `` | For Aliyun SMS |
+| `ALIYUN_SIGN_NAME` | Aliyun SMS sign name | `` | For Aliyun SMS |
+| `ALIYUN_TEMPLATE_CODE` | Aliyun SMS template code | `` | For Aliyun SMS |
 
 ## Integration with Stargate
 

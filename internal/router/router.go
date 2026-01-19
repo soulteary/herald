@@ -27,7 +27,7 @@ func NewRouter() *fiber.App {
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "*",
 		AllowMethods: "GET,POST,OPTIONS",
-		AllowHeaders: "Content-Type,Authorization,X-Service,X-Signature,X-Timestamp",
+		AllowHeaders: "Content-Type,Authorization,X-Service,X-Signature,X-Timestamp,X-API-Key",
 	}))
 
 	// Initialize Redis client

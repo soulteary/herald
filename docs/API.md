@@ -73,10 +73,32 @@ Create a new verification challenge and send verification code.
 ```
 
 **Error Responses:**
-- `400 Bad Request`: Invalid request
+
+All error responses follow this format:
+```json
+{
+  "ok": false,
+  "reason": "error_code",
+  "error": "optional error message"
+}
+```
+
+Possible error codes:
+- `invalid_request`: Request body parsing failed
+- `user_id_required`: Missing required field `user_id`
+- `invalid_channel`: Invalid channel type (must be "sms" or "email")
+- `destination_required`: Missing required field `destination`
+- `rate_limit_exceeded`: Rate limit exceeded
+- `resend_cooldown`: Resend cooldown period not expired
+- `user_locked`: User is temporarily locked
+- `internal_error`: Internal server error
+
+HTTP Status Codes:
+- `400 Bad Request`: Invalid request parameters
 - `401 Unauthorized`: Authentication failed
-- `429 Too Many Requests`: Rate limit exceeded
 - `403 Forbidden`: User locked
+- `429 Too Many Requests`: Rate limit exceeded
+- `500 Internal Server Error`: Internal server error
 
 ### Verify Challenge
 
@@ -107,14 +129,28 @@ Verify a challenge code.
 ```json
 {
   "ok": false,
-  "reason": "expired|invalid|locked|too_many_attempts"
+  "reason": "error_code"
 }
 ```
 
 **Error Responses:**
-- `400 Bad Request`: Invalid request
+
+Possible error codes:
+- `invalid_request`: Request body parsing failed
+- `challenge_id_required`: Missing required field `challenge_id`
+- `code_required`: Missing required field `code`
+- `invalid_code_format`: Verification code format is invalid
+- `expired`: Challenge has expired
+- `invalid`: Invalid verification code
+- `locked`: Challenge locked due to too many attempts
+- `verification_failed`: General verification failure
+- `internal_error`: Internal server error
+
+HTTP Status Codes:
+- `400 Bad Request`: Invalid request parameters
 - `401 Unauthorized`: Verification failed
 - `403 Forbidden`: User locked
+- `500 Internal Server Error`: Internal server error
 
 ### Revoke Challenge
 
@@ -122,12 +158,30 @@ Verify a challenge code.
 
 Revoke a challenge (optional).
 
-**Response:**
+**Response (Success):**
 ```json
 {
   "ok": true
 }
 ```
+
+**Response (Failure):**
+```json
+{
+  "ok": false,
+  "reason": "error_code"
+}
+```
+
+**Error Responses:**
+
+Possible error codes:
+- `challenge_id_required`: Missing challenge ID in URL parameter
+- `internal_error`: Internal server error
+
+HTTP Status Codes:
+- `400 Bad Request`: Invalid request
+- `500 Internal Server Error`: Internal server error
 
 ## Rate Limiting
 
@@ -140,10 +194,36 @@ Herald implements multi-dimensional rate limiting:
 
 ## Error Codes
 
+This section lists all possible error codes returned by the API.
+
+### Request Validation Errors
+- `invalid_request`: Request body parsing failed or invalid JSON
+- `user_id_required`: Missing required field `user_id`
+- `invalid_channel`: Invalid channel type (must be "sms" or "email")
+- `destination_required`: Missing required field `destination`
+- `challenge_id_required`: Missing required field `challenge_id`
+- `code_required`: Missing required field `code`
+- `invalid_code_format`: Verification code format is invalid
+
+### Authentication Errors
+- `authentication_required`: No valid authentication provided
+- `invalid_timestamp`: Invalid timestamp format
+- `timestamp_expired`: Timestamp is outside the allowed window (5 minutes)
+- `invalid_signature`: HMAC signature verification failed
+
+### Challenge Errors
 - `expired`: Challenge has expired
 - `invalid`: Invalid verification code
-- `locked`: User is temporarily locked
-- `too_many_attempts`: Too many failed attempts
+- `locked`: Challenge locked due to too many attempts
+- `too_many_attempts`: Too many failed attempts (may be included in `locked`)
+- `verification_failed`: General verification failure
+
+### Rate Limiting Errors
 - `rate_limit_exceeded`: Rate limit exceeded
-- `user_locked`: User is locked
 - `resend_cooldown`: Resend cooldown period not expired
+
+### User Status Errors
+- `user_locked`: User is temporarily locked
+
+### System Errors
+- `internal_error`: Internal server error

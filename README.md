@@ -4,7 +4,7 @@
 
 ![Herald](.github/assets/banner.jpg)
 
-Herald is a production-ready, lightweight service for sending verification codes (OTP) via SMS and email, with built-in rate limiting, security controls, and audit logging.
+Herald is a production-ready, lightweight service for sending verification codes (OTP) via email (SMS support is currently in development), with built-in rate limiting, security controls, and audit logging.
 
 ## Features
 
@@ -12,7 +12,7 @@ Herald is a production-ready, lightweight service for sending verification codes
 - 🔒 **Secure**: Challenge-based verification with hash storage
 - 📊 **Rate Limiting**: Multi-dimensional rate limiting (per user, per IP, per destination)
 - 📝 **Audit Logging**: Complete audit trail for all operations
-- 🔌 **Pluggable Providers**: Support for multiple SMS and email providers
+- 🔌 **Pluggable Providers**: Support for email providers (SMS providers are placeholder implementations and not yet fully functional)
 - ⚡ **Redis Backend**: Fast, distributed storage with Redis
 
 ## Quick Start
@@ -35,6 +35,8 @@ Set environment variables:
 - `REDIS_DB`: Redis database number (default: `0`)
 - `API_KEY`: API key for service-to-service authentication
 - `LOG_LEVEL`: Log level (default: `info`)
+
+For complete configuration options, see [DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## API Documentation
 
