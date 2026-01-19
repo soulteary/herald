@@ -35,11 +35,11 @@ func (p *SMSProvider) Validate() error {
 	switch p.provider {
 	case "aliyun":
 		if config.AliyunAccessKey == "" || config.AliyunSecretKey == "" {
-			return fmt.Errorf("Aliyun SMS credentials are not configured")
+			return fmt.Errorf("aliyun SMS credentials are not configured")
 		}
 	case "tencent":
 		// Add Tencent validation when implemented
-		return fmt.Errorf("Tencent SMS provider not yet implemented")
+		return fmt.Errorf("tencent SMS provider not yet implemented")
 	default:
 		return fmt.Errorf("unsupported SMS provider: %s", p.provider)
 	}
@@ -60,7 +60,7 @@ func (p *SMSProvider) Send(ctx context.Context, msg *Message) error {
 	case "aliyun":
 		return p.sendAliyunSMS(ctx, msg)
 	case "tencent":
-		return fmt.Errorf("Tencent SMS provider not yet implemented")
+		return fmt.Errorf("tencent SMS provider not yet implemented")
 	default:
 		return fmt.Errorf("unsupported SMS provider: %s", p.provider)
 	}

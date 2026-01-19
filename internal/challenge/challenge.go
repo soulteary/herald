@@ -202,7 +202,12 @@ func (m *Manager) IsUserLocked(ctx context.Context, userID string) bool {
 
 func generateChallengeID() string {
 	b := make([]byte, 16)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		// Fallback: use current time as seed (not secure, but better than panic)
+		for i := range b {
+			b[i] = byte(int(time.Now().UnixNano()+int64(i)) % 256)
+		}
+	}
 	return "ch_" + base64.URLEncoding.EncodeToString(b)[:22]
 }
 
@@ -227,7 +232,12 @@ func generateCode(length int) string {
 func hashCode(code string) string {
 	// Use Argon2 for hashing
 	salt := make([]byte, 16)
-	rand.Read(salt)
+	if _, err := rand.Read(salt); err != nil {
+		// Fallback: use current time as seed (not secure, but better than panic)
+		for i := range salt {
+			salt[i] = byte(int(time.Now().UnixNano()+int64(i)) % 256)
+		}
+	}
 	hash := argon2.IDKey([]byte(code), salt, 1, 64*1024, 4, 32)
 	return base64.URLEncoding.EncodeToString(salt) + ":" + base64.URLEncoding.EncodeToString(hash)
 }

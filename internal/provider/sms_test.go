@@ -69,18 +69,20 @@ func TestSMSProvider_Validate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &SMSProvider{provider: tt.provider}
 			err := p.Validate()
-			if tt.provider == "" {
+			switch tt.provider {
+			case "":
 				// Empty provider should always error
 				if err == nil {
 					t.Error("SMSProvider.Validate() with empty provider should return error")
 				}
-			} else if tt.provider == "tencent" || tt.provider == "unknown" {
+			case "tencent", "unknown":
 				// These should always error
 				if err == nil {
 					t.Errorf("SMSProvider.Validate() with provider %q should return error", tt.provider)
 				}
+			default:
+				// For aliyun, result depends on config, so we don't assert
 			}
-			// For aliyun, result depends on config, so we don't assert
 		})
 	}
 }

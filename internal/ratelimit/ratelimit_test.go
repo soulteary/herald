@@ -29,7 +29,11 @@ func testRedisClient(t *testing.T) *redis.Client {
 
 func TestNewManager(t *testing.T) {
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		if err := redisClient.Close(); err != nil {
+			t.Errorf("failed to close redis client: %v", err)
+		}
+	}()
 
 	manager := NewManager(redisClient)
 
@@ -43,7 +47,11 @@ func TestNewManager(t *testing.T) {
 
 func TestManager_CheckRateLimit_FirstRequest(t *testing.T) {
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		if err := redisClient.Close(); err != nil {
+			t.Errorf("failed to close redis client: %v", err)
+		}
+	}()
 
 	manager := NewManager(redisClient)
 
@@ -72,7 +80,11 @@ func TestManager_CheckRateLimit_FirstRequest(t *testing.T) {
 
 func TestManager_CheckRateLimit_WithinLimit(t *testing.T) {
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		if err := redisClient.Close(); err != nil {
+			t.Errorf("failed to close redis client: %v", err)
+		}
+	}()
 
 	manager := NewManager(redisClient)
 
@@ -101,7 +113,11 @@ func TestManager_CheckRateLimit_WithinLimit(t *testing.T) {
 
 func TestManager_CheckRateLimit_Exceeded(t *testing.T) {
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		if err := redisClient.Close(); err != nil {
+			t.Errorf("failed to close redis client: %v", err)
+		}
+	}()
 
 	manager := NewManager(redisClient)
 
@@ -143,7 +159,11 @@ func TestManager_CheckRateLimit_Exceeded(t *testing.T) {
 
 func TestManager_CheckUserRateLimit(t *testing.T) {
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		if err := redisClient.Close(); err != nil {
+			t.Errorf("failed to close redis client: %v", err)
+		}
+	}()
 
 	manager := NewManager(redisClient)
 
@@ -168,7 +188,11 @@ func TestManager_CheckUserRateLimit(t *testing.T) {
 
 func TestManager_CheckIPRateLimit(t *testing.T) {
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		if err := redisClient.Close(); err != nil {
+			t.Errorf("failed to close redis client: %v", err)
+		}
+	}()
 
 	manager := NewManager(redisClient)
 
@@ -193,7 +217,11 @@ func TestManager_CheckIPRateLimit(t *testing.T) {
 
 func TestManager_CheckDestinationRateLimit(t *testing.T) {
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		if err := redisClient.Close(); err != nil {
+			t.Errorf("failed to close redis client: %v", err)
+		}
+	}()
 
 	manager := NewManager(redisClient)
 
@@ -218,7 +246,11 @@ func TestManager_CheckDestinationRateLimit(t *testing.T) {
 
 func TestManager_CheckResendCooldown_FirstTime(t *testing.T) {
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		if err := redisClient.Close(); err != nil {
+			t.Errorf("failed to close redis client: %v", err)
+		}
+	}()
 
 	manager := NewManager(redisClient)
 
@@ -242,7 +274,11 @@ func TestManager_CheckResendCooldown_FirstTime(t *testing.T) {
 
 func TestManager_CheckResendCooldown_WithinCooldown(t *testing.T) {
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		if err := redisClient.Close(); err != nil {
+			t.Errorf("failed to close redis client: %v", err)
+		}
+	}()
 
 	manager := NewManager(redisClient)
 

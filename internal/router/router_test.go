@@ -43,7 +43,11 @@ func TestNewRouter(t *testing.T) {
 
 	// Setup test Redis
 	testClient := setupTestRedis(t)
-	defer testClient.Close()
+	defer func() {
+		if err := testClient.Close(); err != nil {
+			t.Errorf("failed to close test client: %v", err)
+		}
+	}()
 
 	// Save original config values
 	originalRedisAddr := os.Getenv("REDIS_ADDR")
@@ -53,19 +57,19 @@ func TestNewRouter(t *testing.T) {
 	defer func() {
 		// Restore original values
 		if originalRedisAddr != "" {
-			os.Setenv("REDIS_ADDR", originalRedisAddr)
+			_ = os.Setenv("REDIS_ADDR", originalRedisAddr)
 		} else {
-			os.Unsetenv("REDIS_ADDR")
+			_ = os.Unsetenv("REDIS_ADDR")
 		}
 		if originalRedisPassword != "" {
-			os.Setenv("REDIS_PASSWORD", originalRedisPassword)
+			_ = os.Setenv("REDIS_PASSWORD", originalRedisPassword)
 		} else {
-			os.Unsetenv("REDIS_PASSWORD")
+			_ = os.Unsetenv("REDIS_PASSWORD")
 		}
 		if originalRedisDB != "" {
-			os.Setenv("REDIS_DB", originalRedisDB)
+			_ = os.Setenv("REDIS_DB", originalRedisDB)
 		} else {
-			os.Unsetenv("REDIS_DB")
+			_ = os.Unsetenv("REDIS_DB")
 		}
 	}()
 

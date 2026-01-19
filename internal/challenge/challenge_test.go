@@ -30,7 +30,9 @@ func testRedisClient(t *testing.T) *redis.Client {
 
 func TestNewManager(t *testing.T) {
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		_ = redisClient.Close()
+	}()
 	expiry := 5 * time.Minute
 	maxAttempts := 5
 	lockoutDuration := 10 * time.Minute
@@ -57,7 +59,9 @@ func TestNewManager(t *testing.T) {
 
 func TestManager_CreateChallenge(t *testing.T) {
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		_ = redisClient.Close()
+	}()
 
 	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6)
 
@@ -120,7 +124,9 @@ func TestManager_CreateChallenge(t *testing.T) {
 
 func TestManager_VerifyChallenge(t *testing.T) {
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		_ = redisClient.Close()
+	}()
 
 	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6)
 
@@ -165,7 +171,9 @@ func TestManager_VerifyChallenge(t *testing.T) {
 
 func TestManager_VerifyChallenge_InvalidCode(t *testing.T) {
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		_ = redisClient.Close()
+	}()
 
 	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6)
 
@@ -202,7 +210,9 @@ func TestManager_VerifyChallenge_InvalidCode(t *testing.T) {
 
 func TestManager_VerifyChallenge_Expired(t *testing.T) {
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		_ = redisClient.Close()
+	}()
 
 	// Use very short expiry for testing
 	manager := NewManager(redisClient, 1*time.Millisecond, 5, 10*time.Minute, 6)
@@ -236,7 +246,9 @@ func TestManager_VerifyChallenge_Expired(t *testing.T) {
 
 func TestManager_VerifyChallenge_MaxAttempts(t *testing.T) {
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		_ = redisClient.Close()
+	}()
 
 	manager := NewManager(redisClient, 5*time.Minute, 3, 10*time.Minute, 6)
 
@@ -277,7 +289,9 @@ func TestManager_VerifyChallenge_MaxAttempts(t *testing.T) {
 
 func TestManager_GetChallenge(t *testing.T) {
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		_ = redisClient.Close()
+	}()
 
 	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6)
 
@@ -315,7 +329,9 @@ func TestManager_GetChallenge(t *testing.T) {
 
 func TestManager_GetChallenge_NotFound(t *testing.T) {
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		_ = redisClient.Close()
+	}()
 
 	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6)
 
@@ -330,7 +346,9 @@ func TestManager_GetChallenge_NotFound(t *testing.T) {
 
 func TestManager_RevokeChallenge(t *testing.T) {
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		_ = redisClient.Close()
+	}()
 
 	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6)
 
@@ -363,7 +381,9 @@ func TestManager_RevokeChallenge(t *testing.T) {
 
 func TestManager_IsUserLocked(t *testing.T) {
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		_ = redisClient.Close()
+	}()
 
 	manager := NewManager(redisClient, 5*time.Minute, 3, 10*time.Minute, 6)
 

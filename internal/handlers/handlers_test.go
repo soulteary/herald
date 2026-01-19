@@ -36,7 +36,9 @@ func testRedisClient(t *testing.T) *redis.Client {
 
 func TestNewHandlers(t *testing.T) {
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		_ = redisClient.Close()
+	}()
 
 	handlers := NewHandlers(redisClient)
 
@@ -59,7 +61,9 @@ func TestNewHandlers(t *testing.T) {
 
 func TestHandlers_HealthCheck(t *testing.T) {
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		_ = redisClient.Close()
+	}()
 
 	handlers := NewHandlers(redisClient)
 
@@ -114,7 +118,9 @@ func TestHandlers_CreateChallenge_Success(t *testing.T) {
 	config.ChallengeExpiry = 5 * time.Minute
 
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		_ = redisClient.Close()
+	}()
 
 	handlers := NewHandlers(redisClient)
 
@@ -161,7 +167,9 @@ func TestHandlers_CreateChallenge_Success(t *testing.T) {
 
 func TestHandlers_CreateChallenge_InvalidRequest(t *testing.T) {
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		_ = redisClient.Close()
+	}()
 
 	handlers := NewHandlers(redisClient)
 
@@ -238,7 +246,9 @@ func TestHandlers_VerifyChallenge_Success(t *testing.T) {
 	config.ChallengeExpiry = 5 * time.Minute
 
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		_ = redisClient.Close()
+	}()
 
 	handlers := NewHandlers(redisClient)
 
@@ -297,7 +307,9 @@ func TestHandlers_VerifyChallenge_Success(t *testing.T) {
 
 func TestHandlers_VerifyChallenge_InvalidRequest(t *testing.T) {
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		_ = redisClient.Close()
+	}()
 
 	handlers := NewHandlers(redisClient)
 
@@ -363,7 +375,9 @@ func TestHandlers_RevokeChallenge(t *testing.T) {
 	config.CodeLength = 6
 
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		_ = redisClient.Close()
+	}()
 
 	handlers := NewHandlers(redisClient)
 
@@ -413,7 +427,9 @@ func TestHandlers_RevokeChallenge(t *testing.T) {
 
 func TestHandlers_RevokeChallenge_MissingID(t *testing.T) {
 	redisClient := testRedisClient(t)
-	defer redisClient.Close()
+	defer func() {
+		_ = redisClient.Close()
+	}()
 
 	handlers := NewHandlers(redisClient)
 

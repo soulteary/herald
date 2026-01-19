@@ -72,10 +72,18 @@ func TestGetEnv(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.envValue != "" {
-				os.Setenv(tt.envKey, tt.envValue)
-				defer os.Unsetenv(tt.envKey)
+				if err := os.Setenv(tt.envKey, tt.envValue); err != nil {
+					t.Fatalf("failed to set env var: %v", err)
+				}
+				defer func() {
+					if err := os.Unsetenv(tt.envKey); err != nil {
+						t.Errorf("failed to unset env var: %v", err)
+					}
+				}()
 			} else {
-				os.Unsetenv(tt.envKey)
+				if err := os.Unsetenv(tt.envKey); err != nil {
+					t.Fatalf("failed to unset env var: %v", err)
+				}
 			}
 
 			if got := getEnv(tt.envKey, tt.defaultValue); got != tt.expected {
@@ -119,10 +127,18 @@ func TestGetEnvInt(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.envValue != "" {
-				os.Setenv(tt.envKey, tt.envValue)
-				defer os.Unsetenv(tt.envKey)
+				if err := os.Setenv(tt.envKey, tt.envValue); err != nil {
+					t.Fatalf("failed to set env var: %v", err)
+				}
+				defer func() {
+					if err := os.Unsetenv(tt.envKey); err != nil {
+						t.Errorf("failed to unset env var: %v", err)
+					}
+				}()
 			} else {
-				os.Unsetenv(tt.envKey)
+				if err := os.Unsetenv(tt.envKey); err != nil {
+					t.Fatalf("failed to unset env var: %v", err)
+				}
 			}
 
 			if got := getEnvInt(tt.envKey, tt.defaultValue); got != tt.expected {
@@ -166,10 +182,18 @@ func TestGetEnvDuration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.envValue != "" {
-				os.Setenv(tt.envKey, tt.envValue)
-				defer os.Unsetenv(tt.envKey)
+				if err := os.Setenv(tt.envKey, tt.envValue); err != nil {
+					t.Fatalf("failed to set env var: %v", err)
+				}
+				defer func() {
+					if err := os.Unsetenv(tt.envKey); err != nil {
+						t.Errorf("failed to unset env var: %v", err)
+					}
+				}()
 			} else {
-				os.Unsetenv(tt.envKey)
+				if err := os.Unsetenv(tt.envKey); err != nil {
+					t.Fatalf("failed to unset env var: %v", err)
+				}
 			}
 
 			if got := getEnvDuration(tt.envKey, tt.defaultValue); got != tt.expected {
