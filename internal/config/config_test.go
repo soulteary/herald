@@ -1,0 +1,222 @@
+package config
+
+import (
+	"os"
+	"testing"
+	"time"
+)
+
+func TestGetPort(t *testing.T) {
+	tests := []struct {
+		name     string
+		port     string
+		expected string
+	}{
+		{
+			name:     "port with colon prefix",
+			port:     ":8082",
+			expected: ":8082",
+		},
+		{
+			name:     "port without colon prefix",
+			port:     "8082",
+			expected: ":8082",
+		},
+		{
+			name:     "empty port",
+			port:     "",
+			expected: ":",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Save original value
+			originalPort := Port
+			defer func() {
+				Port = originalPort
+			}()
+
+			Port = tt.port
+			if got := GetPort(); got != tt.expected {
+				t.Errorf("GetPort() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGetEnv(t *testing.T) {
+	tests := []struct {
+		name         string
+		envKey       string
+		envValue     string
+		defaultValue string
+		expected     string
+	}{
+		{
+			name:         "env var set",
+			envKey:       "TEST_ENV_VAR",
+			envValue:     "test_value",
+			defaultValue: "default",
+			expected:     "test_value",
+		},
+		{
+			name:         "env var not set",
+			envKey:       "TEST_ENV_VAR_NOT_SET",
+			envValue:     "",
+			defaultValue: "default",
+			expected:     "default",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envValue != "" {
+				os.Setenv(tt.envKey, tt.envValue)
+				defer os.Unsetenv(tt.envKey)
+			} else {
+				os.Unsetenv(tt.envKey)
+			}
+
+			if got := getEnv(tt.envKey, tt.defaultValue); got != tt.expected {
+				t.Errorf("getEnv() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGetEnvInt(t *testing.T) {
+	tests := []struct {
+		name         string
+		envKey       string
+		envValue     string
+		defaultValue int
+		expected     int
+	}{
+		{
+			name:         "valid integer",
+			envKey:       "TEST_INT_VAR",
+			envValue:     "42",
+			defaultValue: 0,
+			expected:     42,
+		},
+		{
+			name:         "invalid integer",
+			envKey:       "TEST_INT_VAR_INVALID",
+			envValue:     "not_a_number",
+			defaultValue: 10,
+			expected:     10,
+		},
+		{
+			name:         "env var not set",
+			envKey:       "TEST_INT_VAR_NOT_SET",
+			envValue:     "",
+			defaultValue: 5,
+			expected:     5,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envValue != "" {
+				os.Setenv(tt.envKey, tt.envValue)
+				defer os.Unsetenv(tt.envKey)
+			} else {
+				os.Unsetenv(tt.envKey)
+			}
+
+			if got := getEnvInt(tt.envKey, tt.defaultValue); got != tt.expected {
+				t.Errorf("getEnvInt() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGetEnvDuration(t *testing.T) {
+	tests := []struct {
+		name         string
+		envKey       string
+		envValue     string
+		defaultValue time.Duration
+		expected     time.Duration
+	}{
+		{
+			name:         "valid duration",
+			envKey:       "TEST_DURATION_VAR",
+			envValue:     "5m",
+			defaultValue: time.Minute,
+			expected:     5 * time.Minute,
+		},
+		{
+			name:         "invalid duration",
+			envKey:       "TEST_DURATION_VAR_INVALID",
+			envValue:     "not_a_duration",
+			defaultValue: time.Hour,
+			expected:     time.Hour,
+		},
+		{
+			name:         "env var not set",
+			envKey:       "TEST_DURATION_VAR_NOT_SET",
+			envValue:     "",
+			defaultValue: 10 * time.Second,
+			expected:     10 * time.Second,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envValue != "" {
+				os.Setenv(tt.envKey, tt.envValue)
+				defer os.Unsetenv(tt.envKey)
+			} else {
+				os.Unsetenv(tt.envKey)
+			}
+
+			if got := getEnvDuration(tt.envKey, tt.defaultValue); got != tt.expected {
+				t.Errorf("getEnvDuration() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestMaskSensitive(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "long string",
+			input:    "this_is_a_long_string",
+			expected: "this***ring",
+		},
+		{
+			name:     "short string",
+			input:    "short",
+			expected: "***",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "8 characters",
+			input:    "12345678",
+			expected: "***",
+		},
+		{
+			name:     "9 characters",
+			input:    "123456789",
+			expected: "1234***6789",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := maskSensitive(tt.input); got != tt.expected {
+				t.Errorf("maskSensitive() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}

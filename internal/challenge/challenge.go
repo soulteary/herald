@@ -149,6 +149,13 @@ func (m *Manager) VerifyChallenge(ctx context.Context, challengeID, code, client
 		if ttl > 0 {
 			_ = m.redis.Set(ctx, key, updatedData, ttl)
 		}
+		// Check if should lock after incrementing attempts
+		if challenge.Attempts >= m.maxAttempts {
+			// Lock the user
+			lockKey := lockKeyPrefix + challenge.UserID
+			_ = m.redis.Set(ctx, lockKey, "1", m.lockoutDuration)
+			return false, nil, fmt.Errorf("challenge locked due to too many attempts")
+		}
 		return false, nil, fmt.Errorf("invalid code")
 	}
 
