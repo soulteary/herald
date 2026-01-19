@@ -2,6 +2,8 @@
 
 > **📧 Your Gateway to Secure Verification**
 
+![Herald](.github/assets/banner.jpg)
+
 Herald is a production-ready, lightweight service for sending verification codes (OTP) via SMS and email, with built-in rate limiting, security controls, and audit logging.
 
 ## Features
