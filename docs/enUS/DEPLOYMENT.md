@@ -41,16 +41,12 @@ go build -o herald main.go
 | `RATE_LIMIT_PER_DESTINATION` | Rate limit per destination/hour | `10` | No |
 | `LOCKOUT_DURATION` | User lockout duration after max attempts | `10m` | No |
 | `SERVICE_NAME` | Service identifier for HMAC auth | `herald` | No |
-| `SMTP_HOST` | SMTP server host | `` | For email |
-| `SMTP_PORT` | SMTP server port | `587` | For email |
-| `SMTP_USER` | SMTP username | `` | For email |
-| `SMTP_PASSWORD` | SMTP password | `` | For email |
-| `SMTP_FROM` | SMTP from address | `` | For email |
-| `SMS_PROVIDER` | SMS provider | `` | For SMS |
-| `ALIYUN_ACCESS_KEY` | Aliyun access key | `` | For Aliyun SMS |
-| `ALIYUN_SECRET_KEY` | Aliyun secret key | `` | For Aliyun SMS |
-| `ALIYUN_SIGN_NAME` | Aliyun SMS sign name | `` | For Aliyun SMS |
-| `ALIYUN_TEMPLATE_CODE` | Aliyun SMS template code | `` | For Aliyun SMS |
+| `EMAIL_API_URL` | Email provider API endpoint | `` | For email |
+| `EMAIL_API_KEY` | Email provider API key | `` | Optional |
+| `EMAIL_FROM` | Email sender address | `` | For email |
+| `SMS_API_URL` | SMS provider API endpoint | `` | For SMS |
+| `SMS_API_KEY` | SMS provider API key | `` | Optional |
+| `PROVIDER_TIMEOUT` | External provider timeout | `5s` | No |
 
 ## Integration with Stargate
 

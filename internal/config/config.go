@@ -40,18 +40,12 @@ var (
 	RateLimitPerDestination = getEnvInt("RATE_LIMIT_PER_DESTINATION", 10) // per hour
 
 	// Provider config
-	SMTPHost     = getEnv("SMTP_HOST", "")
-	SMTPPort     = getEnvInt("SMTP_PORT", 587)
-	SMTPUser     = getEnv("SMTP_USER", "")
-	SMTPPassword = getEnv("SMTP_PASSWORD", "")
-	SMTPFrom     = getEnv("SMTP_FROM", "")
-
-	// SMS Provider config (example: Aliyun)
-	SMSProvider        = getEnv("SMS_PROVIDER", "") // "aliyun", "tencent", etc.
-	AliyunAccessKey    = getEnv("ALIYUN_ACCESS_KEY", "")
-	AliyunSecretKey    = getEnv("ALIYUN_SECRET_KEY", "")
-	AliyunSignName     = getEnv("ALIYUN_SIGN_NAME", "")
-	AliyunTemplateCode = getEnv("ALIYUN_TEMPLATE_CODE", "")
+	EmailAPIURL     = getEnv("EMAIL_API_URL", "")
+	EmailAPIKey     = getEnv("EMAIL_API_KEY", "")
+	EmailFrom       = getEnv("EMAIL_FROM", "")
+	SMSAPIURL       = getEnv("SMS_API_URL", "")
+	SMSAPIKey       = getEnv("SMS_API_KEY", "")
+	ProviderTimeout = getEnvDuration("PROVIDER_TIMEOUT", 5*time.Second)
 
 	// Service authentication (HMAC)
 	HMACSecret  = getEnv("HMAC_SECRET", "")

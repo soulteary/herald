@@ -3,20 +3,24 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/soulteary/herald/internal/config"
 )
 
-// SMSProvider is a placeholder for SMS providers
-// This can be extended to support Aliyun, Tencent, etc.
+// SMSProvider sends messages via an external API placeholder.
 type SMSProvider struct {
-	provider string
+	endpoint string
+	apiKey   string
+	client   *http.Client
 }
 
 // NewSMSProvider creates a new SMS provider
 func NewSMSProvider() *SMSProvider {
 	return &SMSProvider{
-		provider: config.SMSProvider,
+		endpoint: config.SMSAPIURL,
+		apiKey:   config.SMSAPIKey,
+		client:   newHTTPClient(config.ProviderTimeout),
 	}
 }
 
@@ -27,24 +31,7 @@ func (p *SMSProvider) Channel() Channel {
 
 // Validate checks if the provider is properly configured
 func (p *SMSProvider) Validate() error {
-	if p.provider == "" {
-		return fmt.Errorf("SMS_PROVIDER is not configured")
-	}
-
-	// Validate provider-specific configs
-	switch p.provider {
-	case "aliyun":
-		if config.AliyunAccessKey == "" || config.AliyunSecretKey == "" {
-			return fmt.Errorf("aliyun SMS credentials are not configured")
-		}
-	case "tencent":
-		// Add Tencent validation when implemented
-		return fmt.Errorf("tencent SMS provider not yet implemented")
-	default:
-		return fmt.Errorf("unsupported SMS provider: %s", p.provider)
-	}
-
-	return nil
+	return validateEndpoint(p.endpoint)
 }
 
 // Send sends an SMS message
@@ -54,34 +41,21 @@ func (p *SMSProvider) Send(ctx context.Context, msg *Message) error {
 		return err
 	}
 
-	// TODO: Implement actual SMS sending based on provider
-	// For now, this is a placeholder that logs the message
-	switch p.provider {
-	case "aliyun":
-		return p.sendAliyunSMS(ctx, msg)
-	case "tencent":
-		return fmt.Errorf("tencent SMS provider not yet implemented")
-	default:
-		return fmt.Errorf("unsupported SMS provider: %s", p.provider)
+	payload := struct {
+		To      string `json:"to"`
+		Message string `json:"message"`
+		Code    string `json:"code,omitempty"`
+	}{
+		To:      msg.To,
+		Message: msg.Body,
+		Code:    msg.Code,
 	}
-}
 
-// sendAliyunSMS sends SMS via Aliyun
-// This is a placeholder - actual implementation would use Aliyun SDK
-func (p *SMSProvider) sendAliyunSMS(ctx context.Context, msg *Message) error {
-	// TODO: Implement Aliyun SMS sending
-	// Example:
-	// client := aliyun.NewClient(config.AliyunAccessKey, config.AliyunSecretKey)
-	// return client.SendSMS(ctx, &aliyun.SendSMSRequest{
-	//     PhoneNumbers: msg.To,
-	//     SignName:     config.AliyunSignName,
-	//     TemplateCode: config.AliyunTemplateCode,
-	//     TemplateParam: fmt.Sprintf(`{"code":"%s"}`, msg.Code),
-	// })
+	if p.client == nil {
+		p.client = newHTTPClient(config.ProviderTimeout)
+	}
 
-	// Placeholder: just log for now
-	fmt.Printf("[PLACEHOLDER] Would send SMS to %s with code: %s\n", msg.To, msg.Code)
-	return nil
+	return postJSON(ctx, p.client, p.endpoint, p.apiKey, payload)
 }
 
 // FormatVerificationSMS formats a verification code SMS

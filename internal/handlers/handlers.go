@@ -39,18 +39,18 @@ func NewHandlers(redisClient *redis.Client) *Handlers {
 	// Initialize provider registry
 	registry := provider.NewRegistry()
 
-	// Register SMTP provider if configured
-	if config.SMTPHost != "" {
+	// Register email provider if configured
+	if config.EmailAPIURL != "" {
 		smtpProvider := provider.NewSMTPProvider()
 		if err := registry.Register(smtpProvider); err != nil {
-			logrus.Warnf("Failed to register SMTP provider: %v", err)
+			logrus.Warnf("Failed to register email provider: %v", err)
 		} else {
-			logrus.Info("SMTP provider registered")
+			logrus.Info("Email provider registered")
 		}
 	}
 
 	// Register SMS provider if configured
-	if config.SMSProvider != "" {
+	if config.SMSAPIURL != "" {
 		smsProvider := provider.NewSMSProvider()
 		if err := registry.Register(smsProvider); err != nil {
 			logrus.Warnf("Failed to register SMS provider: %v", err)

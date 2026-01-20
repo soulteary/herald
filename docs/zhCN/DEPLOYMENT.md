@@ -41,16 +41,12 @@ go build -o herald main.go
 | `RATE_LIMIT_PER_DESTINATION` | 每个目标/小时的速率限制 | `10` | 否 |
 | `LOCKOUT_DURATION` | 达到最大尝试次数后的用户锁定持续时间 | `10m` | 否 |
 | `SERVICE_NAME` | HMAC 认证的服务标识符 | `herald` | 否 |
-| `SMTP_HOST` | SMTP 服务器主机 | `` | 用于电子邮件 |
-| `SMTP_PORT` | SMTP 服务器端口 | `587` | 用于电子邮件 |
-| `SMTP_USER` | SMTP 用户名 | `` | 用于电子邮件 |
-| `SMTP_PASSWORD` | SMTP 密码 | `` | 用于电子邮件 |
-| `SMTP_FROM` | SMTP 发件人地址 | `` | 用于电子邮件 |
-| `SMS_PROVIDER` | SMS 提供商 | `` | 用于 SMS |
-| `ALIYUN_ACCESS_KEY` | 阿里云访问密钥 | `` | 用于阿里云 SMS |
-| `ALIYUN_SECRET_KEY` | 阿里云密钥 | `` | 用于阿里云 SMS |
-| `ALIYUN_SIGN_NAME` | 阿里云 SMS 签名名称 | `` | 用于阿里云 SMS |
-| `ALIYUN_TEMPLATE_CODE` | 阿里云 SMS 模板代码 | `` | 用于阿里云 SMS |
+| `EMAIL_API_URL` | 邮件服务 API 地址 | `` | 用于邮件 |
+| `EMAIL_API_KEY` | 邮件服务 API Key | `` | 可选 |
+| `EMAIL_FROM` | 邮件发件人地址 | `` | 用于邮件 |
+| `SMS_API_URL` | 短信服务 API 地址 | `` | 用于短信 |
+| `SMS_API_KEY` | 短信服务 API Key | `` | 可选 |
+| `PROVIDER_TIMEOUT` | 外部服务超时时间 | `5s` | 否 |
 
 ## 与 Stargate 集成
 

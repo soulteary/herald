@@ -2,6 +2,9 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -35,74 +38,42 @@ func TestSMTPProvider_Validate(t *testing.T) {
 		{
 			name: "valid configuration",
 			provider: &SMTPProvider{
-				host: "smtp.example.com",
-				port: 587,
-				from: "test@example.com",
+				endpoint: "https://email.example.com/send",
+				from:     "test@example.com",
 			},
 			wantErr: false,
 		},
 		{
-			name: "missing SMTP_HOST",
+			name: "missing EMAIL_API_URL",
 			provider: &SMTPProvider{
-				host: "",
-				port: 587,
-				from: "test@example.com",
+				endpoint: "",
+				from:     "test@example.com",
 			},
 			wantErr: true,
 		},
 		{
-			name: "invalid SMTP_PORT (zero)",
+			name: "invalid endpoint scheme",
 			provider: &SMTPProvider{
-				host: "smtp.example.com",
-				port: 0,
-				from: "test@example.com",
+				endpoint: "ftp://email.example.com/send",
+				from:     "test@example.com",
 			},
 			wantErr: true,
 		},
 		{
-			name: "invalid SMTP_PORT (too large)",
+			name: "invalid endpoint format",
 			provider: &SMTPProvider{
-				host: "smtp.example.com",
-				port: 65536,
-				from: "test@example.com",
+				endpoint: "://bad-url",
+				from:     "test@example.com",
 			},
 			wantErr: true,
 		},
 		{
-			name: "missing SMTP_FROM",
+			name: "missing EMAIL_FROM",
 			provider: &SMTPProvider{
-				host: "smtp.example.com",
-				port: 587,
-				from: "",
+				endpoint: "https://email.example.com/send",
+				from:     "",
 			},
 			wantErr: true,
-		},
-		{
-			name: "valid port 25",
-			provider: &SMTPProvider{
-				host: "smtp.example.com",
-				port: 25,
-				from: "test@example.com",
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid port 465",
-			provider: &SMTPProvider{
-				host: "smtp.example.com",
-				port: 465,
-				from: "test@example.com",
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid port 65535",
-			provider: &SMTPProvider{
-				host: "smtp.example.com",
-				port: 65535,
-				from: "test@example.com",
-			},
-			wantErr: false,
 		},
 	}
 
@@ -117,6 +88,38 @@ func TestSMTPProvider_Validate(t *testing.T) {
 }
 
 func TestSMTPProvider_Send(t *testing.T) {
+	okServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST request, got %s", r.Method)
+		}
+		if auth := r.Header.Get("Authorization"); auth != "Bearer test-key" {
+			t.Errorf("expected Authorization header, got %q", auth)
+		}
+
+		var payload struct {
+			To      string `json:"to"`
+			From    string `json:"from,omitempty"`
+			Subject string `json:"subject"`
+			Body    string `json:"body"`
+			Code    string `json:"code,omitempty"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("failed to decode payload: %v", err)
+		}
+		if payload.To != "recipient@example.com" || payload.Subject != "Test" {
+			t.Errorf("unexpected payload: %+v", payload)
+		}
+
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer okServer.Close()
+
+	errorServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"ok":false,"error":"server error"}`))
+	}))
+	defer errorServer.Close()
+
 	tests := []struct {
 		name     string
 		provider *SMTPProvider
@@ -126,9 +129,8 @@ func TestSMTPProvider_Send(t *testing.T) {
 		{
 			name: "invalid configuration",
 			provider: &SMTPProvider{
-				host: "",
-				port: 587,
-				from: "test@example.com",
+				endpoint: "",
+				from:     "test@example.com",
 			},
 			msg: &Message{
 				To:      "recipient@example.com",
@@ -138,20 +140,33 @@ func TestSMTPProvider_Send(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "valid configuration but connection will fail",
+			name: "external API success",
 			provider: &SMTPProvider{
-				host:     "invalid-smtp-server.example.com",
-				port:     587,
-				username: "user",
-				password: "pass",
+				endpoint: okServer.URL,
+				apiKey:   "test-key",
 				from:     "test@example.com",
+				client:   okServer.Client(),
 			},
 			msg: &Message{
 				To:      "recipient@example.com",
 				Subject: "Test",
 				Body:    "Test body",
 			},
-			wantErr: true, // Connection will fail
+			wantErr: false,
+		},
+		{
+			name: "external API failure",
+			provider: &SMTPProvider{
+				endpoint: errorServer.URL,
+				from:     "test@example.com",
+				client:   errorServer.Client(),
+			},
+			msg: &Message{
+				To:      "recipient@example.com",
+				Subject: "Test",
+				Body:    "Test body",
+			},
+			wantErr: true,
 		},
 	}
 

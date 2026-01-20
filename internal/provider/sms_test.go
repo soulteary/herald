@@ -2,6 +2,9 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -27,67 +30,82 @@ func TestSMSProvider_Channel(t *testing.T) {
 }
 
 func TestSMSProvider_Validate(t *testing.T) {
-	// Note: SMSProvider.Validate() reads config.AliyunAccessKey and config.AliyunSecretKey
-	// which are set at package init time. We can test the provider field validation
-	// by creating SMSProvider instances with different provider values.
-
-	// Test that Validate() can be called
-	provider := NewSMSProvider()
-	err := provider.Validate()
-	// The result depends on config values, but we verify the method works
-	_ = err
-
-	// Test with different provider values by creating instances directly
 	tests := []struct {
 		name     string
-		provider string
+		provider *SMSProvider
 		wantErr  bool
 	}{
 		{
-			name:     "empty provider",
-			provider: "",
-			wantErr:  true,
+			name: "empty endpoint",
+			provider: &SMSProvider{
+				endpoint: "",
+			},
+			wantErr: true,
 		},
 		{
-			name:     "aliyun provider (depends on config)",
-			provider: "aliyun",
-			wantErr:  false, // May be true if config not set, but tests the path
+			name: "invalid endpoint scheme",
+			provider: &SMSProvider{
+				endpoint: "ftp://sms.example.com/send",
+			},
+			wantErr: true,
 		},
 		{
-			name:     "tencent provider not implemented",
-			provider: "tencent",
-			wantErr:  true,
+			name: "invalid endpoint format",
+			provider: &SMSProvider{
+				endpoint: "://bad-url",
+			},
+			wantErr: true,
 		},
 		{
-			name:     "unsupported provider",
-			provider: "unknown",
-			wantErr:  true,
+			name: "valid endpoint",
+			provider: &SMSProvider{
+				endpoint: "https://sms.example.com/send",
+			},
+			wantErr: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := &SMSProvider{provider: tt.provider}
-			err := p.Validate()
-			switch tt.provider {
-			case "":
-				// Empty provider should always error
-				if err == nil {
-					t.Error("SMSProvider.Validate() with empty provider should return error")
-				}
-			case "tencent", "unknown":
-				// These should always error
-				if err == nil {
-					t.Errorf("SMSProvider.Validate() with provider %q should return error", tt.provider)
-				}
-			default:
-				// For aliyun, result depends on config, so we don't assert
+			err := tt.provider.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("SMSProvider.Validate() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
 }
 
 func TestSMSProvider_Send(t *testing.T) {
+	okServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST request, got %s", r.Method)
+		}
+		if auth := r.Header.Get("Authorization"); auth != "Bearer test-key" {
+			t.Errorf("expected Authorization header, got %q", auth)
+		}
+
+		var payload struct {
+			To      string `json:"to"`
+			Message string `json:"message"`
+			Code    string `json:"code,omitempty"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("failed to decode payload: %v", err)
+		}
+		if payload.To != "+1234567890" || payload.Code != "123456" {
+			t.Errorf("unexpected payload: %+v", payload)
+		}
+
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer okServer.Close()
+
+	errorServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"ok":false,"error":"bad request"}`))
+	}))
+	defer errorServer.Close()
+
 	tests := []struct {
 		name     string
 		provider *SMSProvider
@@ -95,9 +113,9 @@ func TestSMSProvider_Send(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			name: "invalid configuration (empty provider)",
+			name: "invalid configuration (empty endpoint)",
 			provider: &SMSProvider{
-				provider: "",
+				endpoint: "",
 			},
 			msg: &Message{
 				To:   "+1234567890",
@@ -106,35 +124,29 @@ func TestSMSProvider_Send(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "aliyun provider (sendAliyunSMS is placeholder, but Validate may fail)",
+			name: "external API success",
 			provider: &SMSProvider{
-				provider: "aliyun",
+				endpoint: okServer.URL,
+				apiKey:   "test-key",
+				client:   okServer.Client(),
 			},
 			msg: &Message{
 				To:   "+1234567890",
 				Code: "123456",
+				Body: "Your verification code is: 123456",
 			},
-			wantErr: true, // Validate() will fail if config.AliyunAccessKey/SecretKey are not set
+			wantErr: false,
 		},
 		{
-			name: "tencent provider not implemented",
+			name: "external API failure",
 			provider: &SMSProvider{
-				provider: "tencent",
+				endpoint: errorServer.URL,
+				client:   errorServer.Client(),
 			},
 			msg: &Message{
 				To:   "+1234567890",
 				Code: "123456",
-			},
-			wantErr: true,
-		},
-		{
-			name: "unsupported provider",
-			provider: &SMSProvider{
-				provider: "unknown",
-			},
-			msg: &Message{
-				To:   "+1234567890",
-				Code: "123456",
+				Body: "Your verification code is: 123456",
 			},
 			wantErr: true,
 		},
@@ -148,22 +160,5 @@ func TestSMSProvider_Send(t *testing.T) {
 				t.Errorf("SMSProvider.Send() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
-	}
-}
-
-func TestSMSProvider_sendAliyunSMS(t *testing.T) {
-	provider := &SMSProvider{
-		provider: "aliyun",
-	}
-	ctx := context.Background()
-	msg := &Message{
-		To:   "+1234567890",
-		Code: "123456",
-	}
-
-	// sendAliyunSMS is currently a placeholder that just logs and returns nil
-	err := provider.sendAliyunSMS(ctx, msg)
-	if err != nil {
-		t.Errorf("SMSProvider.sendAliyunSMS() error = %v, want nil", err)
 	}
 }

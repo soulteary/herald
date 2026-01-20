@@ -3,29 +3,27 @@ package provider
 import (
 	"context"
 	"fmt"
-	"net/smtp"
+	"net/http"
 	"strings"
 
 	"github.com/soulteary/herald/internal/config"
 )
 
-// SMTPProvider implements email sending via SMTP
+// SMTPProvider implements email sending via an external API placeholder.
 type SMTPProvider struct {
-	host     string
-	port     int
-	username string
-	password string
+	endpoint string
+	apiKey   string
 	from     string
+	client   *http.Client
 }
 
 // NewSMTPProvider creates a new SMTP provider
 func NewSMTPProvider() *SMTPProvider {
 	return &SMTPProvider{
-		host:     config.SMTPHost,
-		port:     config.SMTPPort,
-		username: config.SMTPUser,
-		password: config.SMTPPassword,
-		from:     config.SMTPFrom,
+		endpoint: config.EmailAPIURL,
+		apiKey:   config.EmailAPIKey,
+		from:     config.EmailFrom,
+		client:   newHTTPClient(config.ProviderTimeout),
 	}
 }
 
@@ -36,14 +34,11 @@ func (p *SMTPProvider) Channel() Channel {
 
 // Validate checks if the provider is properly configured
 func (p *SMTPProvider) Validate() error {
-	if p.host == "" {
-		return fmt.Errorf("SMTP_HOST is not configured")
-	}
-	if p.port <= 0 || p.port > 65535 {
-		return fmt.Errorf("SMTP_PORT is invalid")
+	if err := validateEndpoint(p.endpoint); err != nil {
+		return err
 	}
 	if p.from == "" {
-		return fmt.Errorf("SMTP_FROM is not configured")
+		return fmt.Errorf("EMAIL_FROM is not configured")
 	}
 	return nil
 }
@@ -54,25 +49,25 @@ func (p *SMTPProvider) Send(ctx context.Context, msg *Message) error {
 		return err
 	}
 
-	// Build email message
-	emailBody := fmt.Sprintf("From: %s\r\n", p.from)
-	emailBody += fmt.Sprintf("To: %s\r\n", msg.To)
-	emailBody += fmt.Sprintf("Subject: %s\r\n", msg.Subject)
-	emailBody += "Content-Type: text/plain; charset=UTF-8\r\n"
-	emailBody += "\r\n"
-	emailBody += msg.Body
-
-	// SMTP authentication
-	auth := smtp.PlainAuth("", p.username, p.password, p.host)
-
-	// Send email
-	addr := fmt.Sprintf("%s:%d", p.host, p.port)
-	err := smtp.SendMail(addr, auth, p.from, []string{msg.To}, []byte(emailBody))
-	if err != nil {
-		return fmt.Errorf("failed to send email: %w", err)
+	payload := struct {
+		To      string `json:"to"`
+		From    string `json:"from,omitempty"`
+		Subject string `json:"subject"`
+		Body    string `json:"body"`
+		Code    string `json:"code,omitempty"`
+	}{
+		To:      msg.To,
+		From:    p.from,
+		Subject: msg.Subject,
+		Body:    msg.Body,
+		Code:    msg.Code,
 	}
 
-	return nil
+	if p.client == nil {
+		p.client = newHTTPClient(config.ProviderTimeout)
+	}
+
+	return postJSON(ctx, p.client, p.endpoint, p.apiKey, payload)
 }
 
 // FormatVerificationEmail formats a verification code email
