@@ -5,6 +5,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    # Main service port mapping: host port 8082 -> container port 8082
+    # Purpose: Main service port for OTP verification service
     ports:
       - "8082:8082"
     environment:
@@ -20,6 +22,9 @@ services:
 
   redis:
     image: redis:7-alpine
+    # Redis port mapping: host port 6379 -> container port 6379
+    # Purpose: Redis cache for Herald service, mapped to host for external access
+    # Note: Port conflict may occur if other services also need to access host Redis
     ports:
       - "6379:6379"
     volumes:
