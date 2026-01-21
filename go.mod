@@ -6,7 +6,7 @@ require (
 	github.com/gofiber/fiber/v2 v2.52.10
 	github.com/redis/go-redis/v9 v9.17.2
 	github.com/sirupsen/logrus v1.9.4
-	github.com/soulteary/redis-kit v0.1.0
+	github.com/soulteary/redis-kit v0.1.1
 	golang.org/x/crypto v0.47.0
 )
 
