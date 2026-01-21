@@ -8,12 +8,15 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
+	rediskitcache "github.com/soulteary/redis-kit/cache"
+	rediskitclient "github.com/soulteary/redis-kit/client"
 
 	"github.com/soulteary/herald/internal/challenge"
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/otp"
 	"github.com/soulteary/herald/internal/provider"
 	"github.com/soulteary/herald/internal/ratelimit"
+	"github.com/soulteary/herald/internal/session"
 )
 
 // Handlers contains all HTTP handlers
@@ -22,10 +25,12 @@ type Handlers struct {
 	rateLimitManager *ratelimit.Manager
 	providerRegistry *provider.Registry
 	redis            *redis.Client
+	testCodeCache    rediskitcache.Cache // For test mode code storage
+	sessionManager   *session.Manager    // Optional: nil if session storage is disabled
 }
 
 // NewHandlers creates a new handlers instance
-func NewHandlers(redisClient *redis.Client) *Handlers {
+func NewHandlers(redisClient *redis.Client, sessionManager *session.Manager) *Handlers {
 	challengeMgr := challenge.NewManager(
 		redisClient,
 		config.ChallengeExpiry,
@@ -59,11 +64,16 @@ func NewHandlers(redisClient *redis.Client) *Handlers {
 		}
 	}
 
+	// Create test code cache for test mode
+	testCodeCache := rediskitcache.NewCache(redisClient, "otp:test:code:")
+
 	return &Handlers{
 		challengeManager: challengeMgr,
 		rateLimitManager: rateLimitMgr,
 		providerRegistry: registry,
 		redis:            redisClient,
+		testCodeCache:    testCodeCache,
+		sessionManager:   sessionManager,
 	}
 }
 
@@ -71,11 +81,11 @@ func NewHandlers(redisClient *redis.Client) *Handlers {
 func (h *Handlers) HealthCheck(c *fiber.Ctx) error {
 	ctx := c.Context()
 
-	// Check Redis connection
-	if err := h.redis.Ping(ctx).Err(); err != nil {
+	// Check Redis connection using redis-kit
+	if !rediskitclient.HealthCheck(ctx, h.redis) {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
 			"status": "unhealthy",
-			"error":  err.Error(),
+			"error":  "Redis connection failed",
 		})
 	}
 
@@ -215,8 +225,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 
 	// Store code in test mode (for integration testing only)
 	if config.TestMode {
-		testCodeKey := fmt.Sprintf("otp:test:code:%s", ch.ID)
-		if err := h.redis.Set(ctx, testCodeKey, code, config.ChallengeExpiry).Err(); err != nil {
+		if err := h.testCodeCache.Set(ctx, ch.ID, code, config.ChallengeExpiry); err != nil {
 			logrus.Warnf("Failed to store test code: %v", err)
 		}
 	}
@@ -320,11 +329,20 @@ func (h *Handlers) VerifyChallenge(c *fiber.Ctx) error {
 		})
 	}
 
+	// Generate AMR based on channel
+	amr := []string{"otp"}
+	switch ch.Channel {
+	case "sms":
+		amr = append(amr, "sms")
+	case "email":
+		amr = append(amr, "email")
+	}
+
 	// Success
 	return c.JSON(fiber.Map{
 		"ok":        true,
 		"user_id":   ch.UserID,
-		"amr":       []string{"otp"},
+		"amr":       amr,
 		"issued_at": time.Now().Unix(),
 	})
 }
@@ -372,9 +390,8 @@ func (h *Handlers) GetTestCode(c *fiber.Ctx) error {
 	}
 
 	ctx := c.Context()
-	testCodeKey := fmt.Sprintf("otp:test:code:%s", challengeID)
-	code, err := h.redis.Get(ctx, testCodeKey).Result()
-	if err != nil {
+	var code string
+	if err := h.testCodeCache.Get(ctx, challengeID, &code); err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "code_not_found",

@@ -4,13 +4,13 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
+	rediskitcache "github.com/soulteary/redis-kit/cache"
 	"golang.org/x/crypto/argon2"
 )
 
@@ -42,7 +42,8 @@ type ChallengeResponse struct {
 
 // Manager handles challenge operations
 type Manager struct {
-	redis           *redis.Client
+	cache           rediskitcache.Cache
+	lockCache       rediskitcache.Cache
 	expiry          time.Duration
 	maxAttempts     int
 	lockoutDuration time.Duration
@@ -51,8 +52,13 @@ type Manager struct {
 
 // NewManager creates a new challenge manager
 func NewManager(redisClient *redis.Client, expiry time.Duration, maxAttempts int, lockoutDuration time.Duration, codeLength int) *Manager {
+	// Create cache instances with appropriate prefixes
+	challengeCache := rediskitcache.NewCache(redisClient, challengeKeyPrefix)
+	lockCache := rediskitcache.NewCache(redisClient, lockKeyPrefix)
+
 	return &Manager{
-		redis:           redisClient,
+		cache:           challengeCache,
+		lockCache:       lockCache,
 		expiry:          expiry,
 		maxAttempts:     maxAttempts,
 		lockoutDuration: lockoutDuration,
@@ -85,15 +91,8 @@ func (m *Manager) CreateChallenge(ctx context.Context, userID, channel, destinat
 		CreatedAt:   time.Now(),
 	}
 
-	// Store in Redis
-	key := challengeKeyPrefix + challengeID
-	data, err := json.Marshal(challenge)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to marshal challenge: %w", err)
-	}
-
-	// Store with expiration
-	if err := m.redis.Set(ctx, key, data, m.expiry).Err(); err != nil {
+	// Store in Redis using cache interface
+	if err := m.cache.Set(ctx, challengeID, challenge, m.expiry); err != nil {
 		return nil, "", fmt.Errorf("failed to store challenge: %w", err)
 	}
 
@@ -104,15 +103,9 @@ func (m *Manager) CreateChallenge(ctx context.Context, userID, channel, destinat
 // GetCodeForTesting retrieves the verification code for a challenge in test mode
 // This should only be used in test environments
 func (m *Manager) GetCodeForTesting(ctx context.Context, challengeID string) (string, error) {
-	key := challengeKeyPrefix + challengeID
-	data, err := m.redis.Get(ctx, key).Bytes()
-	if err != nil {
-		return "", fmt.Errorf("challenge not found: %w", err)
-	}
-
 	var challenge Challenge
-	if err := json.Unmarshal(data, &challenge); err != nil {
-		return "", fmt.Errorf("failed to unmarshal challenge: %w", err)
+	if err := m.cache.Get(ctx, challengeID, &challenge); err != nil {
+		return "", fmt.Errorf("challenge not found: %w", err)
 	}
 
 	// In test mode, we need to store the code separately
@@ -122,40 +115,29 @@ func (m *Manager) GetCodeForTesting(ctx context.Context, challengeID string) (st
 
 // VerifyChallenge verifies a code against a challenge
 func (m *Manager) VerifyChallenge(ctx context.Context, challengeID, code, clientIP string) (bool, *Challenge, error) {
-	key := challengeKeyPrefix + challengeID
-
-	// Get challenge from Redis
-	data, err := m.redis.Get(ctx, key).Bytes()
-	if err == redis.Nil {
-		return false, nil, fmt.Errorf("challenge not found or expired")
-	}
-	if err != nil {
-		return false, nil, fmt.Errorf("failed to get challenge: %w", err)
-	}
-
+	// Get challenge from Redis using cache interface
 	var challenge Challenge
-	if err := json.Unmarshal(data, &challenge); err != nil {
-		return false, nil, fmt.Errorf("failed to unmarshal challenge: %w", err)
+	if err := m.cache.Get(ctx, challengeID, &challenge); err != nil {
+		return false, nil, fmt.Errorf("challenge not found or expired: %w", err)
 	}
 
 	// Check if expired
 	if time.Now().After(challenge.ExpiresAt) {
 		// Delete expired challenge
-		_ = m.redis.Del(ctx, key)
+		_ = m.cache.Del(ctx, challengeID)
 		return false, nil, fmt.Errorf("challenge expired")
 	}
 
 	// Check if locked
 	if challenge.Attempts >= m.maxAttempts {
 		// Lock the user
-		lockKey := lockKeyPrefix + challenge.UserID
-		_ = m.redis.Set(ctx, lockKey, "1", m.lockoutDuration)
+		_ = m.lockCache.Set(ctx, challenge.UserID, "1", m.lockoutDuration)
 		return false, nil, fmt.Errorf("challenge locked due to too many attempts")
 	}
 
 	// Check if user is locked
-	lockKey := lockKeyPrefix + challenge.UserID
-	if m.redis.Exists(ctx, lockKey).Val() > 0 {
+	exists, err := m.lockCache.Exists(ctx, challenge.UserID)
+	if err == nil && exists {
 		return false, nil, fmt.Errorf("user is temporarily locked")
 	}
 
@@ -163,23 +145,21 @@ func (m *Manager) VerifyChallenge(ctx context.Context, challengeID, code, client
 	if !verifyCode(code, challenge.CodeHash) {
 		// Increment attempts
 		challenge.Attempts++
-		updatedData, _ := json.Marshal(challenge)
-		ttl := m.redis.TTL(ctx, key).Val()
-		if ttl > 0 {
-			_ = m.redis.Set(ctx, key, updatedData, ttl)
+		ttl, err := m.cache.TTL(ctx, challengeID)
+		if err == nil && ttl > 0 {
+			_ = m.cache.Set(ctx, challengeID, challenge, ttl)
 		}
 		// Check if should lock after incrementing attempts
 		if challenge.Attempts >= m.maxAttempts {
 			// Lock the user
-			lockKey := lockKeyPrefix + challenge.UserID
-			_ = m.redis.Set(ctx, lockKey, "1", m.lockoutDuration)
+			_ = m.lockCache.Set(ctx, challenge.UserID, "1", m.lockoutDuration)
 			return false, nil, fmt.Errorf("challenge locked due to too many attempts")
 		}
 		return false, nil, fmt.Errorf("invalid code")
 	}
 
 	// Success - delete challenge (one-time use)
-	_ = m.redis.Del(ctx, key)
+	_ = m.cache.Del(ctx, challengeID)
 
 	logrus.Debugf("Challenge verified successfully: %s", challengeID)
 	return true, &challenge, nil
@@ -187,19 +167,9 @@ func (m *Manager) VerifyChallenge(ctx context.Context, challengeID, code, client
 
 // GetChallenge retrieves a challenge by ID
 func (m *Manager) GetChallenge(ctx context.Context, challengeID string) (*Challenge, error) {
-	key := challengeKeyPrefix + challengeID
-
-	data, err := m.redis.Get(ctx, key).Bytes()
-	if err == redis.Nil {
-		return nil, fmt.Errorf("challenge not found")
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to get challenge: %w", err)
-	}
-
 	var challenge Challenge
-	if err := json.Unmarshal(data, &challenge); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal challenge: %w", err)
+	if err := m.cache.Get(ctx, challengeID, &challenge); err != nil {
+		return nil, fmt.Errorf("challenge not found: %w", err)
 	}
 
 	return &challenge, nil
@@ -207,14 +177,13 @@ func (m *Manager) GetChallenge(ctx context.Context, challengeID string) (*Challe
 
 // RevokeChallenge revokes a challenge
 func (m *Manager) RevokeChallenge(ctx context.Context, challengeID string) error {
-	key := challengeKeyPrefix + challengeID
-	return m.redis.Del(ctx, key).Err()
+	return m.cache.Del(ctx, challengeID)
 }
 
 // IsUserLocked checks if a user is locked
 func (m *Manager) IsUserLocked(ctx context.Context, userID string) bool {
-	lockKey := lockKeyPrefix + userID
-	return m.redis.Exists(ctx, lockKey).Val() > 0
+	exists, err := m.lockCache.Exists(ctx, userID)
+	return err == nil && exists
 }
 
 // Helper functions

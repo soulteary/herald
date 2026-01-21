@@ -40,7 +40,7 @@ func TestNewHandlers(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient)
+	handlers := NewHandlers(redisClient, nil)
 
 	if handlers == nil {
 		t.Fatal("NewHandlers() returned nil")
@@ -65,7 +65,7 @@ func TestHandlers_HealthCheck(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient)
+	handlers := NewHandlers(redisClient, nil)
 
 	app := fiber.New()
 	app.Get("/health", handlers.HealthCheck)
@@ -122,7 +122,7 @@ func TestHandlers_CreateChallenge_Success(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient)
+	handlers := NewHandlers(redisClient, nil)
 
 	app := fiber.New()
 	app.Post("/challenge", handlers.CreateChallenge)
@@ -171,7 +171,7 @@ func TestHandlers_CreateChallenge_InvalidRequest(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient)
+	handlers := NewHandlers(redisClient, nil)
 
 	app := fiber.New()
 	app.Post("/challenge", handlers.CreateChallenge)
@@ -250,7 +250,7 @@ func TestHandlers_VerifyChallenge_Success(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient)
+	handlers := NewHandlers(redisClient, nil)
 
 	// Create a challenge first
 	challengeMgr := challenge.NewManager(
@@ -303,6 +303,151 @@ func TestHandlers_VerifyChallenge_Success(t *testing.T) {
 	if result["ok"] != true {
 		t.Error("VerifyChallenge() ok should be true")
 	}
+
+	// Verify AMR for email channel
+	if amr, ok := result["amr"].([]interface{}); ok {
+		expectedAMR := []string{"otp", "email"}
+		if len(amr) != len(expectedAMR) {
+			t.Errorf("VerifyChallenge() amr length = %d, want %d", len(amr), len(expectedAMR))
+		} else {
+			for i, v := range amr {
+				if str, ok := v.(string); ok {
+					if str != expectedAMR[i] {
+						t.Errorf("VerifyChallenge() amr[%d] = %s, want %s", i, str, expectedAMR[i])
+					}
+				}
+			}
+		}
+	} else {
+		t.Error("VerifyChallenge() amr should be present and be an array")
+	}
+}
+
+func TestHandlers_VerifyChallenge_AMR_ByChannel(t *testing.T) {
+	// Save original config
+	originalCodeLength := config.CodeLength
+	originalMaxAttempts := config.MaxAttempts
+	originalLockoutDuration := config.LockoutDuration
+	originalChallengeExpiry := config.ChallengeExpiry
+	defer func() {
+		config.CodeLength = originalCodeLength
+		config.MaxAttempts = originalMaxAttempts
+		config.LockoutDuration = originalLockoutDuration
+		config.ChallengeExpiry = originalChallengeExpiry
+	}()
+
+	config.CodeLength = 6
+	config.MaxAttempts = 5
+	config.LockoutDuration = 10 * time.Minute
+	config.ChallengeExpiry = 5 * time.Minute
+
+	tests := []struct {
+		name        string
+		channel     string
+		destination string
+		expectedAMR []string
+	}{
+		{
+			name:        "email channel",
+			channel:     "email",
+			destination: "test@example.com",
+			expectedAMR: []string{"otp", "email"},
+		},
+		{
+			name:        "sms channel",
+			channel:     "sms",
+			destination: "+8613800138000",
+			expectedAMR: []string{"otp", "sms"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			redisClient := testRedisClient(t)
+			defer func() {
+				_ = redisClient.Close()
+			}()
+
+			handlers := NewHandlers(redisClient, nil)
+
+			// Create a challenge first
+			challengeMgr := challenge.NewManager(
+				redisClient,
+				config.ChallengeExpiry,
+				config.MaxAttempts,
+				config.LockoutDuration,
+				config.CodeLength,
+			)
+
+			ctx := context.Background()
+			ch, code, err := challengeMgr.CreateChallenge(ctx, "user123", tt.channel, tt.destination, "login", "127.0.0.1")
+			if err != nil {
+				t.Fatalf("Failed to create challenge: %v", err)
+			}
+
+			app := fiber.New()
+			app.Post("/verify", handlers.VerifyChallenge)
+
+			reqBody := VerifyChallengeRequest{
+				ChallengeID: ch.ID,
+				Code:        code,
+				ClientIP:    "127.0.0.1",
+			}
+
+			bodyBytes, _ := json.Marshal(reqBody)
+			req := httptest.NewRequest("POST", "/verify", bytes.NewBuffer(bodyBytes))
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := app.Test(req)
+			if err != nil {
+				t.Fatalf("Test request failed: %v", err)
+			}
+
+			if resp.StatusCode != fiber.StatusOK {
+				body, _ := io.ReadAll(resp.Body)
+				t.Fatalf("VerifyChallenge() status = %d, want %d, body: %s", resp.StatusCode, fiber.StatusOK, string(body))
+			}
+
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("Failed to read response body: %v", err)
+			}
+
+			var result map[string]interface{}
+			if err := json.Unmarshal(body, &result); err != nil {
+				t.Fatalf("Failed to unmarshal response: %v", err)
+			}
+
+			if result["ok"] != true {
+				t.Error("VerifyChallenge() ok should be true")
+			}
+
+			// Verify AMR matches expected values
+			amrInterface, ok := result["amr"]
+			if !ok {
+				t.Fatal("VerifyChallenge() amr should be present")
+			}
+
+			amr, ok := amrInterface.([]interface{})
+			if !ok {
+				t.Fatal("VerifyChallenge() amr should be an array")
+			}
+
+			if len(amr) != len(tt.expectedAMR) {
+				t.Errorf("VerifyChallenge() amr length = %d, want %d", len(amr), len(tt.expectedAMR))
+			} else {
+				for i, v := range amr {
+					if str, ok := v.(string); ok {
+						if str != tt.expectedAMR[i] {
+							t.Errorf("VerifyChallenge() amr[%d] = %s, want %s", i, str, tt.expectedAMR[i])
+						}
+					} else {
+						t.Errorf("VerifyChallenge() amr[%d] should be a string", i)
+					}
+				}
+			}
+		})
+	}
 }
 
 func TestHandlers_VerifyChallenge_InvalidRequest(t *testing.T) {
@@ -311,7 +456,7 @@ func TestHandlers_VerifyChallenge_InvalidRequest(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient)
+	handlers := NewHandlers(redisClient, nil)
 
 	app := fiber.New()
 	app.Post("/verify", handlers.VerifyChallenge)
@@ -379,7 +524,7 @@ func TestHandlers_RevokeChallenge(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient)
+	handlers := NewHandlers(redisClient, nil)
 
 	// Create a challenge first
 	challengeMgr := challenge.NewManager(
@@ -431,7 +576,7 @@ func TestHandlers_RevokeChallenge_MissingID(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient)
+	handlers := NewHandlers(redisClient, nil)
 
 	app := fiber.New()
 	app.Delete("/challenge/:id", handlers.RevokeChallenge)
