@@ -48,6 +48,11 @@ func NewRouter() *fiber.App {
 	// Health check
 	app.Get("/health", h.HealthCheck)
 
+	// Test mode endpoint (only available when HERALD_TEST_MODE=true)
+	if config.TestMode {
+		app.Get("/v1/test/code/:challenge_id", h.GetTestCode)
+	}
+
 	// API routes
 	api := app.Group("/v1")
 
