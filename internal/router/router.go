@@ -1,10 +1,12 @@
 package router
 
 import (
+	"github.com/gofiber/adaptor/v2"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	rediskit "github.com/soulteary/redis-kit/client"
 
@@ -55,7 +57,10 @@ func NewRouter() *fiber.App {
 	h := handlers.NewHandlers(redisClient, sessionManager)
 
 	// Health check
-	app.Get("/health", h.HealthCheck)
+	app.Get("/healthz", h.HealthCheck)
+
+	// Prometheus metrics endpoint
+	app.Get("/metrics", adaptor.HTTPHandler(promhttp.Handler()))
 
 	// Test mode endpoint (only available when HERALD_TEST_MODE=true)
 	if config.TestMode {

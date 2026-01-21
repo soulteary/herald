@@ -32,7 +32,7 @@ Dove :
 
 ### Controllo dello Stato
 
-**GET /health**
+**GET /healthz**
 
 Verificare lo stato di salute del servizio.
 

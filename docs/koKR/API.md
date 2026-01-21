@@ -32,7 +32,7 @@ HMAC-SHA256(timestamp:service:body, secret)
 
 ### 헬스 체크
 
-**GET /health**
+**GET /healthz**
 
 서비스 상태를 확인합니다.
 
