@@ -14,70 +14,77 @@ import (
 )
 
 // RequireAuth middleware validates service-to-service authentication
+// Priority: mTLS (if client cert verified) > HMAC > API Key
 func RequireAuth() fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// If no authentication is configured, skip auth (for development)
-		if config.APIKey == "" && config.HMACSecret == "" {
-			return c.Next()
+		// Check mTLS first (if TLS connection with verified client certificate)
+		if c.Protocol() == "https" {
+			// Get TLS connection state
+			tlsConn := c.Context().TLSConnectionState()
+			if tlsConn != nil && len(tlsConn.PeerCertificates) > 0 {
+				// Client certificate is present and verified (by TLS layer)
+				logrus.Debug("Request authenticated via mTLS")
+				return c.Next()
+			}
 		}
 
-		// Check API Key header (simple auth)
-		apiKey := c.Get("X-API-Key")
-		if apiKey != "" && apiKey == config.APIKey {
-			return c.Next()
-		}
-
-		// Check HMAC signature (more secure)
+		// Check HMAC signature (more secure than API Key)
 		signature := c.Get("X-Signature")
 		timestamp := c.Get("X-Timestamp")
 		service := c.Get("X-Service")
 
 		if signature != "" && timestamp != "" {
 			if config.HMACSecret == "" {
-				logrus.Warn("HMAC_SECRET is not configured, falling back to API key")
-				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-					"ok":     false,
-					"reason": "authentication_required",
-				})
-			}
+				logrus.Debug("HMAC_SECRET is not configured, trying API key")
+			} else {
+				// Validate timestamp (prevent replay attacks)
+				ts, err := strconv.ParseInt(timestamp, 10, 64)
+				if err != nil {
+					return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+						"ok":     false,
+						"reason": "invalid_timestamp",
+					})
+				}
 
-			// Validate timestamp (prevent replay attacks)
-			ts, err := strconv.ParseInt(timestamp, 10, 64)
-			if err != nil {
-				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-					"ok":     false,
-					"reason": "invalid_timestamp",
-				})
-			}
+				// Check timestamp is within 5 minutes
+				now := time.Now().Unix()
+				if abs(now-ts) > 300 { // 5 minutes
+					return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+						"ok":     false,
+						"reason": "timestamp_expired",
+					})
+				}
 
-			// Check timestamp is within 5 minutes
-			now := time.Now().Unix()
-			if abs(now-ts) > 300 { // 5 minutes
-				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-					"ok":     false,
-					"reason": "timestamp_expired",
-				})
-			}
+				// Verify HMAC signature
+				body := string(c.Body())
+				expectedSig := computeHMAC(timestamp, service, body, config.HMACSecret)
 
-			// Verify HMAC signature
-			body := string(c.Body())
-			expectedSig := computeHMAC(timestamp, service, body, config.HMACSecret)
+				if hmac.Equal([]byte(signature), []byte(expectedSig)) {
+					logrus.Debug("Request authenticated via HMAC")
+					return c.Next()
+				}
 
-			if !hmac.Equal([]byte(signature), []byte(expectedSig)) {
 				logrus.Debugf("HMAC signature mismatch. Expected: %s, Got: %s", expectedSig, signature)
-				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-					"ok":     false,
-					"reason": "invalid_signature",
-				})
 			}
+		}
 
+		// Check API Key header (simple auth)
+		apiKey := c.Get("X-API-Key")
+		if apiKey != "" && config.APIKey != "" && apiKey == config.APIKey {
+			logrus.Debug("Request authenticated via API Key")
+			return c.Next()
+		}
+
+		// If no authentication method is configured, allow in development but warn
+		if config.APIKey == "" && config.HMACSecret == "" {
+			logrus.Warn("No authentication method configured (API_KEY or HMAC_SECRET), allowing request (development mode)")
 			return c.Next()
 		}
 
 		// No valid authentication found
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"ok":     false,
-			"reason": "authentication_required",
+			"reason": "unauthorized",
 		})
 	}
 }

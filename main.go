@@ -1,6 +1,9 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
+	"os"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -21,9 +24,56 @@ func main() {
 	app := router.NewRouter()
 	port := config.GetPort()
 
-	logrus.Infof("Herald service starting on port %s", port)
-	if err := app.Listen(port); err != nil {
-		logrus.Fatalf("Failed to start server: %v", err)
+	// Check if TLS is configured
+	if config.TLSCertFile != "" && config.TLSKeyFile != "" {
+		logrus.Infof("Herald service starting with TLS on port %s", port)
+
+		// Load server certificate
+		cert, err := tls.LoadX509KeyPair(config.TLSCertFile, config.TLSKeyFile)
+		if err != nil {
+			logrus.Fatalf("Failed to load TLS certificate: %v", err)
+		}
+
+		// Configure TLS
+		tlsConfig := &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			MinVersion:   tls.VersionTLS12,
+		}
+
+		// Configure mTLS if CA certificate is provided
+		if config.TLSCACertFile != "" {
+			logrus.Info("mTLS enabled: client certificate verification required")
+
+			// Load CA certificate for client verification
+			caCert, err := os.ReadFile(config.TLSCACertFile)
+			if err != nil {
+				logrus.Fatalf("Failed to read CA certificate: %v", err)
+			}
+
+			caCertPool := x509.NewCertPool()
+			if !caCertPool.AppendCertsFromPEM(caCert) {
+				logrus.Fatalf("Failed to parse CA certificate")
+			}
+
+			tlsConfig.ClientCAs = caCertPool
+			// Require client certificates (but allow fallback to HMAC/API Key if not provided)
+			tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
+		}
+
+		// Start server with TLS
+		ln, err := tls.Listen("tcp", port, tlsConfig)
+		if err != nil {
+			logrus.Fatalf("Failed to start TLS listener: %v", err)
+		}
+
+		if err := app.Listener(ln); err != nil {
+			logrus.Fatalf("Failed to start server: %v", err)
+		}
+	} else {
+		logrus.Infof("Herald service starting on port %s", port)
+		if err := app.Listen(port); err != nil {
+			logrus.Fatalf("Failed to start server: %v", err)
+		}
 	}
 }
 

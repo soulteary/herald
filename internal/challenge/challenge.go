@@ -101,6 +101,25 @@ func (m *Manager) CreateChallenge(ctx context.Context, userID, channel, destinat
 	return challenge, code, nil
 }
 
+// GetCodeForTesting retrieves the verification code for a challenge in test mode
+// This should only be used in test environments
+func (m *Manager) GetCodeForTesting(ctx context.Context, challengeID string) (string, error) {
+	key := challengeKeyPrefix + challengeID
+	data, err := m.redis.Get(ctx, key).Bytes()
+	if err != nil {
+		return "", fmt.Errorf("challenge not found: %w", err)
+	}
+
+	var challenge Challenge
+	if err := json.Unmarshal(data, &challenge); err != nil {
+		return "", fmt.Errorf("failed to unmarshal challenge: %w", err)
+	}
+
+	// In test mode, we need to store the code separately
+	// For now, return empty - test mode code storage will be handled in handlers
+	return "", fmt.Errorf("test mode code retrieval not implemented - use HERALD_TEST_MODE with code storage")
+}
+
 // VerifyChallenge verifies a code against a challenge
 func (m *Manager) VerifyChallenge(ctx context.Context, challengeID, code, clientIP string) (bool, *Challenge, error) {
 	key := challengeKeyPrefix + challengeID

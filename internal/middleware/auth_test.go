@@ -15,8 +15,8 @@ import (
 	"github.com/soulteary/herald/internal/config"
 )
 
-func TestRequireAuth_NoAPIKey(t *testing.T) {
-	// Save original API key
+func TestRequireAuth_NoAPIKey_NoHMAC(t *testing.T) {
+	// Save original config
 	originalAPIKey := config.APIKey
 	originalHMACSecret := config.HMACSecret
 	defer func() {
@@ -24,7 +24,7 @@ func TestRequireAuth_NoAPIKey(t *testing.T) {
 		config.HMACSecret = originalHMACSecret
 	}()
 
-	// Set API key to empty (should skip auth)
+	// Set both to empty (should allow in dev mode)
 	config.APIKey = ""
 	config.HMACSecret = ""
 
@@ -42,6 +42,60 @@ func TestRequireAuth_NoAPIKey(t *testing.T) {
 
 	if resp.StatusCode != fiber.StatusOK {
 		t.Errorf("RequireAuth() status = %d, want %d", resp.StatusCode, fiber.StatusOK)
+	}
+}
+
+func TestRequireAuth_NoAPIKey_WithHMAC(t *testing.T) {
+	// Save original config
+	originalAPIKey := config.APIKey
+	originalHMACSecret := config.HMACSecret
+	defer func() {
+		config.APIKey = originalAPIKey
+		config.HMACSecret = originalHMACSecret
+	}()
+
+	// Set API key to empty but HMAC is configured (should require HMAC)
+	config.APIKey = ""
+	config.HMACSecret = "test-secret"
+
+	app := fiber.New()
+	app.Use(RequireAuth())
+	app.Post("/test", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"ok": true})
+	})
+
+	// Request without authentication should fail
+	req := httptest.NewRequest("POST", "/test", bytes.NewBufferString(`{"test": "data"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Test request failed: %v", err)
+	}
+
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		t.Errorf("RequireAuth() status = %d, want %d", resp.StatusCode, fiber.StatusUnauthorized)
+	}
+
+	// Request with valid HMAC should succeed
+	body := `{"test": "data"}`
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	service := "test-service"
+	signature := computeHMAC(timestamp, service, body, config.HMACSecret)
+
+	req = httptest.NewRequest("POST", "/test", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Signature", signature)
+	req.Header.Set("X-Timestamp", timestamp)
+	req.Header.Set("X-Service", service)
+
+	resp, err = app.Test(req)
+	if err != nil {
+		t.Fatalf("Test request failed: %v", err)
+	}
+
+	if resp.StatusCode != fiber.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		t.Errorf("RequireAuth() status = %d, want %d, body: %s", resp.StatusCode, fiber.StatusOK, string(bodyBytes))
 	}
 }
 
@@ -116,7 +170,7 @@ func TestRequireAuth_ValidHMAC(t *testing.T) {
 		config.HMACSecret = originalHMACSecret
 	}()
 
-	// Set config
+	// Set config - HMAC should work even without API key
 	config.APIKey = ""
 	config.HMACSecret = "test-secret"
 
@@ -187,7 +241,7 @@ func TestRequireAuth_InvalidHMAC(t *testing.T) {
 		config.HMACSecret = originalHMACSecret
 	}()
 
-	// Set config - APIKey must be set to trigger HMAC check
+	// Set config - HMAC check works regardless of API key
 	config.APIKey = "some-api-key"
 	config.HMACSecret = "test-secret"
 
@@ -227,7 +281,7 @@ func TestRequireAuth_ExpiredTimestamp(t *testing.T) {
 		config.HMACSecret = originalHMACSecret
 	}()
 
-	// Set config - APIKey must be set to trigger HMAC check
+	// Set config
 	config.APIKey = "some-api-key"
 	config.HMACSecret = "test-secret"
 
@@ -268,7 +322,7 @@ func TestRequireAuth_InvalidTimestamp(t *testing.T) {
 		config.HMACSecret = originalHMACSecret
 	}()
 
-	// Set config - APIKey must be set to trigger HMAC check
+	// Set config
 	config.APIKey = "some-api-key"
 	config.HMACSecret = "test-secret"
 
