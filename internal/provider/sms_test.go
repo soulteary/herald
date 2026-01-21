@@ -85,15 +85,23 @@ func TestSMSProvider_Send(t *testing.T) {
 		}
 
 		var payload struct {
-			To      string `json:"to"`
-			Message string `json:"message"`
-			Code    string `json:"code,omitempty"`
+			Channel        string                 `json:"channel"`
+			To             string                 `json:"to"`
+			Template       string                 `json:"template"`
+			Params         map[string]interface{} `json:"params"`
+			Locale         string                 `json:"locale,omitempty"`
+			IdempotencyKey string                 `json:"idempotency_key,omitempty"`
+			TimeoutSeconds int                    `json:"timeout_seconds,omitempty"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Fatalf("failed to decode payload: %v", err)
 		}
-		if payload.To != "+1234567890" || payload.Code != "123456" {
+		if payload.Channel != "sms" || payload.To != "+1234567890" {
 			t.Errorf("unexpected payload: %+v", payload)
+		}
+		// Check params contain expected fields
+		if code, ok := payload.Params["code"].(string); !ok || code != "123456" {
+			t.Errorf("unexpected params: %+v", payload.Params)
 		}
 
 		_, _ = w.Write([]byte(`{"ok":true}`))

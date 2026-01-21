@@ -16,8 +16,8 @@ import (
 // RequireAuth middleware validates service-to-service authentication
 func RequireAuth() fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// If API key is not configured, skip auth (for development)
-		if config.APIKey == "" {
+		// If no authentication is configured, skip auth (for development)
+		if config.APIKey == "" && config.HMACSecret == "" {
 			return c.Next()
 		}
 

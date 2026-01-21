@@ -27,6 +27,8 @@ Welcome to the Herald OTP and Verification Code Service documentation.
   - Configuration options
   - Integration with Stargate
   - Security best practices
+  - Architecture diagram
+  - Troubleshooting guide
 
 ## 🚀 Quick Navigation
 

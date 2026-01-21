@@ -15,10 +15,17 @@ const (
 
 // Message represents a message to be sent
 type Message struct {
-	To      string
-	Subject string
-	Body    string
-	Code    string // Verification code
+	To             string
+	Subject        string
+	Body           string
+	Code           string // Verification code
+	IdempotencyKey string
+	Purpose        string
+	Locale         string
+	Template       string
+	Params         map[string]interface{}
+	Traceparent    string
+	Tracestate     string
 }
 
 // Provider is the interface for message providers

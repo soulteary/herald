@@ -18,12 +18,15 @@ import (
 func TestRequireAuth_NoAPIKey(t *testing.T) {
 	// Save original API key
 	originalAPIKey := config.APIKey
+	originalHMACSecret := config.HMACSecret
 	defer func() {
 		config.APIKey = originalAPIKey
+		config.HMACSecret = originalHMACSecret
 	}()
 
 	// Set API key to empty (should skip auth)
 	config.APIKey = ""
+	config.HMACSecret = ""
 
 	app := fiber.New()
 	app.Use(RequireAuth())
@@ -45,12 +48,15 @@ func TestRequireAuth_NoAPIKey(t *testing.T) {
 func TestRequireAuth_ValidAPIKey(t *testing.T) {
 	// Save original API key
 	originalAPIKey := config.APIKey
+	originalHMACSecret := config.HMACSecret
 	defer func() {
 		config.APIKey = originalAPIKey
+		config.HMACSecret = originalHMACSecret
 	}()
 
 	// Set API key
 	config.APIKey = "test-api-key"
+	config.HMACSecret = ""
 
 	app := fiber.New()
 	app.Use(RequireAuth())
@@ -73,12 +79,15 @@ func TestRequireAuth_ValidAPIKey(t *testing.T) {
 func TestRequireAuth_InvalidAPIKey(t *testing.T) {
 	// Save original API key
 	originalAPIKey := config.APIKey
+	originalHMACSecret := config.HMACSecret
 	defer func() {
 		config.APIKey = originalAPIKey
+		config.HMACSecret = originalHMACSecret
 	}()
 
 	// Set API key
 	config.APIKey = "test-api-key"
+	config.HMACSecret = ""
 
 	app := fiber.New()
 	app.Use(RequireAuth())
@@ -136,6 +145,36 @@ func TestRequireAuth_ValidHMAC(t *testing.T) {
 	if resp.StatusCode != fiber.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		t.Errorf("RequireAuth() status = %d, want %d, body: %s", resp.StatusCode, fiber.StatusOK, string(bodyBytes))
+	}
+}
+
+func TestRequireAuth_RequireHMACWhenConfigured(t *testing.T) {
+	// Save original config
+	originalAPIKey := config.APIKey
+	originalHMACSecret := config.HMACSecret
+	defer func() {
+		config.APIKey = originalAPIKey
+		config.HMACSecret = originalHMACSecret
+	}()
+
+	// Require HMAC only
+	config.APIKey = ""
+	config.HMACSecret = "test-secret"
+
+	app := fiber.New()
+	app.Use(RequireAuth())
+	app.Get("/test", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"ok": true})
+	})
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Test request failed: %v", err)
+	}
+
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		t.Errorf("RequireAuth() status = %d, want %d", resp.StatusCode, fiber.StatusUnauthorized)
 	}
 }
 

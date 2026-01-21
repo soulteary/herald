@@ -50,6 +50,9 @@ HMAC-SHA256(timestamp:service:body, secret)
 
 创建新的验证挑战并发送验证码。
 
+**请求头（可选）：**
+- `Idempotency-Key`：幂等键，同一键返回相同 challenge 结果
+
 **请求：**
 ```json
 {
@@ -88,16 +91,21 @@ HMAC-SHA256(timestamp:service:body, secret)
 - `user_id_required`：缺少必需字段 `user_id`
 - `invalid_channel`：无效的通道类型（必须是 "sms" 或 "email"）
 - `destination_required`：缺少必需字段 `destination`
+- `idempotency_conflict`：幂等键已存在但请求内容不一致
+- `idempotency_in_progress`：幂等键正在处理中，请稍后重试
 - `rate_limit_exceeded`：超过速率限制
 - `resend_cooldown`：重发冷却期未过期
 - `user_locked`：用户暂时被锁定
+- `send_failed`：外部发送失败（严格模式）
 - `internal_error`：内部服务器错误
 
 HTTP 状态代码：
 - `400 Bad Request`：无效的请求参数
 - `401 Unauthorized`：认证失败
 - `403 Forbidden`：用户被锁定
+- `409 Conflict`：幂等键冲突或正在处理中
 - `429 Too Many Requests`：超过速率限制
+- `502 Bad Gateway`：外部发送失败（严格模式）
 - `500 Internal Server Error`：内部服务器错误
 
 ### 验证挑战
@@ -204,6 +212,8 @@ Herald 实现多维速率限制：
 - `challenge_id_required`：缺少必需字段 `challenge_id`
 - `code_required`：缺少必需字段 `code`
 - `invalid_code_format`：验证码格式无效
+- `idempotency_conflict`：幂等键冲突，请求内容不一致
+- `idempotency_in_progress`：幂等键处理中
 
 ### 认证错误
 - `authentication_required`：未提供有效的认证
@@ -226,4 +236,5 @@ Herald 实现多维速率限制：
 - `user_locked`：用户暂时被锁定
 
 ### 系统错误
+- `send_failed`：外部发送失败（严格模式）
 - `internal_error`：内部服务器错误

@@ -44,30 +44,59 @@ func (p *SMTPProvider) Validate() error {
 }
 
 // Send sends an email via SMTP
+// This follows external API protocol
 func (p *SMTPProvider) Send(ctx context.Context, msg *Message) error {
 	if err := p.Validate(); err != nil {
 		return err
 	}
 
+	// Build params map
+	params := make(map[string]interface{})
+	if msg.Params != nil {
+		params = msg.Params
+	}
+	if msg.Code != "" {
+		params["code"] = msg.Code
+	}
+	if msg.Subject != "" {
+		params["subject"] = msg.Subject
+	}
+	if msg.Body != "" {
+		params["body"] = msg.Body
+	}
+	if p.from != "" {
+		params["from"] = p.from
+	}
+
+	// Determine template
+	template := msg.Template
+	if template == "" {
+		template = "verification_email"
+	}
+
 	payload := struct {
-		To      string `json:"to"`
-		From    string `json:"from,omitempty"`
-		Subject string `json:"subject"`
-		Body    string `json:"body"`
-		Code    string `json:"code,omitempty"`
+		Channel        string                 `json:"channel"`
+		To             string                 `json:"to"`
+		Template       string                 `json:"template"`
+		Params         map[string]interface{} `json:"params"`
+		Locale         string                 `json:"locale,omitempty"`
+		IdempotencyKey string                 `json:"idempotency_key,omitempty"`
+		TimeoutSeconds int                    `json:"timeout_seconds,omitempty"`
 	}{
-		To:      msg.To,
-		From:    p.from,
-		Subject: msg.Subject,
-		Body:    msg.Body,
-		Code:    msg.Code,
+		Channel:        "email",
+		To:             msg.To,
+		Template:       template,
+		Params:         params,
+		Locale:         msg.Locale,
+		IdempotencyKey: msg.IdempotencyKey,
+		TimeoutSeconds: int(config.ProviderTimeout.Seconds()),
 	}
 
 	if p.client == nil {
 		p.client = newHTTPClient(config.ProviderTimeout)
 	}
 
-	return postJSON(ctx, p.client, p.endpoint, p.apiKey, payload)
+	return postJSON(ctx, p.client, p.endpoint, p.apiKey, payload, msg.Traceparent, msg.Tracestate)
 }
 
 // FormatVerificationEmail formats a verification code email

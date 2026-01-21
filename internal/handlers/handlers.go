@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
@@ -9,8 +11,12 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 
+	"github.com/soulteary/herald/internal/audit"
 	"github.com/soulteary/herald/internal/challenge"
 	"github.com/soulteary/herald/internal/config"
+	"github.com/soulteary/herald/internal/idempotency"
+	"github.com/soulteary/herald/internal/metrics"
+	"github.com/soulteary/herald/internal/middleware"
 	"github.com/soulteary/herald/internal/otp"
 	"github.com/soulteary/herald/internal/provider"
 	"github.com/soulteary/herald/internal/ratelimit"
@@ -21,6 +27,8 @@ type Handlers struct {
 	challengeManager *challenge.Manager
 	rateLimitManager *ratelimit.Manager
 	providerRegistry *provider.Registry
+	idempotencyMgr   *idempotency.Manager
+	auditLogger      *audit.Logger
 	redis            *redis.Client
 }
 
@@ -35,6 +43,20 @@ func NewHandlers(redisClient *redis.Client) *Handlers {
 	)
 
 	rateLimitMgr := ratelimit.NewManager(redisClient)
+	idempotencyMgr := idempotency.NewManager(redisClient, config.IdempotencyTTL)
+
+	// Initialize audit logger
+	auditLogger, err := audit.NewLogger(
+		config.AuditLogEnabled,
+		config.AuditLogPath,
+		config.AuditMaskDestination,
+	)
+	if err != nil {
+		logrus.Errorf("Failed to initialize audit logger: %v", err)
+		auditLogger = nil
+	} else if config.AuditLogEnabled {
+		logrus.Info("Audit logger initialized")
+	}
 
 	// Initialize provider registry
 	registry := provider.NewRegistry()
@@ -63,6 +85,8 @@ func NewHandlers(redisClient *redis.Client) *Handlers {
 		challengeManager: challengeMgr,
 		rateLimitManager: rateLimitMgr,
 		providerRegistry: registry,
+		idempotencyMgr:   idempotencyMgr,
+		auditLogger:      auditLogger,
 		redis:            redisClient,
 	}
 }
@@ -131,6 +155,83 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		})
 	}
 
+	idempotencyKey := getIdempotencyKey(c)
+	requestHash := ""
+	reservedIdempotency := false
+	completedIdempotency := false
+
+	if idempotencyKey != "" {
+		requestHash = hashIdempotencyRequest(req)
+		record, err := h.idempotencyMgr.Get(ctx, idempotencyKey)
+		if err != nil {
+			logrus.Errorf("Failed to load idempotency key: %v", err)
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"ok":     false,
+				"reason": "internal_error",
+			})
+		}
+		if record != nil {
+			if record.RequestHash != "" && record.RequestHash != requestHash {
+				return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+					"ok":     false,
+					"reason": "idempotency_conflict",
+				})
+			}
+			if idempotency.IsCompleted(record) {
+				return c.JSON(record.Response)
+			}
+			if idempotency.IsProcessing(record) {
+				return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+					"ok":     false,
+					"reason": "idempotency_in_progress",
+				})
+			}
+		}
+
+		locked, err := h.idempotencyMgr.Begin(ctx, idempotencyKey, requestHash)
+		if err != nil {
+			logrus.Errorf("Failed to reserve idempotency key: %v", err)
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"ok":     false,
+				"reason": "internal_error",
+			})
+		}
+		if !locked {
+			record, err := h.idempotencyMgr.Get(ctx, idempotencyKey)
+			if err != nil {
+				logrus.Errorf("Failed to reload idempotency key: %v", err)
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"ok":     false,
+					"reason": "internal_error",
+				})
+			}
+			if record != nil && record.RequestHash != "" && record.RequestHash != requestHash {
+				return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+					"ok":     false,
+					"reason": "idempotency_conflict",
+				})
+			}
+			if idempotency.IsCompleted(record) {
+				return c.JSON(record.Response)
+			}
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+				"ok":     false,
+				"reason": "idempotency_in_progress",
+			})
+		}
+		reservedIdempotency = true
+	}
+
+	if reservedIdempotency {
+		defer func() {
+			if !completedIdempotency {
+				if err := h.idempotencyMgr.Delete(ctx, idempotencyKey); err != nil {
+					logrus.Warnf("Failed to cleanup idempotency key: %v", err)
+				}
+			}
+		}()
+	}
+
 	// Get client IP
 	clientIP := req.ClientIP
 	if clientIP == "" {
@@ -146,6 +247,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		logrus.Errorf("Rate limit check failed: %v", err)
 	}
 	if !allowed {
+		metrics.RecordRateLimitHit("user")
 		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "rate_limit_exceeded",
@@ -160,6 +262,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		logrus.Errorf("Rate limit check failed: %v", err)
 	}
 	if !allowed {
+		metrics.RecordRateLimitHit("ip")
 		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "rate_limit_exceeded",
@@ -174,6 +277,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		logrus.Errorf("Rate limit check failed: %v", err)
 	}
 	if !allowed {
+		metrics.RecordRateLimitHit("destination")
 		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "rate_limit_exceeded",
@@ -187,6 +291,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		logrus.Errorf("Cooldown check failed: %v", err)
 	}
 	if !allowed {
+		metrics.RecordRateLimitHit("resend_cooldown")
 		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "resend_cooldown",
@@ -195,6 +300,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 
 	// Check if user is locked
 	if h.challengeManager.IsUserLocked(ctx, req.UserID) {
+		metrics.RecordRateLimitHit("user_locked")
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "user_locked",
@@ -207,6 +313,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 	)
 	if err != nil {
 		logrus.Errorf("Failed to create challenge: %v", err)
+		metrics.RecordChallenge(req.Channel, req.Purpose, "error")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "internal_error",
@@ -215,9 +322,21 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 
 	// Send verification code via provider
 	channel := provider.Channel(req.Channel)
+	traceparent := middleware.GetTraceparent(c)
+	tracestate := middleware.GetTracestate(c)
+
 	msg := &provider.Message{
-		To:   req.Destination,
-		Code: code,
+		To:          req.Destination,
+		Code:        code,
+		Purpose:     req.Purpose,
+		Locale:      req.Locale,
+		Traceparent: traceparent,
+		Tracestate:  tracestate,
+	}
+	if idempotencyKey != "" {
+		msg.IdempotencyKey = idempotencyKey
+	} else {
+		msg.IdempotencyKey = ch.ID
 	}
 
 	if channel == provider.ChannelEmail {
@@ -226,20 +345,82 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		msg.Body = provider.FormatVerificationSMS(code, req.Locale)
 	}
 
-	if err := h.providerRegistry.Send(ctx, channel, msg); err != nil {
-		logrus.Errorf("Failed to send verification code via provider: %v", err)
-		// Don't fail the request, challenge is already created
-		// The code can still be verified manually if needed
-		// However, in production, you may want to return an error here
-		// to prevent creating challenges that cannot be delivered
+	sendStart := time.Now()
+	sendErr := h.providerRegistry.Send(ctx, channel, msg)
+	sendDuration := time.Since(sendStart)
+	sendResult := "ok"
+	if sendErr != nil {
+		sendResult = "failed"
+	}
+	metrics.RecordSend(req.Channel, sendResult)
+	metrics.ObserveSendDuration(req.Channel, sendResult, sendDuration)
+
+	if sendErr != nil {
+		logrus.Errorf("Failed to send verification code via provider: %v", sendErr)
+		metrics.RecordChallenge(req.Channel, req.Purpose, "send_failed")
+
+		// Audit log: send failed
+		if h.auditLogger != nil {
+			h.auditLogger.Log(audit.Event{
+				Event:       "challenge_send_failed",
+				ChallengeID: ch.ID,
+				UserID:      req.UserID,
+				Channel:     req.Channel,
+				Destination: req.Destination,
+				Provider:    string(channel),
+				Result:      "failed",
+				Reason:      sendErr.Error(),
+				ClientIP:    clientIP,
+				Traceparent: traceparent,
+				Tracestate:  tracestate,
+			})
+		}
+
+		if config.IsProviderFailureStrict() {
+			if revokeErr := h.challengeManager.RevokeChallenge(ctx, ch.ID); revokeErr != nil {
+				logrus.Warnf("Failed to revoke challenge after send error: %v", revokeErr)
+			}
+			return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{
+				"ok":     false,
+				"reason": "send_failed",
+			})
+		}
+	} else {
+		metrics.RecordChallenge(req.Channel, req.Purpose, "ok")
+
+		// Audit log: challenge created and sent
+		if h.auditLogger != nil {
+			h.auditLogger.Log(audit.Event{
+				Event:       "challenge_created",
+				ChallengeID: ch.ID,
+				UserID:      req.UserID,
+				Channel:     req.Channel,
+				Destination: req.Destination,
+				Provider:    string(channel),
+				Result:      "ok",
+				ClientIP:    clientIP,
+				Traceparent: traceparent,
+				Tracestate:  tracestate,
+			})
+		}
 	}
 
 	// Return response
-	return c.JSON(fiber.Map{
-		"challenge_id":   ch.ID,
-		"expires_in":     int(config.ChallengeExpiry.Seconds()),
-		"next_resend_in": int(config.ResendCooldown.Seconds()),
-	})
+	response := idempotency.Response{
+		ChallengeID:  ch.ID,
+		ExpiresIn:    int(config.ChallengeExpiry.Seconds()),
+		NextResendIn: int(config.ResendCooldown.Seconds()),
+	}
+
+	if idempotencyKey != "" {
+		if err := h.idempotencyMgr.Complete(ctx, idempotencyKey, requestHash, response); err != nil {
+			logrus.Warnf("Failed to store idempotency response: %v", err)
+		} else {
+			completedIdempotency = true
+		}
+	}
+
+	return c.JSON(response)
 }
 
 // VerifyChallengeRequest represents the request to verify a challenge
@@ -283,6 +464,14 @@ func (h *Handlers) VerifyChallenge(c *fiber.Ctx) error {
 		})
 	}
 
+	// Get trace context
+	traceparent := middleware.GetTraceparent(c)
+	tracestate := middleware.GetTracestate(c)
+	clientIP := req.ClientIP
+	if clientIP == "" {
+		clientIP = c.IP()
+	}
+
 	// Verify challenge
 	valid, ch, err := h.challengeManager.VerifyChallenge(ctx, req.ChallengeID, req.Code, req.ClientIP)
 	if err != nil {
@@ -299,6 +488,21 @@ func (h *Handlers) VerifyChallenge(c *fiber.Ctx) error {
 			reason = "invalid"
 		}
 
+		metrics.RecordVerification("failed", reason)
+
+		// Audit log: verification failed
+		if h.auditLogger != nil {
+			h.auditLogger.Log(audit.Event{
+				Event:       "challenge_verify_failed",
+				ChallengeID: req.ChallengeID,
+				Result:      "failed",
+				Reason:      reason,
+				ClientIP:    clientIP,
+				Traceparent: traceparent,
+				Tracestate:  tracestate,
+			})
+		}
+
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"ok":     false,
 			"reason": reason,
@@ -306,6 +510,21 @@ func (h *Handlers) VerifyChallenge(c *fiber.Ctx) error {
 	}
 
 	if !valid {
+		metrics.RecordVerification("failed", "invalid")
+
+		// Audit log: verification failed (invalid code)
+		if h.auditLogger != nil {
+			h.auditLogger.Log(audit.Event{
+				Event:       "challenge_verify_failed",
+				ChallengeID: req.ChallengeID,
+				Result:      "failed",
+				Reason:      "invalid",
+				ClientIP:    clientIP,
+				Traceparent: traceparent,
+				Tracestate:  tracestate,
+			})
+		}
+
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "invalid",
@@ -313,6 +532,22 @@ func (h *Handlers) VerifyChallenge(c *fiber.Ctx) error {
 	}
 
 	// Success
+	metrics.RecordVerification("ok", "")
+
+	// Audit log: verification succeeded
+	if h.auditLogger != nil {
+		h.auditLogger.Log(audit.Event{
+			Event:       "challenge_verified",
+			ChallengeID: req.ChallengeID,
+			UserID:      ch.UserID,
+			Channel:     ch.Channel,
+			Result:      "ok",
+			ClientIP:    clientIP,
+			Traceparent: traceparent,
+			Tracestate:  tracestate,
+		})
+	}
+
 	return c.JSON(fiber.Map{
 		"ok":        true,
 		"user_id":   ch.UserID,
@@ -333,10 +568,39 @@ func (h *Handlers) RevokeChallenge(c *fiber.Ctx) error {
 		})
 	}
 
+	traceparent := middleware.GetTraceparent(c)
+	tracestate := middleware.GetTracestate(c)
+	clientIP := c.IP()
+
 	if err := h.challengeManager.RevokeChallenge(ctx, challengeID); err != nil {
+		// Audit log: revoke failed
+		if h.auditLogger != nil {
+			h.auditLogger.Log(audit.Event{
+				Event:       "challenge_revoke_failed",
+				ChallengeID: challengeID,
+				Result:      "failed",
+				Reason:      err.Error(),
+				ClientIP:    clientIP,
+				Traceparent: traceparent,
+				Tracestate:  tracestate,
+			})
+		}
+
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "internal_error",
+		})
+	}
+
+	// Audit log: revoke succeeded
+	if h.auditLogger != nil {
+		h.auditLogger.Log(audit.Event{
+			Event:       "challenge_revoked",
+			ChallengeID: challengeID,
+			Result:      "ok",
+			ClientIP:    clientIP,
+			Traceparent: traceparent,
+			Tracestate:  tracestate,
 		})
 	}
 
@@ -348,4 +612,24 @@ func (h *Handlers) RevokeChallenge(c *fiber.Ctx) error {
 // Helper function
 func contains(s, substr string) bool {
 	return strings.Contains(s, substr)
+}
+
+func getIdempotencyKey(c *fiber.Ctx) string {
+	key := strings.TrimSpace(c.Get("Idempotency-Key"))
+	if key == "" {
+		key = strings.TrimSpace(c.Get("X-Idempotency-Key"))
+	}
+	return key
+}
+
+func hashIdempotencyRequest(req CreateChallengeRequest) string {
+	data := strings.Join([]string{
+		strings.TrimSpace(req.UserID),
+		strings.TrimSpace(req.Channel),
+		strings.TrimSpace(req.Destination),
+		strings.TrimSpace(req.Purpose),
+		strings.TrimSpace(req.Locale),
+	}, "|")
+	sum := sha256.Sum256([]byte(data))
+	return hex.EncodeToString(sum[:])
 }

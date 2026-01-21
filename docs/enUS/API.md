@@ -50,6 +50,9 @@ Check service health.
 
 Create a new verification challenge and send verification code.
 
+**Optional Headers:**
+- `Idempotency-Key`: Returns the same challenge response for the same key
+
 **Request:**
 ```json
 {
@@ -88,16 +91,21 @@ Possible error codes:
 - `user_id_required`: Missing required field `user_id`
 - `invalid_channel`: Invalid channel type (must be "sms" or "email")
 - `destination_required`: Missing required field `destination`
+- `idempotency_conflict`: Idempotency key exists with different payload
+- `idempotency_in_progress`: Idempotency key is processing
 - `rate_limit_exceeded`: Rate limit exceeded
 - `resend_cooldown`: Resend cooldown period not expired
 - `user_locked`: User is temporarily locked
+- `send_failed`: External provider send failed (strict mode)
 - `internal_error`: Internal server error
 
 HTTP Status Codes:
 - `400 Bad Request`: Invalid request parameters
 - `401 Unauthorized`: Authentication failed
 - `403 Forbidden`: User locked
+- `409 Conflict`: Idempotency conflict or in progress
 - `429 Too Many Requests`: Rate limit exceeded
+- `502 Bad Gateway`: Provider send failed (strict mode)
 - `500 Internal Server Error`: Internal server error
 
 ### Verify Challenge
@@ -204,6 +212,8 @@ This section lists all possible error codes returned by the API.
 - `challenge_id_required`: Missing required field `challenge_id`
 - `code_required`: Missing required field `code`
 - `invalid_code_format`: Verification code format is invalid
+- `idempotency_conflict`: Idempotency key conflicts with payload
+- `idempotency_in_progress`: Idempotency key is being processed
 
 ### Authentication Errors
 - `authentication_required`: No valid authentication provided
@@ -226,4 +236,5 @@ This section lists all possible error codes returned by the API.
 - `user_locked`: User is temporarily locked
 
 ### System Errors
+- `send_failed`: External provider send failed (strict mode)
 - `internal_error`: Internal server error

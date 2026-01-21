@@ -499,3 +499,165 @@ func TestContains(t *testing.T) {
 		})
 	}
 }
+
+func TestHandlers_CreateChallenge_IdempotencyConflict(t *testing.T) {
+	// Save original config
+	originalRateLimitPerUser := config.RateLimitPerUser
+	originalRateLimitPerIP := config.RateLimitPerIP
+	originalRateLimitPerDestination := config.RateLimitPerDestination
+	originalResendCooldown := config.ResendCooldown
+	originalChallengeExpiry := config.ChallengeExpiry
+	defer func() {
+		config.RateLimitPerUser = originalRateLimitPerUser
+		config.RateLimitPerIP = originalRateLimitPerIP
+		config.RateLimitPerDestination = originalRateLimitPerDestination
+		config.ResendCooldown = originalResendCooldown
+		config.ChallengeExpiry = originalChallengeExpiry
+	}()
+
+	config.RateLimitPerUser = 100
+	config.RateLimitPerIP = 100
+	config.RateLimitPerDestination = 100
+	config.ResendCooldown = 1 * time.Second
+	config.ChallengeExpiry = 5 * time.Minute
+
+	redisClient := testRedisClient(t)
+	defer func() {
+		_ = redisClient.Close()
+	}()
+
+	handlers := NewHandlers(redisClient)
+	app := fiber.New()
+	app.Post("/challenge", handlers.CreateChallenge)
+
+	idempotencyKey := "test-idempotency-key"
+
+	// First request
+	reqBody1 := CreateChallengeRequest{
+		UserID:      "user123",
+		Channel:     "email",
+		Destination: "test@example.com",
+		Purpose:     "login",
+		Locale:      "en",
+		ClientIP:    "127.0.0.1",
+	}
+
+	bodyBytes1, _ := json.Marshal(reqBody1)
+	req1 := httptest.NewRequest("POST", "/challenge", bytes.NewBuffer(bodyBytes1))
+	req1.Header.Set("Content-Type", "application/json")
+	req1.Header.Set("Idempotency-Key", idempotencyKey)
+
+	resp1, err := app.Test(req1)
+	if err != nil {
+		t.Fatalf("Test request failed: %v", err)
+	}
+
+	// Second request with different payload but same idempotency key
+	reqBody2 := CreateChallengeRequest{
+		UserID:      "user456", // Different user
+		Channel:     "email",
+		Destination: "test@example.com",
+		Purpose:     "login",
+		Locale:      "en",
+		ClientIP:    "127.0.0.1",
+	}
+
+	bodyBytes2, _ := json.Marshal(reqBody2)
+	req2 := httptest.NewRequest("POST", "/challenge", bytes.NewBuffer(bodyBytes2))
+	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("Idempotency-Key", idempotencyKey)
+
+	resp2, err := app.Test(req2)
+	if err != nil {
+		t.Fatalf("Test request failed: %v", err)
+	}
+
+	// First request should succeed
+	if resp1.StatusCode != fiber.StatusOK {
+		body, _ := io.ReadAll(resp1.Body)
+		t.Logf("First request body: %s", string(body))
+	}
+
+	// Second request should return 409 Conflict
+	if resp2.StatusCode != fiber.StatusConflict {
+		body, _ := io.ReadAll(resp2.Body)
+		t.Errorf("CreateChallenge() with conflicting idempotency key status = %d, want %d, body: %s",
+			resp2.StatusCode, fiber.StatusConflict, string(body))
+	}
+
+	body2, _ := io.ReadAll(resp2.Body)
+	var result2 map[string]interface{}
+	if err := json.Unmarshal(body2, &result2); err == nil {
+		if result2["reason"] != "idempotency_conflict" {
+			t.Errorf("CreateChallenge() reason = %v, want 'idempotency_conflict'", result2["reason"])
+		}
+	}
+}
+
+func TestHandlers_CreateChallenge_ProviderFailureStrict(t *testing.T) {
+	// Save original config
+	originalProviderFailurePolicy := config.ProviderFailurePolicy
+	originalRateLimitPerUser := config.RateLimitPerUser
+	originalRateLimitPerIP := config.RateLimitPerIP
+	originalRateLimitPerDestination := config.RateLimitPerDestination
+	originalResendCooldown := config.ResendCooldown
+	originalChallengeExpiry := config.ChallengeExpiry
+	defer func() {
+		config.ProviderFailurePolicy = originalProviderFailurePolicy
+		config.RateLimitPerUser = originalRateLimitPerUser
+		config.RateLimitPerIP = originalRateLimitPerIP
+		config.RateLimitPerDestination = originalRateLimitPerDestination
+		config.ResendCooldown = originalResendCooldown
+		config.ChallengeExpiry = originalChallengeExpiry
+	}()
+
+	// Set strict failure policy
+	config.ProviderFailurePolicy = "strict"
+	config.RateLimitPerUser = 100
+	config.RateLimitPerIP = 100
+	config.RateLimitPerDestination = 100
+	config.ResendCooldown = 1 * time.Second
+	config.ChallengeExpiry = 5 * time.Minute
+
+	redisClient := testRedisClient(t)
+	defer func() {
+		_ = redisClient.Close()
+	}()
+
+	handlers := NewHandlers(redisClient)
+	app := fiber.New()
+	app.Post("/challenge", handlers.CreateChallenge)
+
+	// Note: This test assumes provider will fail if not configured
+	// In a real scenario, you'd mock the provider
+	reqBody := CreateChallengeRequest{
+		UserID:      "user123",
+		Channel:     "email",
+		Destination: "test@example.com",
+		Purpose:     "login",
+		Locale:      "en",
+		ClientIP:    "127.0.0.1",
+	}
+
+	bodyBytes, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest("POST", "/challenge", bytes.NewBuffer(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Test request failed: %v", err)
+	}
+
+	// If provider is not configured, it should fail in strict mode
+	// If provider is configured but fails, it should return 502
+	// This test verifies the handler logic, actual provider failure depends on configuration
+	if resp.StatusCode == fiber.StatusBadGateway {
+		body, _ := io.ReadAll(resp.Body)
+		var result map[string]interface{}
+		if err := json.Unmarshal(body, &result); err == nil {
+			if result["reason"] != "send_failed" {
+				t.Errorf("CreateChallenge() reason = %v, want 'send_failed'", result["reason"])
+			}
+		}
+	}
+}

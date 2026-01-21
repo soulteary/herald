@@ -15,7 +15,9 @@ Herald is a production-ready, lightweight service for sending verification codes
 - 🚀 **High Performance**: Built with Go and Fiber
 - 🔒 **Secure**: Challenge-based verification with hash storage
 - 📊 **Rate Limiting**: Multi-dimensional rate limiting (per user, per IP, per destination)
-- 📝 **Audit Logging**: Complete audit trail for all operations
+- ♻️ **Idempotency**: Prevent duplicate challenge creation and sends
+- 📈 **Metrics**: Prometheus-compatible metrics endpoint
+- 📝 **Operational Logs**: Key events and errors for troubleshooting
 - 🔌 **Pluggable Providers**: Support for email providers (SMS providers are placeholder implementations and not yet fully functional)
 - ⚡ **Redis Backend**: Fast, distributed storage with Redis
 

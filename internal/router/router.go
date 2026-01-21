@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/handlers"
+	"github.com/soulteary/herald/internal/metrics"
 	"github.com/soulteary/herald/internal/middleware"
 )
 
@@ -24,10 +26,11 @@ func NewRouter() *fiber.App {
 	// Middleware
 	app.Use(recover.New())
 	app.Use(logger.New())
+	app.Use(middleware.TraceContext())
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "*",
 		AllowMethods: "GET,POST,OPTIONS",
-		AllowHeaders: "Content-Type,Authorization,X-Service,X-Signature,X-Timestamp,X-API-Key",
+		AllowHeaders: "Content-Type,Authorization,X-Service,X-Signature,X-Timestamp,X-API-Key,traceparent,tracestate,Idempotency-Key,X-Idempotency-Key",
 	}))
 
 	// Initialize Redis client
@@ -44,6 +47,16 @@ func NewRouter() *fiber.App {
 
 	// Initialize handlers
 	h := handlers.NewHandlers(redisClient)
+
+	// Metrics
+	metrics.Init(config.MetricsEnabled)
+	if metrics.Enabled() {
+		metricsPath := config.MetricsPath
+		if !strings.HasPrefix(metricsPath, "/") {
+			metricsPath = "/" + metricsPath
+		}
+		app.Get(metricsPath, metrics.Handler())
+	}
 
 	// Health check
 	app.Get("/health", h.HealthCheck)

@@ -97,17 +97,29 @@ func TestSMTPProvider_Send(t *testing.T) {
 		}
 
 		var payload struct {
-			To      string `json:"to"`
-			From    string `json:"from,omitempty"`
-			Subject string `json:"subject"`
-			Body    string `json:"body"`
-			Code    string `json:"code,omitempty"`
+			Channel        string                 `json:"channel"`
+			To             string                 `json:"to"`
+			Template       string                 `json:"template"`
+			Params         map[string]interface{} `json:"params"`
+			Locale         string                 `json:"locale,omitempty"`
+			IdempotencyKey string                 `json:"idempotency_key,omitempty"`
+			TimeoutSeconds int                    `json:"timeout_seconds,omitempty"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Fatalf("failed to decode payload: %v", err)
 		}
-		if payload.To != "recipient@example.com" || payload.Subject != "Test" {
-			t.Errorf("unexpected payload: %+v", payload)
+		if payload.Channel != "email" || payload.To != "recipient@example.com" {
+			t.Errorf("unexpected payload channel/to: channel=%s, to=%s", payload.Channel, payload.To)
+		}
+		// Check params contain expected fields
+		if body, ok := payload.Params["body"].(string); !ok || body != "Test body" {
+			t.Errorf("unexpected params body: %+v", payload.Params)
+		}
+		if subject, ok := payload.Params["subject"].(string); !ok || subject != "Test" {
+			t.Errorf("unexpected params subject: %+v", payload.Params)
+		}
+		if from, ok := payload.Params["from"].(string); !ok || from != "test@example.com" {
+			t.Errorf("unexpected params from: %+v", payload.Params)
 		}
 
 		_, _ = w.Write([]byte(`{"ok":true}`))

@@ -317,3 +317,41 @@ func TestFormatVerificationSMS(t *testing.T) {
 		})
 	}
 }
+
+func TestMessage_Fields(t *testing.T) {
+	msg := &Message{
+		To:             "test@example.com",
+		Subject:        "Test Subject",
+		Body:           "Test Body",
+		Code:           "123456",
+		IdempotencyKey: "idem-key-123",
+		Purpose:        "login",
+		Locale:         "zh-CN",
+		Template:       "verification_email",
+		Params: map[string]interface{}{
+			"code": "123456",
+		},
+		Traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+		Tracestate:  "rojo=00f067aa0ba902b7",
+	}
+
+	if msg.To != "test@example.com" {
+		t.Errorf("Message To = %v, want 'test@example.com'", msg.To)
+	}
+
+	if msg.Purpose != "login" {
+		t.Errorf("Message Purpose = %v, want 'login'", msg.Purpose)
+	}
+
+	if msg.Locale != "zh-CN" {
+		t.Errorf("Message Locale = %v, want 'zh-CN'", msg.Locale)
+	}
+
+	if msg.Template != "verification_email" {
+		t.Errorf("Message Template = %v, want 'verification_email'", msg.Template)
+	}
+
+	if msg.Traceparent == "" {
+		t.Error("Message Traceparent should be set")
+	}
+}

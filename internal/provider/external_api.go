@@ -44,7 +44,7 @@ func validateEndpoint(endpoint string) error {
 	return nil
 }
 
-func postJSON(ctx context.Context, client *http.Client, endpoint string, apiKey string, payload any) (retErr error) {
+func postJSON(ctx context.Context, client *http.Client, endpoint string, apiKey string, payload any, traceparent, tracestate string) (retErr error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -61,6 +61,12 @@ func postJSON(ctx context.Context, client *http.Client, endpoint string, apiKey 
 	req.Header.Set("Content-Type", "application/json")
 	if apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+	if traceparent != "" {
+		req.Header.Set("traceparent", traceparent)
+	}
+	if tracestate != "" {
+		req.Header.Set("tracestate", tracestate)
 	}
 
 	resp, err := client.Do(req)
