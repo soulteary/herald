@@ -320,11 +320,20 @@ func (h *Handlers) VerifyChallenge(c *fiber.Ctx) error {
 		})
 	}
 
+	// Generate AMR based on channel
+	amr := []string{"otp"}
+	switch ch.Channel {
+	case "sms":
+		amr = append(amr, "sms")
+	case "email":
+		amr = append(amr, "email")
+	}
+
 	// Success
 	return c.JSON(fiber.Map{
 		"ok":        true,
 		"user_id":   ch.UserID,
-		"amr":       []string{"otp"},
+		"amr":       amr,
 		"issued_at": time.Now().Unix(),
 	})
 }
