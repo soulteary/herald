@@ -213,6 +213,14 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		})
 	}
 
+	// Store code in test mode (for integration testing only)
+	if config.TestMode {
+		testCodeKey := fmt.Sprintf("otp:test:code:%s", ch.ID)
+		if err := h.redis.Set(ctx, testCodeKey, code, config.ChallengeExpiry).Err(); err != nil {
+			logrus.Warnf("Failed to store test code: %v", err)
+		}
+	}
+
 	// Send verification code via provider
 	channel := provider.Channel(req.Channel)
 	msg := &provider.Message{
@@ -342,6 +350,41 @@ func (h *Handlers) RevokeChallenge(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"ok": true,
+	})
+}
+
+// GetTestCode retrieves the verification code for a challenge in test mode
+// This endpoint is only available when HERALD_TEST_MODE=true
+func (h *Handlers) GetTestCode(c *fiber.Ctx) error {
+	if !config.TestMode {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "not_found",
+		})
+	}
+
+	challengeID := c.Params("challenge_id")
+	if challengeID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "challenge_id_required",
+		})
+	}
+
+	ctx := c.Context()
+	testCodeKey := fmt.Sprintf("otp:test:code:%s", challengeID)
+	code, err := h.redis.Get(ctx, testCodeKey).Result()
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "code_not_found",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"ok":           true,
+		"challenge_id": challengeID,
+		"code":         code,
 	})
 }
 

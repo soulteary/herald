@@ -56,6 +56,13 @@ var (
 	// Service authentication (HMAC)
 	HMACSecret  = getEnv("HMAC_SECRET", "")
 	ServiceName = getEnv("SERVICE_NAME", "herald")
+
+	// TLS/mTLS config
+	TLSCertFile     = getEnv("TLS_CERT_FILE", "")
+	TLSKeyFile      = getEnv("TLS_KEY_FILE", "")
+	TLSCACertFile   = getEnv("TLS_CA_CERT_FILE", "")   // For mTLS (client certificate verification)
+	TLSClientCAFile = getEnv("TLS_CLIENT_CA_FILE", "") // Alias for TLS_CA_CERT_FILE
+	TestMode        = getEnvBool("HERALD_TEST_MODE", false)
 )
 
 // Initialize validates and initializes configuration
@@ -65,8 +72,13 @@ func Initialize() error {
 		logrus.Warn("REDIS_ADDR is not set, using default: localhost:6379")
 	}
 
-	if APIKey == "" {
-		logrus.Warn("API_KEY is not set, service-to-service authentication will be disabled")
+	if APIKey == "" && HMACSecret == "" {
+		logrus.Warn("Neither API_KEY nor HMAC_SECRET is set, service-to-service authentication will be disabled")
+	}
+
+	// Handle TLS_CA_CERT_FILE alias
+	if TLSCACertFile == "" && TLSClientCAFile != "" {
+		TLSCACertFile = TLSClientCAFile
 	}
 
 	// Log configuration (excluding sensitive data)
@@ -110,6 +122,15 @@ func getEnvDuration(key string, defaultValue time.Duration) time.Duration {
 	if value := os.Getenv(key); value != "" {
 		if duration, err := time.ParseDuration(value); err == nil {
 			return duration
+		}
+	}
+	return defaultValue
+}
+
+func getEnvBool(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		if boolValue, err := strconv.ParseBool(value); err == nil {
+			return boolValue
 		}
 	}
 	return defaultValue
