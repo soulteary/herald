@@ -40,8 +40,8 @@ func TestNewManager(t *testing.T) {
 	if manager == nil {
 		t.Fatal("NewManager() returned nil")
 	}
-	if manager.redis == nil {
-		t.Error("NewManager() redis client is nil")
+	if manager.limiter == nil {
+		t.Error("NewManager() limiter is nil")
 	}
 }
 

@@ -1,18 +1,17 @@
 package router
 
 import (
-	"context"
-
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
-	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
+	rediskit "github.com/soulteary/redis-kit/client"
 
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/handlers"
 	"github.com/soulteary/herald/internal/middleware"
+	"github.com/soulteary/herald/internal/session"
 )
 
 // NewRouter creates and configures a new Fiber router
@@ -30,20 +29,30 @@ func NewRouter() *fiber.App {
 		AllowHeaders: "Content-Type,Authorization,X-Service,X-Signature,X-Timestamp,X-API-Key",
 	}))
 
-	// Initialize Redis client
-	redisClient := redis.NewClient(&redis.Options{
-		Addr:     config.RedisAddr,
-		Password: config.RedisPassword,
-		DB:       config.RedisDB,
-	})
+	// Initialize Redis client using redis-kit
+	cfg := rediskit.DefaultConfig().
+		WithAddr(config.RedisAddr).
+		WithPassword(config.RedisPassword).
+		WithDB(config.RedisDB)
 
-	// Test Redis connection
-	if err := redisClient.Ping(context.Background()).Err(); err != nil {
+	redisClient, err := rediskit.NewClient(cfg)
+	if err != nil {
 		logrus.Fatalf("Failed to connect to Redis: %v", err)
 	}
 
+	// Initialize session manager if enabled
+	var sessionManager *session.Manager
+	if config.SessionStorageEnabled {
+		sessionManager = session.NewManager(
+			redisClient,
+			config.SessionKeyPrefix,
+			config.SessionDefaultTTL,
+		)
+		logrus.Info("Session storage manager initialized")
+	}
+
 	// Initialize handlers
-	h := handlers.NewHandlers(redisClient)
+	h := handlers.NewHandlers(redisClient, sessionManager)
 
 	// Health check
 	app.Get("/health", h.HealthCheck)

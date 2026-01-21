@@ -63,6 +63,11 @@ var (
 	TLSCACertFile   = getEnv("TLS_CA_CERT_FILE", "")   // For mTLS (client certificate verification)
 	TLSClientCAFile = getEnv("TLS_CLIENT_CA_FILE", "") // Alias for TLS_CA_CERT_FILE
 	TestMode        = getEnvBool("HERALD_TEST_MODE", false)
+
+	// Session storage config
+	SessionStorageEnabled = getEnvBool("HERALD_SESSION_STORAGE_ENABLED", false)
+	SessionDefaultTTL     = getEnvDuration("HERALD_SESSION_DEFAULT_TTL", 1*time.Hour)
+	SessionKeyPrefix      = getEnv("HERALD_SESSION_KEY_PREFIX", "session:")
 )
 
 // Initialize validates and initializes configuration
@@ -89,6 +94,11 @@ func Initialize() error {
 	logrus.Infof("  Challenge Expiry: %v", ChallengeExpiry)
 	logrus.Infof("  Max Attempts: %d", MaxAttempts)
 	logrus.Infof("  Code Length: %d", CodeLength)
+	if SessionStorageEnabled {
+		logrus.Infof("  Session Storage: enabled (TTL: %v, Prefix: %s)", SessionDefaultTTL, SessionKeyPrefix)
+	} else {
+		logrus.Infof("  Session Storage: disabled")
+	}
 
 	return nil
 }

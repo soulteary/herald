@@ -40,7 +40,7 @@ func TestNewHandlers(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient)
+	handlers := NewHandlers(redisClient, nil)
 
 	if handlers == nil {
 		t.Fatal("NewHandlers() returned nil")
@@ -65,7 +65,7 @@ func TestHandlers_HealthCheck(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient)
+	handlers := NewHandlers(redisClient, nil)
 
 	app := fiber.New()
 	app.Get("/health", handlers.HealthCheck)
@@ -122,7 +122,7 @@ func TestHandlers_CreateChallenge_Success(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient)
+	handlers := NewHandlers(redisClient, nil)
 
 	app := fiber.New()
 	app.Post("/challenge", handlers.CreateChallenge)
@@ -171,7 +171,7 @@ func TestHandlers_CreateChallenge_InvalidRequest(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient)
+	handlers := NewHandlers(redisClient, nil)
 
 	app := fiber.New()
 	app.Post("/challenge", handlers.CreateChallenge)
@@ -250,7 +250,7 @@ func TestHandlers_VerifyChallenge_Success(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient)
+	handlers := NewHandlers(redisClient, nil)
 
 	// Create a challenge first
 	challengeMgr := challenge.NewManager(
@@ -368,7 +368,7 @@ func TestHandlers_VerifyChallenge_AMR_ByChannel(t *testing.T) {
 				_ = redisClient.Close()
 			}()
 
-			handlers := NewHandlers(redisClient)
+			handlers := NewHandlers(redisClient, nil)
 
 			// Create a challenge first
 			challengeMgr := challenge.NewManager(
@@ -456,7 +456,7 @@ func TestHandlers_VerifyChallenge_InvalidRequest(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient)
+	handlers := NewHandlers(redisClient, nil)
 
 	app := fiber.New()
 	app.Post("/verify", handlers.VerifyChallenge)
@@ -524,7 +524,7 @@ func TestHandlers_RevokeChallenge(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient)
+	handlers := NewHandlers(redisClient, nil)
 
 	// Create a challenge first
 	challengeMgr := challenge.NewManager(
@@ -576,7 +576,7 @@ func TestHandlers_RevokeChallenge_MissingID(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient)
+	handlers := NewHandlers(redisClient, nil)
 
 	app := fiber.New()
 	app.Delete("/challenge/:id", handlers.RevokeChallenge)
