@@ -32,7 +32,7 @@ Où :
 
 ### Vérification de Santé
 
-**GET /health**
+**GET /healthz**
 
 Vérifier l'état de santé du service.
 

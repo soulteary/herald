@@ -32,7 +32,7 @@ Where:
 
 ### Health Check
 
-**GET /health**
+**GET /healthz**
 
 Check service health.
 

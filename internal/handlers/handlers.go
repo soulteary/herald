@@ -11,12 +11,15 @@ import (
 	rediskitcache "github.com/soulteary/redis-kit/cache"
 	rediskitclient "github.com/soulteary/redis-kit/client"
 
+	"github.com/soulteary/herald/internal/audit"
 	"github.com/soulteary/herald/internal/challenge"
 	"github.com/soulteary/herald/internal/config"
+	"github.com/soulteary/herald/internal/metrics"
 	"github.com/soulteary/herald/internal/otp"
 	"github.com/soulteary/herald/internal/provider"
 	"github.com/soulteary/herald/internal/ratelimit"
 	"github.com/soulteary/herald/internal/session"
+	"github.com/soulteary/herald/internal/template"
 )
 
 // Handlers contains all HTTP handlers
@@ -24,8 +27,11 @@ type Handlers struct {
 	challengeManager *challenge.Manager
 	rateLimitManager *ratelimit.Manager
 	providerRegistry *provider.Registry
+	auditManager     *audit.Manager
+	templateManager  *template.Manager
 	redis            *redis.Client
 	testCodeCache    rediskitcache.Cache // For test mode code storage
+	idempotencyCache rediskitcache.Cache // For idempotency key storage
 	sessionManager   *session.Manager    // Optional: nil if session storage is disabled
 }
 
@@ -40,6 +46,12 @@ func NewHandlers(redisClient *redis.Client, sessionManager *session.Manager) *Ha
 	)
 
 	rateLimitMgr := ratelimit.NewManager(redisClient)
+
+	// Initialize audit manager
+	auditMgr := audit.NewManager(redisClient)
+
+	// Initialize template manager
+	templateMgr := template.NewManager(config.TemplateDir)
 
 	// Initialize provider registry
 	registry := provider.NewRegistry()
@@ -67,12 +79,18 @@ func NewHandlers(redisClient *redis.Client, sessionManager *session.Manager) *Ha
 	// Create test code cache for test mode
 	testCodeCache := rediskitcache.NewCache(redisClient, "otp:test:code:")
 
+	// Create idempotency cache
+	idempotencyCache := rediskitcache.NewCache(redisClient, "otp:idem:")
+
 	return &Handlers{
 		challengeManager: challengeMgr,
 		rateLimitManager: rateLimitMgr,
 		providerRegistry: registry,
+		auditManager:     auditMgr,
+		templateManager:  templateMgr,
 		redis:            redisClient,
 		testCodeCache:    testCodeCache,
+		idempotencyCache: idempotencyCache,
 		sessionManager:   sessionManager,
 	}
 }
@@ -106,9 +124,31 @@ type CreateChallengeRequest struct {
 	UA          string `json:"ua"`
 }
 
+// IdempotencyRecord represents a cached idempotency response
+type IdempotencyRecord struct {
+	ChallengeID  string `json:"challenge_id"`
+	ExpiresIn    int    `json:"expires_in"`
+	NextResendIn int    `json:"next_resend_in"`
+	CreatedAt    int64  `json:"created_at"`
+}
+
 // CreateChallenge handles challenge creation
 func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 	ctx := c.Context()
+
+	// Check for idempotency key
+	idempotencyKey := c.Get("Idempotency-Key")
+	if idempotencyKey != "" {
+		var cachedRecord IdempotencyRecord
+		if err := h.idempotencyCache.Get(ctx, idempotencyKey, &cachedRecord); err == nil {
+			// Return cached response
+			return c.JSON(fiber.Map{
+				"challenge_id":   cachedRecord.ChallengeID,
+				"expires_in":     cachedRecord.ExpiresIn,
+				"next_resend_in": cachedRecord.NextResendIn,
+			})
+		}
+	}
 
 	var req CreateChallengeRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -141,6 +181,26 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		})
 	}
 
+	// Validate purpose
+	if req.Purpose == "" {
+		req.Purpose = "login" // Default purpose
+	}
+	allowedPurposes := strings.Split(config.AllowedPurposes, ",")
+	purposeValid := false
+	for _, allowed := range allowedPurposes {
+		if strings.TrimSpace(allowed) == req.Purpose {
+			purposeValid = true
+			break
+		}
+	}
+	if !purposeValid {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "invalid_purpose",
+			"error":  fmt.Sprintf("Purpose must be one of: %s", config.AllowedPurposes),
+		})
+	}
+
 	// Get client IP
 	clientIP := req.ClientIP
 	if clientIP == "" {
@@ -156,6 +216,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		logrus.Errorf("Rate limit check failed: %v", err)
 	}
 	if !allowed {
+		metrics.RecordRateLimitHit("user")
 		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "rate_limit_exceeded",
@@ -170,6 +231,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		logrus.Errorf("Rate limit check failed: %v", err)
 	}
 	if !allowed {
+		metrics.RecordRateLimitHit("ip")
 		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "rate_limit_exceeded",
@@ -184,6 +246,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		logrus.Errorf("Rate limit check failed: %v", err)
 	}
 	if !allowed {
+		metrics.RecordRateLimitHit("destination")
 		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "rate_limit_exceeded",
@@ -197,6 +260,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		logrus.Errorf("Cooldown check failed: %v", err)
 	}
 	if !allowed {
+		metrics.RecordRateLimitHit("resend_cooldown")
 		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "resend_cooldown",
@@ -223,6 +287,21 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		})
 	}
 
+	// Audit: challenge created
+	h.auditManager.Log(ctx, &audit.AuditRecord{
+		EventType:   audit.EventChallengeCreated,
+		ChallengeID: ch.ID,
+		UserID:      req.UserID,
+		Channel:     req.Channel,
+		Destination: req.Destination,
+		Purpose:     req.Purpose,
+		Result:      "success",
+		IP:          clientIP,
+	})
+
+	// Metrics: challenge created
+	metrics.RecordChallengeCreated(req.Channel, req.Purpose, "success")
+
 	// Store code in test mode (for integration testing only)
 	if config.TestMode {
 		if err := h.testCodeCache.Set(ctx, ch.ID, code, config.ChallengeExpiry); err != nil {
@@ -237,26 +316,124 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		Code: code,
 	}
 
+	// Use template manager to format message
+	templateData := template.TemplateData{
+		Code:      code,
+		ExpiresIn: int(config.ChallengeExpiry.Seconds()),
+		Purpose:   req.Purpose,
+		Locale:    req.Locale,
+	}
+
 	if channel == provider.ChannelEmail {
-		msg.Subject, msg.Body = provider.FormatVerificationEmail(code, req.Locale)
+		subject, body, err := h.templateManager.RenderEmail(req.Locale, req.Purpose, templateData)
+		if err != nil {
+			// Fallback to built-in formatting
+			msg.Subject, msg.Body = provider.FormatVerificationEmail(code, req.Locale)
+		} else {
+			msg.Subject = subject
+			msg.Body = body
+		}
 	} else {
-		msg.Body = provider.FormatVerificationSMS(code, req.Locale)
+		body, err := h.templateManager.RenderSMS(req.Locale, req.Purpose, templateData)
+		if err != nil {
+			// Fallback to built-in formatting
+			msg.Body = provider.FormatVerificationSMS(code, req.Locale)
+		} else {
+			msg.Body = body
+		}
 	}
 
+	// Determine provider name for audit
+	var providerName string
+	switch req.Channel {
+	case "email":
+		providerName = "smtp"
+	case "sms":
+		providerName = config.SMSProvider
+	default:
+		providerName = req.Channel
+	}
+
+	// Record send duration
+	sendStart := time.Now()
 	if err := h.providerRegistry.Send(ctx, channel, msg); err != nil {
+		sendDuration := time.Since(sendStart)
 		logrus.Errorf("Failed to send verification code via provider: %v", err)
-		// Don't fail the request, challenge is already created
+
+		// Metrics: send failed
+		metrics.RecordOTPSend(req.Channel, providerName, "failure", sendDuration)
+
+		// Audit: send failed
+		h.auditManager.Log(ctx, &audit.AuditRecord{
+			EventType:   audit.EventSendFailed,
+			ChallengeID: ch.ID,
+			UserID:      req.UserID,
+			Channel:     req.Channel,
+			Destination: req.Destination,
+			Purpose:     req.Purpose,
+			Result:      "failure",
+			Reason:      "send_failed",
+			Provider:    providerName,
+			IP:          clientIP,
+		})
+
+		// Handle provider failure based on policy
+		if config.ProviderFailurePolicy == "strict" {
+			// Strict mode: revoke challenge and return error
+			_ = h.challengeManager.RevokeChallenge(ctx, ch.ID)
+			// Also remove idempotency record if it was stored
+			if idempotencyKey != "" {
+				_ = h.idempotencyCache.Del(ctx, idempotencyKey)
+			}
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"ok":     false,
+				"reason": "send_failed",
+				"error":  "Failed to send verification code",
+			})
+		}
+		// Soft mode: log error but continue (challenge is already created)
 		// The code can still be verified manually if needed
-		// However, in production, you may want to return an error here
-		// to prevent creating challenges that cannot be delivered
+	} else {
+		sendDuration := time.Since(sendStart)
+		// Metrics: send success
+		metrics.RecordOTPSend(req.Channel, providerName, "success", sendDuration)
+
+		// Audit: send success
+		h.auditManager.Log(ctx, &audit.AuditRecord{
+			EventType:   audit.EventSendSuccess,
+			ChallengeID: ch.ID,
+			UserID:      req.UserID,
+			Channel:     req.Channel,
+			Destination: req.Destination,
+			Purpose:     req.Purpose,
+			Result:      "success",
+			Provider:    providerName,
+			IP:          clientIP,
+		})
 	}
 
-	// Return response
-	return c.JSON(fiber.Map{
+	// Prepare response
+	response := fiber.Map{
 		"challenge_id":   ch.ID,
 		"expires_in":     int(config.ChallengeExpiry.Seconds()),
 		"next_resend_in": int(config.ResendCooldown.Seconds()),
-	})
+	}
+
+	// Store idempotency record if idempotency key is provided
+	if idempotencyKey != "" {
+		idempotencyRecord := IdempotencyRecord{
+			ChallengeID:  ch.ID,
+			ExpiresIn:    int(config.ChallengeExpiry.Seconds()),
+			NextResendIn: int(config.ResendCooldown.Seconds()),
+			CreatedAt:    time.Now().Unix(),
+		}
+		if err := h.idempotencyCache.Set(ctx, idempotencyKey, idempotencyRecord, config.IdempotencyKeyTTL); err != nil {
+			logrus.Warnf("Failed to store idempotency record: %v", err)
+		}
+	}
+
+	// Return response
+	return c.JSON(response)
 }
 
 // VerifyChallengeRequest represents the request to verify a challenge
@@ -316,6 +493,18 @@ func (h *Handlers) VerifyChallenge(c *fiber.Ctx) error {
 			reason = "invalid"
 		}
 
+		// Metrics: verification failed
+		metrics.RecordVerification("failure", reason)
+
+		// Audit: verification failed
+		h.auditManager.Log(ctx, &audit.AuditRecord{
+			EventType:   audit.EventVerificationFailed,
+			ChallengeID: req.ChallengeID,
+			Result:      "failure",
+			Reason:      reason,
+			IP:          req.ClientIP,
+		})
+
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"ok":     false,
 			"reason": reason,
@@ -323,11 +512,38 @@ func (h *Handlers) VerifyChallenge(c *fiber.Ctx) error {
 	}
 
 	if !valid {
+		// Metrics: verification failed
+		metrics.RecordVerification("failure", "invalid")
+
+		// Audit: verification failed
+		h.auditManager.Log(ctx, &audit.AuditRecord{
+			EventType:   audit.EventVerificationFailed,
+			ChallengeID: req.ChallengeID,
+			Result:      "failure",
+			Reason:      "invalid",
+			IP:          req.ClientIP,
+		})
+
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "invalid",
 		})
 	}
+
+	// Metrics: verification success
+	metrics.RecordVerification("success", "")
+
+	// Audit: challenge verified
+	h.auditManager.Log(ctx, &audit.AuditRecord{
+		EventType:   audit.EventChallengeVerified,
+		ChallengeID: ch.ID,
+		UserID:      ch.UserID,
+		Channel:     ch.Channel,
+		Destination: ch.Destination,
+		Purpose:     ch.Purpose,
+		Result:      "success",
+		IP:          req.ClientIP,
+	})
 
 	// Generate AMR based on channel
 	amr := []string{"otp"}
@@ -365,6 +581,14 @@ func (h *Handlers) RevokeChallenge(c *fiber.Ctx) error {
 			"reason": "internal_error",
 		})
 	}
+
+	// Audit: challenge revoked
+	h.auditManager.Log(ctx, &audit.AuditRecord{
+		EventType:   audit.EventChallengeRevoked,
+		ChallengeID: challengeID,
+		Result:      "success",
+		IP:          c.IP(),
+	})
 
 	return c.JSON(fiber.Map{
 		"ok": true,

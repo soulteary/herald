@@ -32,7 +32,7 @@ Wobei :
 
 ### Gesundheitsprüfung
 
-**GET /health**
+**GET /healthz**
 
 Service-Gesundheit prüfen.
 

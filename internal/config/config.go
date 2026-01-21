@@ -28,11 +28,13 @@ var (
 	APIKey = getEnv("API_KEY", "")
 
 	// Challenge config
-	ChallengeExpiry = getEnvDuration("CHALLENGE_EXPIRY", 5*time.Minute)
-	MaxAttempts     = getEnvInt("MAX_ATTEMPTS", 5)
-	ResendCooldown  = getEnvDuration("RESEND_COOLDOWN", 60*time.Second)
-	CodeLength      = getEnvInt("CODE_LENGTH", 6)
-	LockoutDuration = getEnvDuration("LOCKOUT_DURATION", 10*time.Minute)
+	ChallengeExpiry   = getEnvDuration("CHALLENGE_EXPIRY", 5*time.Minute)
+	MaxAttempts       = getEnvInt("MAX_ATTEMPTS", 5)
+	ResendCooldown    = getEnvDuration("RESEND_COOLDOWN", 60*time.Second)
+	CodeLength        = getEnvInt("CODE_LENGTH", 6)
+	LockoutDuration   = getEnvDuration("LOCKOUT_DURATION", 10*time.Minute)
+	IdempotencyKeyTTL = getEnvDuration("IDEMPOTENCY_KEY_TTL", 0) // 0 means use ChallengeExpiry
+	AllowedPurposes   = getEnv("ALLOWED_PURPOSES", "login")      // Comma-separated list: "login,reset,bind,stepup"
 
 	// Rate limiting config
 	RateLimitPerUser        = getEnvInt("RATE_LIMIT_PER_USER", 10)        // per hour
@@ -40,11 +42,12 @@ var (
 	RateLimitPerDestination = getEnvInt("RATE_LIMIT_PER_DESTINATION", 10) // per hour
 
 	// Provider config
-	SMTPHost     = getEnv("SMTP_HOST", "")
-	SMTPPort     = getEnvInt("SMTP_PORT", 587)
-	SMTPUser     = getEnv("SMTP_USER", "")
-	SMTPPassword = getEnv("SMTP_PASSWORD", "")
-	SMTPFrom     = getEnv("SMTP_FROM", "")
+	SMTPHost              = getEnv("SMTP_HOST", "")
+	SMTPPort              = getEnvInt("SMTP_PORT", 587)
+	SMTPUser              = getEnv("SMTP_USER", "")
+	SMTPPassword          = getEnv("SMTP_PASSWORD", "")
+	SMTPFrom              = getEnv("SMTP_FROM", "")
+	ProviderFailurePolicy = getEnv("PROVIDER_FAILURE_POLICY", "soft") // "strict" | "soft"
 
 	// SMS Provider config (example: Aliyun)
 	SMSProvider        = getEnv("SMS_PROVIDER", "") // "aliyun", "tencent", etc.
@@ -68,6 +71,14 @@ var (
 	SessionStorageEnabled = getEnvBool("HERALD_SESSION_STORAGE_ENABLED", false)
 	SessionDefaultTTL     = getEnvDuration("HERALD_SESSION_DEFAULT_TTL", 1*time.Hour)
 	SessionKeyPrefix      = getEnv("HERALD_SESSION_KEY_PREFIX", "session:")
+
+	// Audit logging config
+	AuditEnabled         = getEnvBool("AUDIT_ENABLED", true)
+	AuditMaskDestination = getEnvBool("AUDIT_MASK_DESTINATION", false)
+	AuditTTL             = getEnvDuration("AUDIT_TTL", 7*24*time.Hour) // 7 days default
+
+	// Template config
+	TemplateDir = getEnv("TEMPLATE_DIR", "") // Optional: path to template directory
 )
 
 // Initialize validates and initializes configuration
@@ -84,6 +95,11 @@ func Initialize() error {
 	// Handle TLS_CA_CERT_FILE alias
 	if TLSCACertFile == "" && TLSClientCAFile != "" {
 		TLSCACertFile = TLSClientCAFile
+	}
+
+	// Set default IdempotencyKeyTTL if not set
+	if IdempotencyKeyTTL == 0 {
+		IdempotencyKeyTTL = ChallengeExpiry
 	}
 
 	// Log configuration (excluding sensitive data)
