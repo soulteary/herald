@@ -244,3 +244,132 @@ func TestMaskSensitive(t *testing.T) {
 		})
 	}
 }
+
+func TestInitialize(t *testing.T) {
+	// Save original values
+	originalRedisAddr := RedisAddr
+	originalAPIKey := APIKey
+	originalHMACSecret := HMACSecret
+	originalTLSCACertFile := TLSCACertFile
+	originalTLSClientCAFile := TLSClientCAFile
+	originalIdempotencyKeyTTL := IdempotencyKeyTTL
+	originalChallengeExpiry := ChallengeExpiry
+	originalSessionStorageEnabled := SessionStorageEnabled
+
+	defer func() {
+		RedisAddr = originalRedisAddr
+		APIKey = originalAPIKey
+		HMACSecret = originalHMACSecret
+		TLSCACertFile = originalTLSCACertFile
+		TLSClientCAFile = originalTLSClientCAFile
+		IdempotencyKeyTTL = originalIdempotencyKeyTTL
+		ChallengeExpiry = originalChallengeExpiry
+		SessionStorageEnabled = originalSessionStorageEnabled
+	}()
+
+	// Test with default values
+	RedisAddr = ""
+	APIKey = ""
+	HMACSecret = ""
+	TLSCACertFile = ""
+	TLSClientCAFile = ""
+	IdempotencyKeyTTL = 0
+	ChallengeExpiry = 5 * time.Minute
+	SessionStorageEnabled = false
+
+	err := Initialize()
+	if err != nil {
+		t.Errorf("Initialize() error = %v, want nil", err)
+	}
+
+	// Test with TLS_CA_CERT_FILE alias
+	TLSClientCAFile = "test-ca.pem"
+	TLSCACertFile = ""
+	err = Initialize()
+	if err != nil {
+		t.Errorf("Initialize() error = %v, want nil", err)
+	}
+	if TLSCACertFile != "test-ca.pem" {
+		t.Errorf("Initialize() should set TLSCACertFile from TLSClientCAFile, got %v", TLSCACertFile)
+	}
+
+	// Test with IdempotencyKeyTTL = 0 (should use ChallengeExpiry)
+	IdempotencyKeyTTL = 0
+	ChallengeExpiry = 10 * time.Minute
+	err = Initialize()
+	if err != nil {
+		t.Errorf("Initialize() error = %v, want nil", err)
+	}
+	if IdempotencyKeyTTL != ChallengeExpiry {
+		t.Errorf("Initialize() should set IdempotencyKeyTTL to ChallengeExpiry when 0, got %v, want %v", IdempotencyKeyTTL, ChallengeExpiry)
+	}
+
+	// Test with SessionStorageEnabled = true
+	SessionStorageEnabled = true
+	err = Initialize()
+	if err != nil {
+		t.Errorf("Initialize() error = %v, want nil", err)
+	}
+}
+
+func TestGetEnvBool(t *testing.T) {
+	tests := []struct {
+		name         string
+		envKey       string
+		envValue     string
+		defaultValue bool
+		expected     bool
+	}{
+		{
+			name:         "true value",
+			envKey:       "TEST_BOOL_VAR",
+			envValue:     "true",
+			defaultValue: false,
+			expected:     true,
+		},
+		{
+			name:         "false value",
+			envKey:       "TEST_BOOL_VAR_FALSE",
+			envValue:     "false",
+			defaultValue: true,
+			expected:     false,
+		},
+		{
+			name:         "invalid boolean",
+			envKey:       "TEST_BOOL_VAR_INVALID",
+			envValue:     "not_a_boolean",
+			defaultValue: true,
+			expected:     true, // Should return default on parse error
+		},
+		{
+			name:         "env var not set",
+			envKey:       "TEST_BOOL_VAR_NOT_SET",
+			envValue:     "",
+			defaultValue: false,
+			expected:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envValue != "" {
+				if err := os.Setenv(tt.envKey, tt.envValue); err != nil {
+					t.Fatalf("failed to set env var: %v", err)
+				}
+				defer func() {
+					if err := os.Unsetenv(tt.envKey); err != nil {
+						t.Errorf("failed to unset env var: %v", err)
+					}
+				}()
+			} else {
+				if err := os.Unsetenv(tt.envKey); err != nil {
+					t.Fatalf("failed to unset env var: %v", err)
+				}
+			}
+
+			if got := getEnvBool(tt.envKey, tt.defaultValue); got != tt.expected {
+				t.Errorf("getEnvBool() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}

@@ -1,29 +1,16 @@
 package lock
 
 import (
-	"context"
 	"testing"
-	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/soulteary/herald/internal/testutil"
 )
 
-// testRedisClient returns a Redis client for testing
-// If Redis is not available, tests will be skipped
+// testRedisClient returns a mock Redis client for testing
 func testRedisClient(t *testing.T) *redis.Client {
-	client := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
-		Password: "",
-		DB:       0,
-	})
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	if err := client.Ping(ctx).Err(); err != nil {
-		t.Skipf("Skipping test: Redis not available: %v", err)
-	}
-
+	t.Helper()
+	client, _ := testutil.NewTestRedisClient()
 	return client
 }
 

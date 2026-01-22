@@ -7,24 +7,13 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/soulteary/herald/internal/testutil"
 )
 
-// testRedisClient returns a Redis client for testing
-// If Redis is not available, tests will be skipped
+// testRedisClient returns a mock Redis client for testing
 func testRedisClient(t *testing.T) *redis.Client {
-	client := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-		DB:   15, // Use DB 15 for testing
-	})
-
-	ctx := context.Background()
-	if err := client.Ping(ctx).Err(); err != nil {
-		t.Skipf("Skipping test: Redis not available: %v", err)
-	}
-
-	// Clean up test database
-	client.FlushDB(ctx)
-
+	t.Helper()
+	client, _ := testutil.NewTestRedisClient()
 	return client
 }
 
@@ -208,6 +197,41 @@ func TestManager_VerifyChallenge_InvalidCode(t *testing.T) {
 	}
 }
 
+func TestManager_VerifyChallenge_TTLExpired(t *testing.T) {
+	redisClient := testRedisClient(t)
+	defer func() {
+		_ = redisClient.Close()
+	}()
+
+	// Use very short expiry for testing
+	manager := NewManager(redisClient, 1*time.Millisecond, 5, 10*time.Minute, 6)
+
+	ctx := context.Background()
+	userID := "user123"
+	channel := "email"
+	destination := "test@example.com"
+	purpose := "login"
+	clientIP := "127.0.0.1"
+
+	// Create a challenge
+	challenge, code, err := manager.CreateChallenge(ctx, userID, channel, destination, purpose, clientIP)
+	if err != nil {
+		t.Fatalf("CreateChallenge() error = %v", err)
+	}
+
+	// Wait for Redis TTL to expire
+	time.Sleep(10 * time.Millisecond)
+
+	// Try to verify expired challenge (should fail because Redis key expired)
+	valid, _, err := manager.VerifyChallenge(ctx, challenge.ID, code, clientIP)
+	if err == nil {
+		t.Error("VerifyChallenge() should return error for expired challenge (Redis TTL)")
+	}
+	if valid {
+		t.Error("VerifyChallenge() should return false for expired challenge")
+	}
+}
+
 func TestManager_VerifyChallenge_Expired(t *testing.T) {
 	redisClient := testRedisClient(t)
 	defer func() {
@@ -244,6 +268,73 @@ func TestManager_VerifyChallenge_Expired(t *testing.T) {
 	}
 }
 
+func TestManager_VerifyChallenge_UserLockedBeforeVerify(t *testing.T) {
+	redisClient := testRedisClient(t)
+	defer func() {
+		_ = redisClient.Close()
+	}()
+
+	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6)
+
+	ctx := context.Background()
+	userID := "user123"
+	channel := "email"
+	destination := "test@example.com"
+	purpose := "login"
+	clientIP := "127.0.0.1"
+
+	// Manually lock the user
+	lockKey := lockKeyPrefix + userID
+	redisClient.Set(ctx, lockKey, "1", 10*time.Minute)
+
+	// Create a challenge for locked user
+	challenge, code, err := manager.CreateChallenge(ctx, userID, channel, destination, purpose, clientIP)
+	if err != nil {
+		t.Fatalf("CreateChallenge() error = %v", err)
+	}
+
+	// Try to verify - should fail because user is locked
+	valid, _, err := manager.VerifyChallenge(ctx, challenge.ID, code, clientIP)
+	if err == nil {
+		t.Error("VerifyChallenge() should return error for locked user")
+	}
+	if valid {
+		t.Error("VerifyChallenge() should return false for locked user")
+	}
+}
+
+func TestManager_VerifyChallenge_TTLError(t *testing.T) {
+	redisClient := testRedisClient(t)
+	defer func() {
+		_ = redisClient.Close()
+	}()
+
+	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6)
+
+	ctx := context.Background()
+	userID := "user123"
+	channel := "email"
+	destination := "test@example.com"
+	purpose := "login"
+	clientIP := "127.0.0.1"
+
+	// Create a challenge
+	challenge, _, err := manager.CreateChallenge(ctx, userID, channel, destination, purpose, clientIP)
+	if err != nil {
+		t.Fatalf("CreateChallenge() error = %v", err)
+	}
+
+	// Try incorrect code - this should increment attempts and update challenge
+	// Even if TTL check fails, it should still increment attempts
+	valid, _, err := manager.VerifyChallenge(ctx, challenge.ID, "000000", clientIP)
+	if valid {
+		t.Error("VerifyChallenge() should return false for incorrect code")
+	}
+	if err == nil {
+		t.Error("VerifyChallenge() should return error for incorrect code")
+	}
+}
+
 func TestManager_VerifyChallenge_MaxAttempts(t *testing.T) {
 	redisClient := testRedisClient(t)
 	defer func() {
@@ -265,7 +356,8 @@ func TestManager_VerifyChallenge_MaxAttempts(t *testing.T) {
 		t.Fatalf("CreateChallenge() error = %v", err)
 	}
 
-	// Try incorrect code multiple times
+	// Try incorrect code multiple times on the SAME challenge
+	// Each failure increments attempts on the same challenge
 	for i := 0; i < 3; i++ {
 		valid, _, err := manager.VerifyChallenge(ctx, challenge.ID, "000000", clientIP)
 		if i < 2 {
@@ -273,17 +365,19 @@ func TestManager_VerifyChallenge_MaxAttempts(t *testing.T) {
 			if valid {
 				t.Errorf("VerifyChallenge() attempt %d should return false", i+1)
 			}
+			if err == nil {
+				t.Errorf("VerifyChallenge() attempt %d should return error", i+1)
+			}
 		} else {
-			// Third attempt should lock
+			// Third attempt should lock (maxAttempts = 3)
 			if err == nil {
 				t.Error("VerifyChallenge() should return error after max attempts")
 			}
+			// After third attempt, user should be locked
+			if !manager.IsUserLocked(ctx, userID) {
+				t.Error("IsUserLocked() should return true after max attempts")
+			}
 		}
-	}
-
-	// Verify user is locked
-	if !manager.IsUserLocked(ctx, userID) {
-		t.Error("IsUserLocked() should return true after max attempts")
 	}
 }
 
@@ -481,5 +575,33 @@ func TestHashCode_VerifyCode(t *testing.T) {
 	// Invalid hash format should not match
 	if verifyCode(code, "invalid_hash") {
 		t.Error("verifyCode() should return false for invalid hash format")
+	}
+}
+
+func TestManager_GetCodeForTesting(t *testing.T) {
+	redisClient := testRedisClient(t)
+	defer func() {
+		_ = redisClient.Close()
+	}()
+
+	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6)
+
+	ctx := context.Background()
+
+	// Test with non-existent challenge
+	_, err := manager.GetCodeForTesting(ctx, "non_existent")
+	if err == nil {
+		t.Error("GetCodeForTesting() should return error for non-existent challenge")
+	}
+
+	// Test with existing challenge (should return error as not implemented)
+	ch, _, err := manager.CreateChallenge(ctx, "user123", "email", "test@example.com", "login", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateChallenge() error = %v", err)
+	}
+
+	_, err = manager.GetCodeForTesting(ctx, ch.ID)
+	if err == nil {
+		t.Error("GetCodeForTesting() should return error (not implemented)")
 	}
 }

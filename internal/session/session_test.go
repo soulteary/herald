@@ -6,24 +6,13 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/soulteary/herald/internal/testutil"
 )
 
-// testRedisClient returns a Redis client for testing
-// If Redis is not available, tests will be skipped
+// testRedisClient returns a mock Redis client for testing
 func testRedisClient(t *testing.T) *redis.Client {
-	client := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-		DB:   15, // Use DB 15 for testing
-	})
-
-	ctx := context.Background()
-	if err := client.Ping(ctx).Err(); err != nil {
-		t.Skipf("Skipping test: Redis not available: %v", err)
-	}
-
-	// Clean up test database
-	client.FlushDB(ctx)
-
+	t.Helper()
+	client, _ := testutil.NewTestRedisClient()
 	return client
 }
 
@@ -447,5 +436,178 @@ func TestManager_ConcurrentAccess(t *testing.T) {
 	// Wait for all goroutines to complete
 	for i := 0; i < 10; i++ {
 		<-done
+	}
+}
+
+func TestManager_Get_ExpiredByExpiresAt(t *testing.T) {
+	redisClient := testRedisClient(t)
+	defer func() {
+		_ = redisClient.Close()
+	}()
+
+	manager := NewManager(redisClient, "test_session:", 1*time.Hour)
+
+	ctx := context.Background()
+	data := map[string]interface{}{
+		"user_id": "user123",
+	}
+
+	// Create session with very short TTL
+	sessionID, err := manager.Create(ctx, data, 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	// Manually set ExpiresAt to past time to test expiration check
+	// We need to get the session first, modify it, then test
+	session, err := manager.Get(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+
+	// Manually expire the session in Redis by setting ExpiresAt to past
+	// This tests the expiration check in Get()
+	session.ExpiresAt = time.Now().Add(-1 * time.Hour)
+	if err := manager.cache.Set(ctx, sessionID, session, 1*time.Hour); err != nil {
+		t.Fatalf("Failed to set expired session: %v", err)
+	}
+
+	// Try to get expired session
+	_, err = manager.Get(ctx, sessionID)
+	if err == nil {
+		t.Error("Get() expected error for expired session")
+	}
+}
+
+func TestManager_Get_ExpiredSession(t *testing.T) {
+	redisClient := testRedisClient(t)
+	defer func() {
+		_ = redisClient.Close()
+	}()
+
+	manager := NewManager(redisClient, "test_session:", 1*time.Hour)
+
+	ctx := context.Background()
+	data := map[string]interface{}{
+		"user_id": "user123",
+	}
+
+	// Create session with very short TTL
+	sessionID, err := manager.Create(ctx, data, 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	// Wait for expiration
+	time.Sleep(200 * time.Millisecond)
+
+	// Try to get expired session
+	_, err = manager.Get(ctx, sessionID)
+	if err == nil {
+		t.Error("Get() expected error for expired session")
+	}
+}
+
+func TestManager_Set_NotFound(t *testing.T) {
+	redisClient := testRedisClient(t)
+	defer func() {
+		_ = redisClient.Close()
+	}()
+
+	manager := NewManager(redisClient, "test_session:", 1*time.Hour)
+
+	ctx := context.Background()
+	data := map[string]interface{}{
+		"user_id": "user123",
+	}
+
+	err := manager.Set(ctx, "nonexistent_session_id", data, 0)
+	if err == nil {
+		t.Error("Set() expected error for nonexistent session")
+	}
+}
+
+func TestManager_Set_WithZeroTTL(t *testing.T) {
+	redisClient := testRedisClient(t)
+	defer func() {
+		_ = redisClient.Close()
+	}()
+
+	manager := NewManager(redisClient, "test_session:", 1*time.Hour)
+
+	ctx := context.Background()
+	data := map[string]interface{}{
+		"user_id": "user123",
+	}
+
+	sessionID, err := manager.Create(ctx, data, 30*time.Minute)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	// Wait a bit to ensure TTL decreased
+	time.Sleep(100 * time.Millisecond)
+
+	// Update with zero TTL (should use remaining TTL from Redis)
+	updatedData := map[string]interface{}{
+		"user_id": "user456",
+	}
+
+	err = manager.Set(ctx, sessionID, updatedData, 0)
+	if err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+
+	// Verify updated data
+	session, err := manager.Get(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+
+	if session.Data["user_id"] != "user456" {
+		t.Errorf("Set() session.Data[user_id] = %v, want user456", session.Data["user_id"])
+	}
+}
+
+func TestManager_Set_WithZeroTTL_NoRemainingTTL(t *testing.T) {
+	redisClient := testRedisClient(t)
+	defer func() {
+		_ = redisClient.Close()
+	}()
+
+	manager := NewManager(redisClient, "test_session:", 1*time.Hour)
+
+	ctx := context.Background()
+	data := map[string]interface{}{
+		"user_id": "user123",
+	}
+
+	sessionID, err := manager.Create(ctx, data, 0)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	// Manually expire TTL in Redis (simulate TTL = 0 scenario)
+	// This tests the fallback to defaultTTL when TTL is 0 or negative
+	// We can't easily test this with mock Redis, but we can test the path exists
+
+	// Update with zero TTL
+	updatedData := map[string]interface{}{
+		"user_id": "user456",
+	}
+
+	err = manager.Set(ctx, sessionID, updatedData, 0)
+	if err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+
+	// Verify updated data
+	session, err := manager.Get(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+
+	if session.Data["user_id"] != "user456" {
+		t.Errorf("Set() session.Data[user_id] = %v, want user456", session.Data["user_id"])
 	}
 }

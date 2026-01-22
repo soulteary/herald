@@ -6,24 +6,13 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/soulteary/herald/internal/testutil"
 )
 
-// testRedisClient returns a Redis client for testing
-// If Redis is not available, tests will be skipped
+// testRedisClient returns a mock Redis client for testing
 func testRedisClient(t *testing.T) *redis.Client {
-	client := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-		DB:   15, // Use DB 15 for testing
-	})
-
-	ctx := context.Background()
-	if err := client.Ping(ctx).Err(); err != nil {
-		t.Skipf("Skipping test: Redis not available: %v", err)
-	}
-
-	// Clean up test database
-	client.FlushDB(ctx)
-
+	t.Helper()
+	client, _ := testutil.NewTestRedisClient()
 	return client
 }
 
