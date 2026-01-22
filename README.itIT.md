@@ -1,5 +1,10 @@
 # Herald - Servizio OTP e Codici di Verifica
 
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Go Version](https://img.shields.io/badge/go-1.25+-blue.svg)](https://golang.org)
+[![codecov](https://codecov.io/gh/soulteary/herald/branch/main/graph/badge.svg)](https://codecov.io/gh/soulteary/herald)
+[![Go Report Card](https://goreportcard.com/badge/github.com/soulteary/herald)](https://goreportcard.com/report/github.com/soulteary/herald)
+
 > **📧 Il Tuo Gateway per la Verifica Sicura**
 
 ## 🌐 Documentazione Multilingue

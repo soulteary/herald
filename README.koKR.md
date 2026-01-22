@@ -1,5 +1,10 @@
 # Herald - OTP 및 인증 코드 서비스
 
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Go Version](https://img.shields.io/badge/go-1.25+-blue.svg)](https://golang.org)
+[![codecov](https://codecov.io/gh/soulteary/herald/branch/main/graph/badge.svg)](https://codecov.io/gh/soulteary/herald)
+[![Go Report Card](https://goreportcard.com/badge/github.com/soulteary/herald)](https://goreportcard.com/report/github.com/soulteary/herald)
+
 > **📧 안전한 인증을 위한 게이트웨이**
 
 ## 🌐 다국어 문서

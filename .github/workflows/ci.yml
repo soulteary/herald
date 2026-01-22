@@ -105,6 +105,15 @@ jobs:
       - name: Display coverage summary
         run: go tool cover -func=coverage.out
 
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./coverage.out
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+
   # Code quality check (using golangci-lint)
   lint:
     name: Code Quality Check
