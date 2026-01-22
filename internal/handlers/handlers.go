@@ -185,10 +185,9 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 	if req.Purpose == "" {
 		req.Purpose = "login" // Default purpose
 	}
-	allowedPurposes := strings.Split(config.AllowedPurposes, ",")
 	purposeValid := false
-	for _, allowed := range allowedPurposes {
-		if strings.TrimSpace(allowed) == req.Purpose {
+	for _, allowed := range config.AllowedPurposes {
+		if allowed == req.Purpose {
 			purposeValid = true
 			break
 		}
@@ -197,7 +196,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "invalid_purpose",
-			"error":  fmt.Sprintf("Purpose must be one of: %s", config.AllowedPurposes),
+			"error":  fmt.Sprintf("Purpose must be one of: %s", strings.Join(config.AllowedPurposes, ", ")),
 		})
 	}
 

@@ -1200,7 +1200,7 @@ func TestHandlers_CreateChallenge_InvalidPurpose(t *testing.T) {
 		config.AllowedPurposes = originalAllowedPurposes
 	}()
 
-	config.AllowedPurposes = "login,reset" // Only allow login and reset
+	config.AllowedPurposes = []string{"login", "reset"} // Only allow login and reset
 
 	redisClient := testRedisClient(t)
 	defer func() {

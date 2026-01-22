@@ -4,6 +4,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/soulteary/cli-kit/env"
 )
 
 func TestGetPort(t *testing.T) {
@@ -86,8 +88,8 @@ func TestGetEnv(t *testing.T) {
 				}
 			}
 
-			if got := getEnv(tt.envKey, tt.defaultValue); got != tt.expected {
-				t.Errorf("getEnv() = %v, want %v", got, tt.expected)
+			if got := env.Get(tt.envKey, tt.defaultValue); got != tt.expected {
+				t.Errorf("env.Get() = %v, want %v", got, tt.expected)
 			}
 		})
 	}
@@ -141,8 +143,8 @@ func TestGetEnvInt(t *testing.T) {
 				}
 			}
 
-			if got := getEnvInt(tt.envKey, tt.defaultValue); got != tt.expected {
-				t.Errorf("getEnvInt() = %v, want %v", got, tt.expected)
+			if got := env.GetInt(tt.envKey, tt.defaultValue); got != tt.expected {
+				t.Errorf("env.GetInt() = %v, want %v", got, tt.expected)
 			}
 		})
 	}
@@ -196,8 +198,8 @@ func TestGetEnvDuration(t *testing.T) {
 				}
 			}
 
-			if got := getEnvDuration(tt.envKey, tt.defaultValue); got != tt.expected {
-				t.Errorf("getEnvDuration() = %v, want %v", got, tt.expected)
+			if got := env.GetDuration(tt.envKey, tt.defaultValue); got != tt.expected {
+				t.Errorf("env.GetDuration() = %v, want %v", got, tt.expected)
 			}
 		})
 	}
@@ -367,8 +369,8 @@ func TestGetEnvBool(t *testing.T) {
 				}
 			}
 
-			if got := getEnvBool(tt.envKey, tt.defaultValue); got != tt.expected {
-				t.Errorf("getEnvBool() = %v, want %v", got, tt.expected)
+			if got := env.GetBool(tt.envKey, tt.defaultValue); got != tt.expected {
+				t.Errorf("env.GetBool() = %v, want %v", got, tt.expected)
 			}
 		})
 	}

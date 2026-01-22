@@ -1,12 +1,11 @@
 package config
 
 import (
-	"os"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/soulteary/cli-kit/env"
 )
 
 var (
@@ -14,71 +13,71 @@ var (
 	Version = "dev"
 
 	// Server config
-	Port = getEnv("PORT", ":8082")
+	Port = env.Get("PORT", ":8082")
 
 	// Redis config
-	RedisAddr     = getEnv("REDIS_ADDR", "localhost:6379")
-	RedisPassword = getEnv("REDIS_PASSWORD", "")
-	RedisDB       = getEnvInt("REDIS_DB", 0)
+	RedisAddr     = env.Get("REDIS_ADDR", "localhost:6379")
+	RedisPassword = env.Get("REDIS_PASSWORD", "")
+	RedisDB       = env.GetInt("REDIS_DB", 0)
 
 	// Logging
-	LogLevel = getEnv("LOG_LEVEL", "info")
+	LogLevel = env.Get("LOG_LEVEL", "info")
 
 	// API Key for service-to-service authentication
-	APIKey = getEnv("API_KEY", "")
+	APIKey = env.Get("API_KEY", "")
 
 	// Challenge config
-	ChallengeExpiry   = getEnvDuration("CHALLENGE_EXPIRY", 5*time.Minute)
-	MaxAttempts       = getEnvInt("MAX_ATTEMPTS", 5)
-	ResendCooldown    = getEnvDuration("RESEND_COOLDOWN", 60*time.Second)
-	CodeLength        = getEnvInt("CODE_LENGTH", 6)
-	LockoutDuration   = getEnvDuration("LOCKOUT_DURATION", 10*time.Minute)
-	IdempotencyKeyTTL = getEnvDuration("IDEMPOTENCY_KEY_TTL", 0) // 0 means use ChallengeExpiry
-	AllowedPurposes   = getEnv("ALLOWED_PURPOSES", "login")      // Comma-separated list: "login,reset,bind,stepup"
+	ChallengeExpiry   = env.GetDuration("CHALLENGE_EXPIRY", 5*time.Minute)
+	MaxAttempts       = env.GetInt("MAX_ATTEMPTS", 5)
+	ResendCooldown    = env.GetDuration("RESEND_COOLDOWN", 60*time.Second)
+	CodeLength        = env.GetInt("CODE_LENGTH", 6)
+	LockoutDuration   = env.GetDuration("LOCKOUT_DURATION", 10*time.Minute)
+	IdempotencyKeyTTL = env.GetDuration("IDEMPOTENCY_KEY_TTL", 0)                      // 0 means use ChallengeExpiry
+	AllowedPurposes   = env.GetStringSlice("ALLOWED_PURPOSES", []string{"login"}, ",") // Comma-separated list: "login,reset,bind,stepup"
 
 	// Rate limiting config
-	RateLimitPerUser        = getEnvInt("RATE_LIMIT_PER_USER", 10)        // per hour
-	RateLimitPerIP          = getEnvInt("RATE_LIMIT_PER_IP", 5)           // per minute
-	RateLimitPerDestination = getEnvInt("RATE_LIMIT_PER_DESTINATION", 10) // per hour
+	RateLimitPerUser        = env.GetInt("RATE_LIMIT_PER_USER", 10)        // per hour
+	RateLimitPerIP          = env.GetInt("RATE_LIMIT_PER_IP", 5)           // per minute
+	RateLimitPerDestination = env.GetInt("RATE_LIMIT_PER_DESTINATION", 10) // per hour
 
 	// Provider config
-	SMTPHost              = getEnv("SMTP_HOST", "")
-	SMTPPort              = getEnvInt("SMTP_PORT", 587)
-	SMTPUser              = getEnv("SMTP_USER", "")
-	SMTPPassword          = getEnv("SMTP_PASSWORD", "")
-	SMTPFrom              = getEnv("SMTP_FROM", "")
-	ProviderFailurePolicy = getEnv("PROVIDER_FAILURE_POLICY", "soft") // "strict" | "soft"
+	SMTPHost              = env.Get("SMTP_HOST", "")
+	SMTPPort              = env.GetInt("SMTP_PORT", 587)
+	SMTPUser              = env.Get("SMTP_USER", "")
+	SMTPPassword          = env.Get("SMTP_PASSWORD", "")
+	SMTPFrom              = env.Get("SMTP_FROM", "")
+	ProviderFailurePolicy = env.Get("PROVIDER_FAILURE_POLICY", "soft") // "strict" | "soft"
 
 	// SMS Provider config (example: Aliyun)
-	SMSProvider        = getEnv("SMS_PROVIDER", "") // "aliyun", "tencent", etc.
-	AliyunAccessKey    = getEnv("ALIYUN_ACCESS_KEY", "")
-	AliyunSecretKey    = getEnv("ALIYUN_SECRET_KEY", "")
-	AliyunSignName     = getEnv("ALIYUN_SIGN_NAME", "")
-	AliyunTemplateCode = getEnv("ALIYUN_TEMPLATE_CODE", "")
+	SMSProvider        = env.Get("SMS_PROVIDER", "") // "aliyun", "tencent", etc.
+	AliyunAccessKey    = env.Get("ALIYUN_ACCESS_KEY", "")
+	AliyunSecretKey    = env.Get("ALIYUN_SECRET_KEY", "")
+	AliyunSignName     = env.Get("ALIYUN_SIGN_NAME", "")
+	AliyunTemplateCode = env.Get("ALIYUN_TEMPLATE_CODE", "")
 
 	// Service authentication (HMAC)
-	HMACSecret  = getEnv("HMAC_SECRET", "")
-	ServiceName = getEnv("SERVICE_NAME", "herald")
+	HMACSecret  = env.Get("HMAC_SECRET", "")
+	ServiceName = env.Get("SERVICE_NAME", "herald")
 
 	// TLS/mTLS config
-	TLSCertFile     = getEnv("TLS_CERT_FILE", "")
-	TLSKeyFile      = getEnv("TLS_KEY_FILE", "")
-	TLSCACertFile   = getEnv("TLS_CA_CERT_FILE", "")   // For mTLS (client certificate verification)
-	TLSClientCAFile = getEnv("TLS_CLIENT_CA_FILE", "") // Alias for TLS_CA_CERT_FILE
-	TestMode        = getEnvBool("HERALD_TEST_MODE", false)
+	TLSCertFile     = env.Get("TLS_CERT_FILE", "")
+	TLSKeyFile      = env.Get("TLS_KEY_FILE", "")
+	TLSCACertFile   = env.Get("TLS_CA_CERT_FILE", "")   // For mTLS (client certificate verification)
+	TLSClientCAFile = env.Get("TLS_CLIENT_CA_FILE", "") // Alias for TLS_CA_CERT_FILE
+	TestMode        = env.GetBool("HERALD_TEST_MODE", false)
 
 	// Session storage config
-	SessionStorageEnabled = getEnvBool("HERALD_SESSION_STORAGE_ENABLED", false)
-	SessionDefaultTTL     = getEnvDuration("HERALD_SESSION_DEFAULT_TTL", 1*time.Hour)
-	SessionKeyPrefix      = getEnv("HERALD_SESSION_KEY_PREFIX", "session:")
+	SessionStorageEnabled = env.GetBool("HERALD_SESSION_STORAGE_ENABLED", false)
+	SessionDefaultTTL     = env.GetDuration("HERALD_SESSION_DEFAULT_TTL", 1*time.Hour)
+	SessionKeyPrefix      = env.Get("HERALD_SESSION_KEY_PREFIX", "session:")
 
 	// Audit logging config
-	AuditEnabled         = getEnvBool("AUDIT_ENABLED", true)
-	AuditMaskDestination = getEnvBool("AUDIT_MASK_DESTINATION", false)
-	AuditTTL             = getEnvDuration("AUDIT_TTL", 7*24*time.Hour) // 7 days default
+	AuditEnabled         = env.GetBool("AUDIT_ENABLED", true)
+	AuditMaskDestination = env.GetBool("AUDIT_MASK_DESTINATION", false)
+	AuditTTL             = env.GetDuration("AUDIT_TTL", 7*24*time.Hour) // 7 days default
 
 	// Template config
-	TemplateDir = getEnv("TEMPLATE_DIR", "") // Optional: path to template directory
+	TemplateDir = env.Get("TEMPLATE_DIR", "") // Optional: path to template directory
 )
 
 // Initialize validates and initializes configuration
@@ -125,41 +124,6 @@ func GetPort() string {
 		return ":" + Port
 	}
 	return Port
-}
-
-// Helper functions
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}
-
-func getEnvInt(key string, defaultValue int) int {
-	if value := os.Getenv(key); value != "" {
-		if intValue, err := strconv.Atoi(value); err == nil {
-			return intValue
-		}
-	}
-	return defaultValue
-}
-
-func getEnvDuration(key string, defaultValue time.Duration) time.Duration {
-	if value := os.Getenv(key); value != "" {
-		if duration, err := time.ParseDuration(value); err == nil {
-			return duration
-		}
-	}
-	return defaultValue
-}
-
-func getEnvBool(key string, defaultValue bool) bool {
-	if value := os.Getenv(key); value != "" {
-		if boolValue, err := strconv.ParseBool(value); err == nil {
-			return boolValue
-		}
-	}
-	return defaultValue
 }
 
 func maskSensitive(s string) string {
