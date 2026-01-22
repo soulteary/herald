@@ -8,40 +8,96 @@
 
 ![Herald](.github/assets/banner.jpg)
 
-Herald は、電子メール経由で検証コード（OTP）を送信するための本番対応の軽量サービスです（SMS サポートは現在開発中）。レート制限、セキュリティ制御、監査ログ記録が組み込まれています。
+Herald は、電子メールと SMS を介して検証コードを送信できる本番対応のスタンドアロン OTP および検証コードサービスです。組み込みのレート制限、セキュリティ制御、監査ログ記録機能を備えています。Herald は独立して動作するように設計されており、必要に応じて他のサービスと統合できます。
 
-## 機能
+## 主な機能
 
-- 🚀 **高性能**：Go と Fiber で構築
-- 🔒 **セキュア**：ハッシュストレージを使用したチャレンジベースの検証
-- 📊 **レート制限**：多次元レート制限（ユーザーごと、IP ごと、宛先ごと）
-- 📝 **監査ログ**：すべての操作の完全な監査証跡
-- 🔌 **プラガブルプロバイダー**：電子メールプロバイダーのサポート（SMS プロバイダーはプレースホルダー実装で、まだ完全には機能していません）
-- ⚡ **Redis バックエンド**：Redis を使用した高速で分散されたストレージ
+- 🔒 **セキュリティ設計**：Argon2 ハッシュストレージを使用したチャレンジベースの検証、複数の認証方法（mTLS、HMAC、API Key）
+- 📊 **組み込みレート制限**：多次元レート制限（ユーザーごと、IP ごと、宛先ごと）、設定可能なしきい値
+- 📝 **完全な監査証跡**：プロバイダー追跡を含むすべての操作の完全な監査ログ記録
+- 🔌 **プラガブルプロバイダー**：拡張可能な電子メールおよび SMS プロバイダーアーキテクチャ
 
 ## クイックスタート
 
+### Docker Compose の使用
+
+最も簡単な方法は、Redis を含む Docker Compose を使用することです：
+
 ```bash
-# Docker Compose で実行
+# Start Herald and Redis
 docker-compose up -d
 
-# または直接実行
-go run main.go
+# Verify the service is running
+curl http://localhost:8082/healthz
 ```
 
-## 設定
+期待される応答：
+```json
+{
+  "status": "ok",
+  "service": "herald"
+}
+```
 
-環境変数を設定：
+### API のテスト
 
-- `PORT`：サーバーポート（デフォルト：`:8082`）
-- `REDIS_ADDR`：Redis アドレス（デフォルト：`localhost:6379`）
-- `REDIS_PASSWORD`：Redis パスワード（オプション）
-- `REDIS_DB`：Redis データベース番号（デフォルト：`0`）
-- `API_KEY`：サービス間認証用の API キー
-- `LOG_LEVEL`：ログレベル（デフォルト：`info`）
+テストチャレンジを作成（認証が必要 - [API ドキュメント](docs/jaJP/API.md) を参照）：
 
-完全な設定オプションについては、[DEPLOYMENT.md](docs/jaJP/DEPLOYMENT.md) を参照してください。
+```bash
+# Set your API key (from docker-compose.yml: your-secret-api-key-here)
+export API_KEY="your-secret-api-key-here"
 
-## API ドキュメント
+# Create a challenge
+curl -X POST http://localhost:8082/v1/otp/challenges \
+  -H "X-API-Key: $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "test_user",
+    "channel": "email",
+    "destination": "user@example.com",
+    "purpose": "login"
+  }'
+```
 
-詳細な API ドキュメントについては、[API.md](docs/jaJP/API.md) を参照してください。
+### ログの表示
+
+```bash
+# Docker Compose logs
+docker-compose logs -f herald
+```
+
+### 手動デプロイ
+
+手動デプロイと高度な設定については、[デプロイメントガイド](docs/jaJP/DEPLOYMENT.md) を参照してください。
+
+## 基本設定
+
+Herald を開始するには最小限の設定が必要です：
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `PORT` | Server port | `:8082` | No |
+| `REDIS_ADDR` | Redis address | `localhost:6379` | Yes |
+| `API_KEY` | API key for authentication | - | Recommended |
+
+レート制限、チャレンジの有効期限、プロバイダー設定を含む完全な設定オプションについては、[デプロイメントガイド](docs/jaJP/DEPLOYMENT.md#configuration) を参照してください。
+
+## ドキュメント
+
+### 開発者向け
+
+- **[API ドキュメント](docs/jaJP/API.md)** - 認証方法、エンドポイント、エラーコードを含む完全な API リファレンス
+- **[デプロイメントガイド](docs/jaJP/DEPLOYMENT.md)** - 設定オプション、Docker デプロイメント、統合例
+
+### 運用向け
+
+- **[監視ガイド](docs/jaJP/MONITORING.md)** - Prometheus メトリクス、Grafana ダッシュボード、アラート
+- **[トラブルシューティングガイド](docs/jaJP/TROUBLESHOOTING.md)** - 一般的な問題、診断手順、解決策
+
+### ドキュメントインデックス
+
+すべてのドキュメントの完全な概要については、[docs/jaJP/README.md](docs/jaJP/README.md) を参照してください。
+
+## License
+
+See [LICENSE](LICENSE) for details.

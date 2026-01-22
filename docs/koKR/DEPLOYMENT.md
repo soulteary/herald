@@ -52,18 +52,23 @@ go build -o herald main.go
 | `ALIYUN_SIGN_NAME` | Aliyun SMS 서명 이름 | `` | Aliyun SMS용 |
 | `ALIYUN_TEMPLATE_CODE` | Aliyun SMS 템플릿 코드 | `` | Aliyun SMS용 |
 
-## Stargate 통합
+## 다른 서비스와의 통합 (선택사항)
 
-1. Stargate 구성에서 `HERALD_URL` 설정
-2. Stargate 구성에서 `HERALD_API_KEY` 설정
-3. Stargate 구성에서 `HERALD_ENABLED=true` 설정
+Herald는 독립적으로 작동하도록 설계되었으며 필요에 따라 다른 서비스와 통합할 수 있습니다. Herald를 다른 인증 서비스나 게이트웨이 서비스와 통합하려면 다음을 구성할 수 있습니다:
 
-예:
+**통합 구성 예:**
 ```bash
+# Herald에 액세스할 수 있는 서비스 URL
 export HERALD_URL=http://herald:8082
+
+# 서비스 간 인증을 위한 API 키
 export HERALD_API_KEY=your-secret-key
+
+# Herald 통합 활성화 (서비스가 지원하는 경우)
 export HERALD_ENABLED=true
 ```
+
+**참고**: Herald는 외부 서비스 종속성 없이 독립적으로 사용할 수 있습니다. 다른 서비스와의 통합은 선택사항이며 특정 사용 사례에 따라 다릅니다.
 
 ## 보안
 

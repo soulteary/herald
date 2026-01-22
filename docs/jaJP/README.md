@@ -25,8 +25,19 @@ Herald OTP および検証コードサービスのドキュメントへようこ
   - Docker Compose デプロイメント
   - 手動デプロイメント
   - 設定オプション
-  - Stargate との統合
+  - 他のサービスとのオプション統合
   - セキュリティのベストプラクティス
+
+- **[MONITORING.md](MONITORING.md)** - モニタリングガイド
+  - Prometheus メトリクス
+  - Grafana ダッシュボード
+  - アラートルール
+  - ベストプラクティス
+
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - トラブルシューティングガイド
+  - 一般的な問題と解決策
+  - 診断手順
+  - パフォーマンス最適化
 
 ## 🚀 クイックナビゲーション
 
@@ -46,6 +57,8 @@ Herald OTP および検証コードサービスのドキュメントへようこ
 1. [DEPLOYMENT.md](DEPLOYMENT.md) を読んでデプロイメント方法を理解する
 2. [API.md](API.md) を確認して API エンドポイントの詳細を理解する
 3. [セキュリティ](DEPLOYMENT.md#セキュリティ) を参照してセキュリティのベストプラクティスを理解する
+4. サービスの健全性を監視: [MONITORING.md](MONITORING.md)
+5. 問題をトラブルシューティング: [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ## 📖 ドキュメント構造
 
@@ -57,11 +70,15 @@ herald/
 │   ├── enUS/
 │   │   ├── README.md       # ドキュメントインデックス（英語）
 │   │   ├── API.md          # API ドキュメント（英語）
-│   │   └── DEPLOYMENT.md   # デプロイメントガイド（英語）
+│   │   ├── DEPLOYMENT.md   # デプロイメントガイド（英語）
+│   │   ├── MONITORING.md   # モニタリングガイド（英語）
+│   │   └── TROUBLESHOOTING.md # トラブルシューティングガイド（英語）
 │   └── jaJP/
 │       ├── README.md       # ドキュメントインデックス（日本語、このファイル）
 │       ├── API.md          # API ドキュメント（日本語）
-│       └── DEPLOYMENT.md   # デプロイメントガイド（日本語）
+│       ├── DEPLOYMENT.md   # デプロイメントガイド（日本語）
+│       ├── MONITORING.md   # モニタリングガイド（日本語）
+│       └── TROUBLESHOOTING.md # トラブルシューティングガイド（日本語）
 └── ...
 ```
 
@@ -78,8 +95,14 @@ herald/
 
 - Docker デプロイメント：[DEPLOYMENT.md#クイックスタート](DEPLOYMENT.md#クイックスタート)
 - 設定オプション：[DEPLOYMENT.md#設定](DEPLOYMENT.md#設定)
-- Stargate 統合：[DEPLOYMENT.md#stargate-との統合](DEPLOYMENT.md#stargate-との統合)
+- サービス統合：[DEPLOYMENT.md#他のサービスとの統合オプション](DEPLOYMENT.md#他のサービスとの統合オプション)
 - セキュリティ：[DEPLOYMENT.md#セキュリティ](DEPLOYMENT.md#セキュリティ)
+
+### モニタリングと運用
+
+- Prometheus メトリクス：[MONITORING.md](MONITORING.md)
+- Grafana ダッシュボード：[MONITORING.md#grafana-ダッシュボード](MONITORING.md#grafana-ダッシュボード)
+- トラブルシューティング：[TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ## 💡 使用推奨事項
 
@@ -87,6 +110,8 @@ herald/
 2. **サービスを設定する**：[DEPLOYMENT.md](DEPLOYMENT.md) を参照してすべての設定オプションを理解する
 3. **サービスと統合する**：[DEPLOYMENT.md](DEPLOYMENT.md) の統合セクションを確認する
 4. **API 統合**：[API.md](API.md) を読んで API インターフェースを理解する
+5. **サービスを監視する**：[MONITORING.md](MONITORING.md) でモニタリングを設定する
+6. **問題をトラブルシューティング**：[TROUBLESHOOTING.md](TROUBLESHOOTING.md) を参照して一般的な問題を確認する
 
 ## 📝 ドキュメント更新
 

@@ -25,8 +25,19 @@ Willkommen zur Dokumentation des Herald OTP- und Verifizierungscode-Services.
   - Docker Compose-Bereitstellung
   - Manuelle Bereitstellung
   - Konfigurationsoptionen
-  - Integration mit Stargate
+  - Optionale Integration mit anderen Diensten
   - Sicherheitsbest Practices
+
+- **[MONITORING.md](MONITORING.md)** - Monitoring-Leitfaden
+  - Prometheus-Metriken
+  - Grafana-Dashboards
+  - Alerting-Regeln
+  - Best Practices
+
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Fehlerbehebungsleitfaden
+  - Häufige Probleme und Lösungen
+  - Diagnoseschritte
+  - Leistungsoptimierung
 
 ## 🚀 Schnellnavigation
 
@@ -46,6 +57,8 @@ Willkommen zur Dokumentation des Herald OTP- und Verifizierungscode-Services.
 1. Lesen Sie [DEPLOYMENT.md](DEPLOYMENT.md), um Bereitstellungsmethoden zu verstehen
 2. Überprüfen Sie [API.md](API.md) für API-Endpunkt-Details
 3. Beziehen Sie sich auf [Sicherheit](DEPLOYMENT.md#sicherheit) für Sicherheitsbest Practices
+4. Service-Gesundheit überwachen: [MONITORING.md](MONITORING.md)
+5. Probleme beheben: [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ## 📖 Dokumentenstruktur
 
@@ -57,11 +70,15 @@ herald/
 │   ├── enUS/
 │   │   ├── README.md       # Dokumentationsverzeichnis (Englisch)
 │   │   ├── API.md          # API-Dokument (Englisch)
-│   │   └── DEPLOYMENT.md   # Bereitstellungsanleitung (Englisch)
+│   │   ├── DEPLOYMENT.md   # Bereitstellungsanleitung (Englisch)
+│   │   ├── MONITORING.md   # Monitoring-Leitfaden (Englisch)
+│   │   └── TROUBLESHOOTING.md # Fehlerbehebungsleitfaden (Englisch)
 │   └── deDE/
 │       ├── README.md       # Dokumentationsverzeichnis (Deutsch, diese Datei)
 │       ├── API.md          # API-Dokument (Deutsch)
-│       └── DEPLOYMENT.md   # Bereitstellungsanleitung (Deutsch)
+│       ├── DEPLOYMENT.md   # Bereitstellungsanleitung (Deutsch)
+│       ├── MONITORING.md   # Monitoring-Leitfaden (Deutsch)
+│       └── TROUBLESHOOTING.md # Fehlerbehebungsleitfaden (Deutsch)
 └── ...
 ```
 
@@ -78,8 +95,14 @@ herald/
 
 - Docker-Bereitstellung: [DEPLOYMENT.md#schnellstart](DEPLOYMENT.md#schnellstart)
 - Konfigurationsoptionen: [DEPLOYMENT.md#konfiguration](DEPLOYMENT.md#konfiguration)
-- Stargate-Integration: [DEPLOYMENT.md#integration-mit-stargate](DEPLOYMENT.md#integration-mit-stargate)
+- Dienstintegration: [DEPLOYMENT.md#integration-mit-anderen-diensten-optional](DEPLOYMENT.md#integration-mit-anderen-diensten-optional)
 - Sicherheit: [DEPLOYMENT.md#sicherheit](DEPLOYMENT.md#sicherheit)
+
+### Monitoring und Betrieb
+
+- Prometheus-Metriken: [MONITORING.md](MONITORING.md)
+- Grafana-Dashboards: [MONITORING.md#grafana-dashboards](MONITORING.md#grafana-dashboards)
+- Fehlerbehebung: [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ## 💡 Verwendungsempfehlungen
 
@@ -87,6 +110,8 @@ herald/
 2. **Service konfigurieren**: Beziehen Sie sich auf [DEPLOYMENT.md](DEPLOYMENT.md), um alle Konfigurationsoptionen zu verstehen
 3. **Mit Services integrieren**: Überprüfen Sie den Integrationsabschnitt in [DEPLOYMENT.md](DEPLOYMENT.md)
 4. **API-Integration**: Lesen Sie [API.md](API.md), um die API-Schnittstellen zu verstehen
+5. **Service überwachen**: Richten Sie Monitoring mit [MONITORING.md](MONITORING.md) ein
+6. **Probleme beheben**: Beziehen Sie sich auf [TROUBLESHOOTING.md](TROUBLESHOOTING.md) für häufige Probleme
 
 ## 📝 Dokumentationsaktualisierungen
 
