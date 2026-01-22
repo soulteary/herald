@@ -25,8 +25,19 @@ Welcome to the Herald OTP and Verification Code Service documentation.
   - Docker Compose deployment
   - Manual deployment
   - Configuration options
-  - Integration with Stargate
+  - Optional integration with other services
   - Security best practices
+
+- **[MONITORING.md](MONITORING.md)** - Monitoring guide
+  - Prometheus metrics
+  - Grafana dashboards
+  - Alerting rules
+  - Best practices
+
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Troubleshooting guide
+  - Common issues and solutions
+  - Diagnostic steps
+  - Performance optimization
 
 ## 🚀 Quick Navigation
 
@@ -46,6 +57,8 @@ Welcome to the Herald OTP and Verification Code Service documentation.
 1. Read [DEPLOYMENT.md](DEPLOYMENT.md) to understand deployment methods
 2. Check [API.md](API.md) for API endpoint details
 3. Refer to [Security](DEPLOYMENT.md#security) for security best practices
+4. Monitor service health: [MONITORING.md](MONITORING.md)
+5. Troubleshoot issues: [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ## 📖 Document Structure
 
@@ -57,11 +70,15 @@ herald/
 │   ├── enUS/
 │   │   ├── README.md       # Documentation index (English, this file)
 │   │   ├── API.md          # API document (English)
-│   │   └── DEPLOYMENT.md   # Deployment guide (English)
+│   │   ├── DEPLOYMENT.md   # Deployment guide (English)
+│   │   ├── MONITORING.md   # Monitoring guide (English)
+│   │   └── TROUBLESHOOTING.md # Troubleshooting guide (English)
 │   └── zhCN/
 │       ├── README.md       # Documentation index (Chinese)
 │       ├── API.md          # API document (Chinese)
-│       └── DEPLOYMENT.md   # Deployment guide (Chinese)
+│       ├── DEPLOYMENT.md   # Deployment guide (Chinese)
+│       ├── MONITORING.md   # Monitoring guide (Chinese)
+│       └── TROUBLESHOOTING.md # Troubleshooting guide (Chinese)
 └── ...
 ```
 
@@ -78,8 +95,14 @@ herald/
 
 - Docker deployment: [DEPLOYMENT.md#quick-start](DEPLOYMENT.md#quick-start)
 - Configuration options: [DEPLOYMENT.md#configuration](DEPLOYMENT.md#configuration)
-- Stargate integration: [DEPLOYMENT.md#integration-with-stargate](DEPLOYMENT.md#integration-with-stargate)
+- Service integration: [DEPLOYMENT.md#integration-with-other-services-optional](DEPLOYMENT.md#integration-with-other-services-optional)
 - Security: [DEPLOYMENT.md#security](DEPLOYMENT.md#security)
+
+### Monitoring and Operations
+
+- Prometheus metrics: [MONITORING.md](MONITORING.md)
+- Grafana dashboards: [MONITORING.md#grafana-dashboards](MONITORING.md#grafana-dashboards)
+- Troubleshooting: [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ## 💡 Usage Recommendations
 
@@ -87,6 +110,8 @@ herald/
 2. **Configure service**: Refer to [DEPLOYMENT.md](DEPLOYMENT.md) to understand all configuration options
 3. **Integrate with services**: Check the integration section in [DEPLOYMENT.md](DEPLOYMENT.md)
 4. **API integration**: Read [API.md](API.md) to understand the API interfaces
+5. **Monitor service**: Set up monitoring with [MONITORING.md](MONITORING.md)
+6. **Troubleshoot issues**: Refer to [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common problems
 
 ## 📝 Document Updates
 

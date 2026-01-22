@@ -10,10 +10,15 @@ http://localhost:8082
 
 ## 인증
 
-Herald는 두 가지 인증 방법을 지원합니다:
+Herald는 다음 우선순위 순서로 세 가지 인증 방법을 지원합니다:
 
-1. **API 키** (간단): `X-API-Key` 헤더 설정
+1. **mTLS** (가장 안전): 클라이언트 인증서 검증을 통한 상호 TLS (최고 우선순위)
 2. **HMAC 서명** (보안): `X-Signature`, `X-Timestamp` 및 `X-Service` 헤더 설정
+3. **API 키** (간단): `X-API-Key` 헤더 설정 (최저 우선순위)
+
+### mTLS 인증
+
+검증된 클라이언트 인증서로 HTTPS를 사용하는 경우 Herald는 자동으로 mTLS를 통해 요청을 인증합니다. 이것은 가장 안전한 방법이며 다른 인증 방법보다 우선합니다.
 
 ### HMAC 서명
 
@@ -24,9 +29,13 @@ HMAC-SHA256(timestamp:service:body, secret)
 
 여기서:
 - `timestamp`: Unix 타임스탬프(초)
-- `service`: 서비스 식별자(예: "stargate")
+- `service`: 서비스 식별자(예: "my-service", "api-gateway")
 - `body`: 요청 본문(JSON 문자열)
 - `secret`: HMAC 비밀 키
+
+**참고**: 재생 공격을 방지하기 위해 타임스탬프는 서버 시간의 5분(300초) 이내여야 합니다. 타임스탬프 창은 구성 가능하지만 기본값은 5분입니다.
+
+**참고**: 현재 키 순환을 위한 `X-Key-Id` 헤더는 지원되지 않습니다. 이 기능은 향후 버전에서 계획되어 있습니다.
 
 ## 엔드포인트
 

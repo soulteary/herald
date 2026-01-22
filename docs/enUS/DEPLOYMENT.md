@@ -21,6 +21,14 @@ go build -o herald main.go
 
 ## Configuration
 
+### Configuration Naming Convention
+
+**Note**: While the specification recommends using `HERALD_*` prefix for all configuration variables, the current implementation uses a mix of naming conventions:
+- Some variables use `HERALD_*` prefix (e.g., `HERALD_TEST_MODE`, `HERALD_SESSION_STORAGE_ENABLED`)
+- Some variables use shorter names (e.g., `REDIS_ADDR`, `API_KEY`, `HMAC_SECRET`)
+
+For consistency and future compatibility, consider using `HERALD_*` prefix when possible. The service supports both naming conventions.
+
 ### Environment Variables
 
 | Variable | Description | Default | Required |
@@ -52,22 +60,80 @@ go build -o herald main.go
 | `ALIYUN_SIGN_NAME` | Aliyun SMS sign name | `` | For Aliyun SMS |
 | `ALIYUN_TEMPLATE_CODE` | Aliyun SMS template code | `` | For Aliyun SMS |
 
-## Integration with Stargate
+### Redis Configuration
 
-1. Set `HERALD_URL` in Stargate configuration
-2. Set `HERALD_API_KEY` in Stargate configuration
-3. Set `HERALD_ENABLED=true` in Stargate configuration
+#### Independent Redis Instance
 
-Example:
+For production deployments, it is **strongly recommended** to use a dedicated Redis instance or a separate database index for Herald to avoid key space conflicts with other services.
+
+**Key Prefixes:**
+- `otp:ch:*` - Challenge data (TTL: challenge expiry time)
+- `otp:rate:*` - Rate limiting counters (TTL: rate limit window)
+- `otp:idem:*` - Idempotency records (TTL: idempotency key TTL)
+- `otp:lock:*` - User lockout records (TTL: lockout duration)
+
+**Capacity Planning:**
+
+Basic estimation formula:
+```
+Peak challenges/second × TTL (seconds) × Average size per entry + Rate limit keys + Audit keys
+```
+
+**Example:**
+- Peak: 100 challenges/second
+- Challenge TTL: 300 seconds (5 minutes)
+- Average challenge size: ~500 bytes
+- Estimated: 100 × 300 × 500 bytes ≈ 15 MB for challenges
+- Plus rate limit keys (~1-2 MB) and audit keys (~1-2 MB)
+- **Total estimated: ~20 MB minimum**
+
+For high-availability deployments, consider Redis Cluster or Redis Sentinel.
+
+## Integration with Other Services (Optional)
+
+Herald is designed to work independently and can be integrated with other services as needed. If you want to integrate Herald with other authentication or gateway services, you can configure the following:
+
+**Example integration configuration:**
 ```bash
+# Service URL where Herald is accessible
 export HERALD_URL=http://herald:8082
+
+# API key for service-to-service authentication
 export HERALD_API_KEY=your-secret-key
+
+# Enable Herald integration (if your service supports it)
 export HERALD_ENABLED=true
 ```
 
+**Note**: Herald can be used standalone without any external service dependencies. Integration with other services is optional and depends on your specific use case.
+
+## Monitoring
+
+### Prometheus Metrics
+
+Herald exposes Prometheus metrics at the `/metrics` endpoint. The following metrics are available:
+
+- `herald_otp_challenges_total{channel,purpose,result}` - Total number of OTP challenges created
+- `herald_otp_sends_total{channel,provider,result}` - Total number of OTP sends via providers
+- `herald_otp_verifications_total{result,reason}` - Total number of OTP verifications
+- `herald_otp_send_duration_seconds{provider}` - Duration of OTP send operations (Histogram)
+- `herald_rate_limit_hits_total{scope}` - Total number of rate limit hits (scope: user, ip, destination, resend_cooldown)
+- `herald_redis_latency_seconds{operation}` - Redis operation latency (operation: get, set, del, exists)
+
+**Example Prometheus scrape configuration:**
+```yaml
+scrape_configs:
+  - job_name: 'herald'
+    static_configs:
+      - targets: ['herald:8082']
+    metrics_path: '/metrics'
+```
+
+For detailed monitoring documentation, see [MONITORING.md](MONITORING.md).
+
 ## Security
 
-- Use HMAC authentication for production
+- Use mTLS or HMAC authentication for production (mTLS is recommended for highest security)
 - Set strong API keys
 - Use TLS/HTTPS in production
 - Configure rate limits appropriately

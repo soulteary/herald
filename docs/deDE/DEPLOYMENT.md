@@ -52,18 +52,23 @@ go build -o herald main.go
 | `ALIYUN_SIGN_NAME` | Aliyun SMS-Signaturname | `` | Für Aliyun SMS |
 | `ALIYUN_TEMPLATE_CODE` | Aliyun SMS-Vorlagencode | `` | Für Aliyun SMS |
 
-## Integration mit Stargate
+## Integration mit anderen Diensten (Optional)
 
-1. `HERALD_URL` in der Stargate-Konfiguration setzen
-2. `HERALD_API_KEY` in der Stargate-Konfiguration setzen
-3. `HERALD_ENABLED=true` in der Stargate-Konfiguration setzen
+Herald ist so konzipiert, dass es unabhängig funktioniert und bei Bedarf mit anderen Diensten integriert werden kann. Wenn Sie Herald mit anderen Authentifizierungs- oder Gateway-Diensten integrieren möchten, können Sie Folgendes konfigurieren:
 
-Beispiel :
+**Beispiel-Integrationskonfiguration:**
 ```bash
+# Service-URL, unter der Herald erreichbar ist
 export HERALD_URL=http://herald:8082
+
+# API-Schlüssel für die Dienst-zu-Dienst-Authentifizierung
 export HERALD_API_KEY=your-secret-key
+
+# Herald-Integration aktivieren (wenn Ihr Dienst dies unterstützt)
 export HERALD_ENABLED=true
 ```
+
+**Hinweis**: Herald kann eigenständig ohne externe Dienstabhängigkeiten verwendet werden. Die Integration mit anderen Diensten ist optional und hängt von Ihrem spezifischen Anwendungsfall ab.
 
 ## Sicherheit
 

@@ -8,40 +8,96 @@
 
 ![Herald](.github/assets/banner.jpg)
 
-Herald è un servizio leggero pronto per la produzione per l'invio di codici di verifica (OTP) tramite e-mail (il supporto SMS è attualmente in sviluppo), con limitazione della velocità integrata, controlli di sicurezza e registrazione di audit.
+Herald è un servizio OTP e codici di verifica autonomo pronto per la produzione che invia codici di verifica tramite e-mail e SMS. Dispone di limitazione della velocità integrata, controlli di sicurezza e registrazione di audit. Herald è progettato per funzionare in modo indipendente e può essere integrato con altri servizi se necessario.
 
-## Caratteristiche
+## Caratteristiche Principali
 
-- 🚀 **Alte Prestazioni** : Costruito con Go e Fiber
-- 🔒 **Sicuro** : Verifica basata su sfide con archiviazione hash
-- 📊 **Limitazione della Velocità** : Limitazione della velocità multidimensionale (per utente, per IP, per destinazione)
-- 📝 **Registrazione di Audit** : Traccia di audit completa per tutte le operazioni
-- 🔌 **Provider Estendibili** : Supporto per provider di posta elettronica (i provider SMS sono implementazioni segnaposto e non sono ancora completamente funzionali)
-- ⚡ **Backend Redis** : Archiviazione rapida e distribuita con Redis
+- 🔒 **Sicurezza per Progettazione** : Verifica basata su sfide con archiviazione hash Argon2, metodi di autenticazione multipli (mTLS, HMAC, API Key)
+- 📊 **Limitazione della Velocità Integrata** : Limitazione della velocità multidimensionale (per utente, per IP, per destinazione) con soglie configurabili
+- 📝 **Traccia di Audit Completa** : Registrazione di audit completa per tutte le operazioni con tracciamento del provider
+- 🔌 **Provider Estendibili** : Architettura provider e-mail e SMS estendibile
 
 ## Avvio Rapido
 
+### Utilizzo di Docker Compose
+
+Il modo più semplice per iniziare è con Docker Compose, che include Redis:
+
 ```bash
-# Eseguire con Docker Compose
+# Start Herald and Redis
 docker-compose up -d
 
-# Oppure eseguire direttamente
-go run main.go
+# Verify the service is running
+curl http://localhost:8082/healthz
 ```
 
-## Configurazione
+Risposta attesa:
+```json
+{
+  "status": "ok",
+  "service": "herald"
+}
+```
 
-Impostare le variabili d'ambiente :
+### Testare l'API
 
-- `PORT` : Porta del server (predefinito : `:8082`)
-- `REDIS_ADDR` : Indirizzo Redis (predefinito : `localhost:6379`)
-- `REDIS_PASSWORD` : Password Redis (opzionale)
-- `REDIS_DB` : Numero del database Redis (predefinito : `0`)
-- `API_KEY` : Chiave API per l'autenticazione tra servizi
-- `LOG_LEVEL` : Livello di log (predefinito : `info`)
+Creare una sfida di test (richiede autenticazione - vedere [Documentazione API](docs/itIT/API.md)):
 
-Per le opzioni di configurazione complete, vedere [DEPLOYMENT.md](docs/itIT/DEPLOYMENT.md).
+```bash
+# Set your API key (from docker-compose.yml: your-secret-api-key-here)
+export API_KEY="your-secret-api-key-here"
 
-## Documentazione API
+# Create a challenge
+curl -X POST http://localhost:8082/v1/otp/challenges \
+  -H "X-API-Key: $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "test_user",
+    "channel": "email",
+    "destination": "user@example.com",
+    "purpose": "login"
+  }'
+```
 
-Vedere [API.md](docs/itIT/API.md) per la documentazione API dettagliata.
+### Visualizzare i Log
+
+```bash
+# Docker Compose logs
+docker-compose logs -f herald
+```
+
+### Distribuzione Manuale
+
+Per la distribuzione manuale e la configurazione avanzata, vedere la [Guida alla Distribuzione](docs/itIT/DEPLOYMENT.md).
+
+## Configurazione di Base
+
+Herald richiede una configurazione minima per iniziare:
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `PORT` | Server port | `:8082` | No |
+| `REDIS_ADDR` | Redis address | `localhost:6379` | Yes |
+| `API_KEY` | API key for authentication | - | Recommended |
+
+Per le opzioni di configurazione complete, inclusi limiti di velocità, scadenza delle sfide e impostazioni del provider, vedere la [Guida alla Distribuzione](docs/itIT/DEPLOYMENT.md#configuration).
+
+## Documentazione
+
+### Per gli Sviluppatori
+
+- **[Documentazione API](docs/itIT/API.md)** - Riferimento API completo con metodi di autenticazione, endpoint e codici di errore
+- **[Guida alla Distribuzione](docs/itIT/DEPLOYMENT.md)** - Opzioni di configurazione, distribuzione Docker ed esempi di integrazione
+
+### Per le Operazioni
+
+- **[Guida al Monitoraggio](docs/itIT/MONITORING.md)** - Metriche Prometheus, dashboard Grafana e avvisi
+- **[Guida alla Risoluzione dei Problemi](docs/itIT/TROUBLESHOOTING.md)** - Problemi comuni, passaggi diagnostici e soluzioni
+
+### Indice della Documentazione
+
+Per una panoramica completa di tutta la documentazione, vedere [docs/itIT/README.md](docs/itIT/README.md).
+
+## License
+
+See [LICENSE](LICENSE) for details.

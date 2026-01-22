@@ -25,8 +25,19 @@
   - Docker Compose 部署
   - 手动部署
   - 配置选项
-  - 与 Stargate 集成
+  - 与其他服务的可选集成
   - 安全最佳实践
+
+- **[MONITORING.md](MONITORING.md)** - 监控指南
+  - Prometheus 指标
+  - Grafana 仪表板
+  - 告警规则
+  - 最佳实践
+
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - 故障排查指南
+  - 常见问题和解决方案
+  - 诊断步骤
+  - 性能优化
 
 ## 🚀 快速导航
 
@@ -46,6 +57,8 @@
 1. 阅读 [DEPLOYMENT.md](DEPLOYMENT.md) 了解部署方式
 2. 查看 [API.md](API.md) 了解 API 端点详情
 3. 参考 [安全](DEPLOYMENT.md#安全) 了解安全最佳实践
+4. 监控服务健康状态：[MONITORING.md](MONITORING.md)
+5. 排查问题：[TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ## 📖 文档结构
 
@@ -57,11 +70,15 @@ herald/
 │   ├── enUS/
 │   │   ├── README.md       # 文档索引（英文）
 │   │   ├── API.md          # API 文档（英文）
-│   │   └── DEPLOYMENT.md   # 部署指南（英文）
+│   │   ├── DEPLOYMENT.md   # 部署指南（英文）
+│   │   ├── MONITORING.md   # 监控指南（英文）
+│   │   └── TROUBLESHOOTING.md # 故障排查指南（英文）
 │   └── zhCN/
 │       ├── README.md       # 文档索引（中文，本文件）
 │       ├── API.md          # API 文档（中文）
-│       └── DEPLOYMENT.md   # 部署指南（中文）
+│       ├── DEPLOYMENT.md   # 部署指南（中文）
+│       ├── MONITORING.md   # 监控指南（中文）
+│       └── TROUBLESHOOTING.md # 故障排查指南（中文）
 └── ...
 ```
 
@@ -78,8 +95,14 @@ herald/
 
 - Docker 部署：[DEPLOYMENT.md#快速开始](DEPLOYMENT.md#快速开始)
 - 配置选项：[DEPLOYMENT.md#配置](DEPLOYMENT.md#配置)
-- Stargate 集成：[DEPLOYMENT.md#与-stargate-集成](DEPLOYMENT.md#与-stargate-集成)
+- 服务集成：[DEPLOYMENT.md#与其他服务集成可选](DEPLOYMENT.md#与其他服务集成可选)
 - 安全：[DEPLOYMENT.md#安全](DEPLOYMENT.md#安全)
+
+### 监控和运维
+
+- Prometheus 指标：[MONITORING.md](MONITORING.md)
+- Grafana 仪表板：[MONITORING.md#grafana-仪表板](MONITORING.md#grafana-仪表板)
+- 故障排查：[TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ## 💡 使用建议
 
@@ -87,6 +110,8 @@ herald/
 2. **配置服务**：参考 [DEPLOYMENT.md](DEPLOYMENT.md) 了解所有配置选项
 3. **集成服务**：查看 [DEPLOYMENT.md](DEPLOYMENT.md) 中的集成部分
 4. **API 集成**：阅读 [API.md](API.md) 了解 API 接口
+5. **监控服务**：使用 [MONITORING.md](MONITORING.md) 设置监控
+6. **排查问题**：参考 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) 了解常见问题
 
 ## 📝 文档更新
 

@@ -10,10 +10,15 @@ http://localhost:8082
 
 ## Autenticazione
 
-Herald supporta due metodi di autenticazione :
+Herald supporta tre metodi di autenticazione nel seguente ordine di priorità :
 
-1. **Chiave API** (Semplice) : Impostare l'intestazione `X-API-Key`
+1. **mTLS** (Più sicuro) : TLS reciproco con verifica del certificato client (priorità più alta)
 2. **Firma HMAC** (Sicuro) : Impostare le intestazioni `X-Signature`, `X-Timestamp` e `X-Service`
+3. **Chiave API** (Semplice) : Impostare l'intestazione `X-API-Key` (priorità più bassa)
+
+### Autenticazione mTLS
+
+Quando si utilizza HTTPS con un certificato client verificato, Herald autenticherà automaticamente la richiesta tramite mTLS. Questo è il metodo più sicuro e ha la priorità rispetto ad altri metodi di autenticazione.
 
 ### Firma HMAC
 
@@ -24,9 +29,13 @@ HMAC-SHA256(timestamp:service:body, secret)
 
 Dove :
 - `timestamp` : Timestamp Unix (secondi)
-- `service` : Identificatore del servizio (ad esempio, "stargate")
+- `service` : Identificatore del servizio (ad esempio, "my-service", "api-gateway")
 - `body` : Corpo della richiesta (stringa JSON)
 - `secret` : Chiave segreta HMAC
+
+**Nota** : Il timestamp deve essere entro 5 minuti (300 secondi) dall'ora del server per prevenire attacchi di replay. La finestra temporale è configurabile ma di default è 5 minuti.
+
+**Nota** : Attualmente, l'intestazione `X-Key-Id` per la rotazione delle chiavi non è supportata. Questa funzionalità è pianificata per le versioni future.
 
 ## Endpoint
 

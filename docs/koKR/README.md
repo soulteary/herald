@@ -25,8 +25,19 @@ Herald OTP 및 인증 코드 서비스 문서에 오신 것을 환영합니다.
   - Docker Compose 배포
   - 수동 배포
   - 구성 옵션
-  - Stargate 통합
+  - 다른 서비스와의 선택적 통합
   - 보안 모범 사례
+
+- **[MONITORING.md](MONITORING.md)** - 모니터링 가이드
+  - Prometheus 메트릭
+  - Grafana 대시보드
+  - 알림 규칙
+  - 모범 사례
+
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - 문제 해결 가이드
+  - 일반적인 문제 및 해결 방법
+  - 진단 단계
+  - 성능 최적화
 
 ## 🚀 빠른 탐색
 
@@ -46,6 +57,8 @@ Herald OTP 및 인증 코드 서비스 문서에 오신 것을 환영합니다.
 1. [DEPLOYMENT.md](DEPLOYMENT.md)를 읽어 배포 방법을 이해하세요
 2. [API.md](API.md)를 확인하여 API 엔드포인트 세부 정보를 확인하세요
 3. [보안](DEPLOYMENT.md#보안)을 참조하여 보안 모범 사례를 확인하세요
+4. 서비스 상태 모니터링: [MONITORING.md](MONITORING.md)
+5. 문제 해결: [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ## 📖 문서 구조
 
@@ -57,11 +70,15 @@ herald/
 │   ├── enUS/
 │   │   ├── README.md       # 문서 인덱스 (영어)
 │   │   ├── API.md          # API 문서 (영어)
-│   │   └── DEPLOYMENT.md   # 배포 가이드 (영어)
+│   │   ├── DEPLOYMENT.md   # 배포 가이드 (영어)
+│   │   ├── MONITORING.md   # 모니터링 가이드 (영어)
+│   │   └── TROUBLESHOOTING.md # 문제 해결 가이드 (영어)
 │   └── koKR/
 │       ├── README.md       # 문서 인덱스 (한국어, 이 파일)
 │       ├── API.md          # API 문서 (한국어)
-│       └── DEPLOYMENT.md   # 배포 가이드 (한국어)
+│       ├── DEPLOYMENT.md   # 배포 가이드 (한국어)
+│       ├── MONITORING.md   # 모니터링 가이드 (한국어)
+│       └── TROUBLESHOOTING.md # 문제 해결 가이드 (한국어)
 └── ...
 ```
 
@@ -78,8 +95,14 @@ herald/
 
 - Docker 배포: [DEPLOYMENT.md#빠른-시작](DEPLOYMENT.md#빠른-시작)
 - 구성 옵션: [DEPLOYMENT.md#구성](DEPLOYMENT.md#구성)
-- Stargate 통합: [DEPLOYMENT.md#stargate-통합](DEPLOYMENT.md#stargate-통합)
+- 서비스 통합: [DEPLOYMENT.md#다른-서비스와의-통합-선택사항](DEPLOYMENT.md#다른-서비스와의-통합-선택사항)
 - 보안: [DEPLOYMENT.md#보안](DEPLOYMENT.md#보안)
+
+### 모니터링 및 운영
+
+- Prometheus 메트릭: [MONITORING.md](MONITORING.md)
+- Grafana 대시보드: [MONITORING.md#grafana-대시보드](MONITORING.md#grafana-대시보드)
+- 문제 해결: [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ## 💡 사용 권장 사항
 
@@ -87,6 +110,8 @@ herald/
 2. **서비스 구성**: [DEPLOYMENT.md](DEPLOYMENT.md)를 참조하여 모든 구성 옵션을 이해하세요
 3. **서비스 통합**: [DEPLOYMENT.md](DEPLOYMENT.md)의 통합 섹션을 확인하세요
 4. **API 통합**: [API.md](API.md)를 읽어 API 인터페이스를 이해하세요
+5. **서비스 모니터링**: [MONITORING.md](MONITORING.md)로 모니터링을 설정하세요
+6. **문제 해결**: [TROUBLESHOOTING.md](TROUBLESHOOTING.md)를 참조하여 일반적인 문제를 확인하세요
 
 ## 📝 문서 업데이트
 

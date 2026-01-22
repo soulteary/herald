@@ -10,10 +10,15 @@ http://localhost:8082
 
 ## Authentifizierung
 
-Herald unterstützt zwei Authentifizierungsmethoden :
+Herald unterstützt drei Authentifizierungsmethoden in folgender Prioritätsreihenfolge :
 
-1. **API-Schlüssel** (Einfach) : `X-API-Key`-Header setzen
+1. **mTLS** (Am sichersten) : Gegenseitiges TLS mit Client-Zertifikat-Verifizierung (höchste Priorität)
 2. **HMAC-Signatur** (Sicher) : `X-Signature`, `X-Timestamp` und `X-Service`-Header setzen
+3. **API-Schlüssel** (Einfach) : `X-API-Key`-Header setzen (niedrigste Priorität)
+
+### mTLS-Authentifizierung
+
+Bei Verwendung von HTTPS mit einem verifizierten Client-Zertifikat authentifiziert Herald die Anfrage automatisch über mTLS. Dies ist die sicherste Methode und hat Vorrang vor anderen Authentifizierungsmethoden.
 
 ### HMAC-Signatur
 
@@ -24,9 +29,13 @@ HMAC-SHA256(timestamp:service:body, secret)
 
 Wobei :
 - `timestamp` : Unix-Zeitstempel (Sekunden)
-- `service` : Service-Identifikator (z. B. "stargate")
+- `service` : Service-Identifikator (z. B. "my-service", "api-gateway")
 - `body` : Anfragekörper (JSON-String)
 - `secret` : HMAC-Geheimschlüssel
+
+**Hinweis** : Der Zeitstempel muss innerhalb von 5 Minuten (300 Sekunden) der Serverzeit liegen, um Replay-Angriffe zu verhindern. Das Zeitstempel-Fenster ist konfigurierbar, standardmäßig jedoch 5 Minuten.
+
+**Hinweis** : Derzeit wird der `X-Key-Id`-Header für Schlüsselrotation nicht unterstützt. Diese Funktion ist für zukünftige Versionen geplant.
 
 ## Endpunkte
 

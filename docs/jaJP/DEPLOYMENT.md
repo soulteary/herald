@@ -52,18 +52,23 @@ go build -o herald main.go
 | `ALIYUN_SIGN_NAME` | 阿里云 SMS 署名名 | `` | 阿里云 SMS 用 |
 | `ALIYUN_TEMPLATE_CODE` | 阿里云 SMS テンプレートコード | `` | 阿里云 SMS 用 |
 
-## Stargate との統合
+## 他のサービスとの統合（オプション）
 
-1. Stargate 設定で `HERALD_URL` を設定
-2. Stargate 設定で `HERALD_API_KEY` を設定
-3. Stargate 設定で `HERALD_ENABLED=true` を設定
+Herald は独立して動作するように設計されており、必要に応じて他のサービスと統合できます。Herald を他の認証サービスやゲートウェイサービスと統合する場合は、以下を設定できます：
 
-例：
+**統合設定の例：**
 ```bash
+# Herald がアクセス可能なサービス URL
 export HERALD_URL=http://herald:8082
+
+# サービス間認証用の API キー
 export HERALD_API_KEY=your-secret-key
+
+# Herald 統合を有効化（サービスがサポートしている場合）
 export HERALD_ENABLED=true
 ```
+
+**注意**：Herald は外部サービスの依存関係なしで単独で使用できます。他のサービスとの統合はオプションであり、特定のユースケースに依存します。
 
 ## セキュリティ
 

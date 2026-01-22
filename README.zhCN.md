@@ -2,46 +2,102 @@
 
 > **📧 安全验证的网关**
 
-## 🌐 多语言文档 / Multi-language Documentation
+## 🌐 多语言文档
 
 - [English](README.md) | [中文](README.zhCN.md) | [Français](README.frFR.md) | [Italiano](README.itIT.md) | [日本語](README.jaJP.md) | [Deutsch](README.deDE.md) | [한국어](README.koKR.md)
 
 ![Herald](.github/assets/banner.jpg)
 
-Herald 是一个生产就绪的轻量级服务，用于通过电子邮件发送验证码（OTP）（SMS 支持目前正在开发中），具有内置的速率限制、安全控制和审计日志记录。
+Herald 是一个生产就绪的独立 OTP 和验证码服务，可通过电子邮件和 SMS 发送验证码。它具有内置的速率限制、安全控制和审计日志记录功能。Herald 设计为可独立工作，也可以根据需要与其他服务集成。
 
-## 特性
+## 核心特性
 
-- 🚀 **高性能**：使用 Go 和 Fiber 构建
-- 🔒 **安全**：基于挑战的验证，使用哈希存储
-- 📊 **速率限制**：多维速率限制（按用户、按 IP、按目标）
-- 📝 **审计日志**：所有操作的完整审计跟踪
-- 🔌 **可插拔提供者**：支持电子邮件提供者（SMS 提供者是占位符实现，尚未完全 functional）
-- ⚡ **Redis 后端**：快速、分布式存储，使用 Redis
+- 🔒 **安全设计**：基于挑战的验证，使用 Argon2 哈希存储，多种认证方法（mTLS、HMAC、API Key）
+- 📊 **内置速率限制**：多维速率限制（按用户、按 IP、按目标），可配置阈值
+- 📝 **完整审计跟踪**：所有操作的完整审计日志记录，包含提供者跟踪
+- 🔌 **可插拔提供者**：可扩展的电子邮件和 SMS 提供者架构
 
 ## 快速开始
 
+### 使用 Docker Compose
+
+最简单的方式是使用 Docker Compose，它包含 Redis：
+
 ```bash
-# 使用 Docker Compose 运行
+# Start Herald and Redis
 docker-compose up -d
 
-# 或直接运行
-go run main.go
+# Verify the service is running
+curl http://localhost:8082/healthz
 ```
 
-## 配置
+预期响应：
+```json
+{
+  "status": "ok",
+  "service": "herald"
+}
+```
 
-设置环境变量：
+### 测试 API
 
-- `PORT`：服务器端口（默认：`:8082`）
-- `REDIS_ADDR`：Redis 地址（默认：`localhost:6379`）
-- `REDIS_PASSWORD`：Redis 密码（可选）
-- `REDIS_DB`：Redis 数据库编号（默认：`0`）
-- `API_KEY`：用于服务间身份验证的 API 密钥
-- `LOG_LEVEL`：日志级别（默认：`info`）
+创建测试挑战（需要身份验证 - 请参阅 [API 文档](docs/zhCN/API.md)）：
 
-有关完整的配置选项，请参阅 [DEPLOYMENT.md](docs/zhCN/DEPLOYMENT.md)。
+```bash
+# Set your API key (from docker-compose.yml: your-secret-api-key-here)
+export API_KEY="your-secret-api-key-here"
 
-## API 文档
+# Create a challenge
+curl -X POST http://localhost:8082/v1/otp/challenges \
+  -H "X-API-Key: $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "test_user",
+    "channel": "email",
+    "destination": "user@example.com",
+    "purpose": "login"
+  }'
+```
 
-有关详细的 API 文档，请参阅 [API.md](docs/zhCN/API.md)。
+### 查看日志
+
+```bash
+# Docker Compose logs
+docker-compose logs -f herald
+```
+
+### 手动部署
+
+有关手动部署和高级配置，请参阅 [部署指南](docs/zhCN/DEPLOYMENT.md)。
+
+## 基本配置
+
+Herald 需要最少的配置即可开始使用：
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `PORT` | Server port | `:8082` | No |
+| `REDIS_ADDR` | Redis address | `localhost:6379` | Yes |
+| `API_KEY` | API key for authentication | - | Recommended |
+
+有关完整的配置选项，包括速率限制、挑战过期时间和提供者设置，请参阅 [部署指南](docs/zhCN/DEPLOYMENT.md#configuration)。
+
+## 文档
+
+### 开发者文档
+
+- **[API 文档](docs/zhCN/API.md)** - 完整的 API 参考，包含认证方法、端点和错误代码
+- **[部署指南](docs/zhCN/DEPLOYMENT.md)** - 配置选项、Docker 部署和集成示例
+
+### 运维文档
+
+- **[监控指南](docs/zhCN/MONITORING.md)** - Prometheus 指标、Grafana 仪表板和告警
+- **[故障排查指南](docs/zhCN/TROUBLESHOOTING.md)** - 常见问题、诊断步骤和解决方案
+
+### 文档索引
+
+有关所有文档的完整概述，请参阅 [docs/zhCN/README.md](docs/zhCN/README.md)。
+
+## License
+
+See [LICENSE](LICENSE) for details.
