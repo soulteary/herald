@@ -1,11 +1,11 @@
 package config
 
 import (
-	"os"
 	"testing"
 	"time"
 
 	"github.com/soulteary/cli-kit/env"
+	"github.com/soulteary/cli-kit/testutil"
 )
 
 func TestGetPort(t *testing.T) {
@@ -73,17 +73,15 @@ func TestGetEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			envMgr := testutil.NewEnvManager()
+			defer envMgr.Cleanup()
+
 			if tt.envValue != "" {
-				if err := os.Setenv(tt.envKey, tt.envValue); err != nil {
+				if err := envMgr.Set(tt.envKey, tt.envValue); err != nil {
 					t.Fatalf("failed to set env var: %v", err)
 				}
-				defer func() {
-					if err := os.Unsetenv(tt.envKey); err != nil {
-						t.Errorf("failed to unset env var: %v", err)
-					}
-				}()
 			} else {
-				if err := os.Unsetenv(tt.envKey); err != nil {
+				if err := envMgr.Unset(tt.envKey); err != nil {
 					t.Fatalf("failed to unset env var: %v", err)
 				}
 			}
@@ -128,17 +126,15 @@ func TestGetEnvInt(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			envMgr := testutil.NewEnvManager()
+			defer envMgr.Cleanup()
+
 			if tt.envValue != "" {
-				if err := os.Setenv(tt.envKey, tt.envValue); err != nil {
+				if err := envMgr.Set(tt.envKey, tt.envValue); err != nil {
 					t.Fatalf("failed to set env var: %v", err)
 				}
-				defer func() {
-					if err := os.Unsetenv(tt.envKey); err != nil {
-						t.Errorf("failed to unset env var: %v", err)
-					}
-				}()
 			} else {
-				if err := os.Unsetenv(tt.envKey); err != nil {
+				if err := envMgr.Unset(tt.envKey); err != nil {
 					t.Fatalf("failed to unset env var: %v", err)
 				}
 			}
@@ -183,17 +179,15 @@ func TestGetEnvDuration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			envMgr := testutil.NewEnvManager()
+			defer envMgr.Cleanup()
+
 			if tt.envValue != "" {
-				if err := os.Setenv(tt.envKey, tt.envValue); err != nil {
+				if err := envMgr.Set(tt.envKey, tt.envValue); err != nil {
 					t.Fatalf("failed to set env var: %v", err)
 				}
-				defer func() {
-					if err := os.Unsetenv(tt.envKey); err != nil {
-						t.Errorf("failed to unset env var: %v", err)
-					}
-				}()
 			} else {
-				if err := os.Unsetenv(tt.envKey); err != nil {
+				if err := envMgr.Unset(tt.envKey); err != nil {
 					t.Fatalf("failed to unset env var: %v", err)
 				}
 			}
@@ -354,17 +348,15 @@ func TestGetEnvBool(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			envMgr := testutil.NewEnvManager()
+			defer envMgr.Cleanup()
+
 			if tt.envValue != "" {
-				if err := os.Setenv(tt.envKey, tt.envValue); err != nil {
+				if err := envMgr.Set(tt.envKey, tt.envValue); err != nil {
 					t.Fatalf("failed to set env var: %v", err)
 				}
-				defer func() {
-					if err := os.Unsetenv(tt.envKey); err != nil {
-						t.Errorf("failed to unset env var: %v", err)
-					}
-				}()
 			} else {
-				if err := os.Unsetenv(tt.envKey); err != nil {
+				if err := envMgr.Unset(tt.envKey); err != nil {
 					t.Fatalf("failed to unset env var: %v", err)
 				}
 			}

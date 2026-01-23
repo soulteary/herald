@@ -6,6 +6,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/soulteary/cli-kit/env"
+	"github.com/soulteary/cli-kit/validator"
 )
 
 var (
@@ -85,6 +86,12 @@ func Initialize() error {
 	// Validate required configs
 	if RedisAddr == "" {
 		logrus.Warn("REDIS_ADDR is not set, using default: localhost:6379")
+	} else {
+		// Validate Redis address format using cli-kit validator
+		if _, _, err := validator.ValidateHostPort(RedisAddr); err != nil {
+			logrus.Warnf("Invalid REDIS_ADDR format: %s (%v), using default: localhost:6379", RedisAddr, err)
+			RedisAddr = "localhost:6379"
+		}
 	}
 
 	if APIKey == "" && HMACSecret == "" {
