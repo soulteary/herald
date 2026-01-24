@@ -88,7 +88,7 @@ func (s *FileStorage) Query(ctx context.Context, filter *QueryFilter) ([]*types.
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file for reading: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var results []*types.AuditRecord
 	scanner := bufio.NewScanner(file)
