@@ -13,6 +13,7 @@ require (
 	github.com/sirupsen/logrus v1.9.4
 	github.com/soulteary/cli-kit v0.2.0
 	github.com/soulteary/redis-kit v0.1.1
+	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/otel v1.21.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.21.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.21.0
@@ -29,6 +30,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/clipperhouse/stringish v0.1.1 // indirect
 	github.com/clipperhouse/uax29/v2 v2.3.1 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/go-logr/logr v1.3.0 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -39,6 +41,7 @@ require (
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.19 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/common v0.48.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
@@ -52,4 +55,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230822172742-b8732ec3820d // indirect
 	google.golang.org/grpc v1.59.0 // indirect
 	google.golang.org/protobuf v1.32.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
