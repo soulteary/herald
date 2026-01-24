@@ -194,7 +194,7 @@ jobs:
       - name: Get version information
         id: version
         run: |
-          VERSION="dev-$(git rev-parse --short HEAD)"
+          VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "dev-$(git rev-parse --short HEAD)")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Latest version: $VERSION"
 
@@ -202,6 +202,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: ./docker/Dockerfile
           push: false
           load: true
           tags: herald:test
@@ -248,7 +249,7 @@ jobs:
       - name: Get version information
         id: version
         run: |
-          VERSION="dev-$(git rev-parse --short HEAD)"
+          VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "dev-$(git rev-parse --short HEAD)")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Build project
