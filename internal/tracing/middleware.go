@@ -19,6 +19,7 @@ func TracingMiddleware(serviceName string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		// Extract trace context from request headers
 		reqHeaders := make(map[string]string)
+		// nolint:staticcheck // SA1019: VisitAll is deprecated but we need to iterate all headers
 		c.Request().Header.VisitAll(func(key, value []byte) {
 			reqHeaders[string(key)] = string(value)
 		})
@@ -75,6 +76,7 @@ func TracingMiddleware(serviceName string) fiber.Handler {
 
 		// Inject trace context into response headers
 		respHeaders := make(map[string]string)
+		// nolint:staticcheck // SA1019: VisitAll is deprecated but we need to iterate all headers
 		c.Response().Header.VisitAll(func(key, value []byte) {
 			respHeaders[string(key)] = string(value)
 		})

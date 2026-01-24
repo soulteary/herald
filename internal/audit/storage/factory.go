@@ -40,7 +40,7 @@ func NewStorageFromConfig() (Storage, error) {
 
 	case "loki":
 		// Loki storage not implemented yet
-		return nil, fmt.Errorf("Loki storage not implemented yet")
+		return nil, fmt.Errorf("loki storage not implemented yet")
 
 	default:
 		return nil, fmt.Errorf("unsupported storage type: %s", storageType)

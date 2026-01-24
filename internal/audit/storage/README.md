@@ -116,7 +116,3 @@ records, err := auditManager.Query(ctx, filter)
 - **存储失败**：存储失败不会影响主流程，仅记录错误日志
 - **优雅关闭**：服务关闭时会等待队列中的记录写入完成（最多 10 秒）
 
-## 参考
-
-- [Claude.md 第 13.2 节](../Claude.md#13-生产就绪与可用性)
-- [IMPLEMENTATION_PLAN.md 任务 5](../IMPLEMENTATION_PLAN.md#任务-5-实现-herald-审计日志持久化方案)

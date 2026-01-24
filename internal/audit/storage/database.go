@@ -50,7 +50,7 @@ func NewDatabaseStorage(databaseURL string) (*DatabaseStorage, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := db.PingContext(ctx); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
@@ -255,7 +255,7 @@ func (s *DatabaseStorage) Query(ctx context.Context, filter *QueryFilter) ([]*ty
 	// Build query
 	whereClause := ""
 	if len(whereClauses) > 0 {
-		whereClause = "WHERE " + fmt.Sprintf("%s", whereClauses[0])
+		whereClause = "WHERE " + whereClauses[0]
 		for i := 1; i < len(whereClauses); i++ {
 			whereClause += " AND " + whereClauses[i]
 		}
@@ -298,7 +298,7 @@ func (s *DatabaseStorage) Query(ctx context.Context, filter *QueryFilter) ([]*ty
 	if err != nil {
 		return nil, fmt.Errorf("failed to query audit records: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var results []*types.AuditRecord
 	for rows.Next() {

@@ -62,4 +62,3 @@ if err != nil {
 ## 参考
 
 - [OpenTelemetry Go](https://opentelemetry.io/docs/languages/go/)
-- [Claude.md 第 14 节](../Claude.md#14-监控与可观测性)

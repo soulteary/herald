@@ -2,9 +2,11 @@ package audit
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/soulteary/herald/internal/audit/storage"
 	"github.com/soulteary/herald/internal/audit/types"
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/testutil"
@@ -289,6 +291,121 @@ func TestEventTypes(t *testing.T) {
 			t.Error("Event type is empty")
 		}
 	}
+}
+
+func TestNewManagerWithStorage(t *testing.T) {
+	redisClient, _ := testutil.NewTestRedisClient()
+	defer func() {
+		_ = redisClient.Close()
+	}()
+
+	// Create mock storage
+	mockStorage := &mockStorageForManager{
+		records: make([]*types.AuditRecord, 0),
+	}
+
+	manager := NewManagerWithStorage(redisClient, mockStorage, 100, 2)
+	if manager == nil {
+		t.Fatal("NewManagerWithStorage() returned nil")
+	}
+	if manager.cache == nil {
+		t.Error("NewManagerWithStorage() cache is nil")
+	}
+	if manager.persistentStorage == nil {
+		t.Error("NewManagerWithStorage() persistentStorage is nil")
+	}
+	if manager.writer == nil {
+		t.Error("NewManagerWithStorage() writer is nil")
+	}
+
+	// Cleanup
+	_ = manager.Stop()
+}
+
+func TestManager_Stop(t *testing.T) {
+	redisClient, _ := testutil.NewTestRedisClient()
+	defer func() {
+		_ = redisClient.Close()
+	}()
+
+	t.Run("without storage", func(t *testing.T) {
+		manager := NewManager(redisClient)
+		err := manager.Stop()
+		if err != nil {
+			t.Errorf("Stop() without storage error = %v, want nil", err)
+		}
+	})
+
+	t.Run("with storage", func(t *testing.T) {
+		mockStorage := &mockStorageForManager{
+			records: make([]*types.AuditRecord, 0),
+		}
+		manager := NewManagerWithStorage(redisClient, mockStorage, 100, 1)
+		err := manager.Stop()
+		if err != nil {
+			t.Errorf("Stop() with storage error = %v, want nil", err)
+		}
+	})
+}
+
+func TestManager_Query(t *testing.T) {
+	redisClient, _ := testutil.NewTestRedisClient()
+	defer func() {
+		_ = redisClient.Close()
+	}()
+
+	t.Run("without persistent storage", func(t *testing.T) {
+		manager := NewManager(redisClient)
+		_, err := manager.Query(context.Background(), storage.DefaultQueryFilter())
+		if err == nil {
+			t.Error("Query() without persistent storage should return error")
+		}
+		if err != nil && err.Error() != "persistent storage not configured" {
+			t.Errorf("Query() error = %q, want %q", err.Error(), "persistent storage not configured")
+		}
+	})
+
+	t.Run("with persistent storage", func(t *testing.T) {
+		mockStorage := &mockStorageForManager{
+			records: []*types.AuditRecord{
+				{EventType: types.EventChallengeCreated, UserID: "user1", Result: "success", Timestamp: time.Now().Unix()},
+			},
+		}
+		manager := NewManagerWithStorage(redisClient, mockStorage, 100, 1)
+		defer func() { _ = manager.Stop() }()
+
+		filter := storage.DefaultQueryFilter()
+		results, err := manager.Query(context.Background(), filter)
+		if err != nil {
+			t.Fatalf("Query() error = %v", err)
+		}
+		if len(results) != 1 {
+			t.Errorf("Query() returned %d records, want 1", len(results))
+		}
+	})
+}
+
+// mockStorageForManager is a mock storage for testing Manager
+type mockStorageForManager struct {
+	mu      sync.Mutex
+	records []*types.AuditRecord
+}
+
+func (m *mockStorageForManager) Write(ctx context.Context, record *types.AuditRecord) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.records = append(m.records, record)
+	return nil
+}
+
+func (m *mockStorageForManager) Query(ctx context.Context, filter *storage.QueryFilter) ([]*types.AuditRecord, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.records, nil
+}
+
+func (m *mockStorageForManager) Close() error {
+	return nil
 }
 
 func TestAuditRecord_KeyGeneration(t *testing.T) {

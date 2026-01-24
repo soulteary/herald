@@ -100,7 +100,7 @@ func TestHasHMACKeys(t *testing.T) {
 
 	// Test with keys
 	HMACKeysJSON = `{"key-id-1":"secret-key-1"}`
-	parseHMACKeys()
+	_ = parseHMACKeys()
 	if !HasHMACKeys() {
 		t.Error("Expected HasHMACKeys() to return true when keys are configured")
 	}
