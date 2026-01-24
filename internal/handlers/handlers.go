@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -10,8 +11,11 @@ import (
 	"github.com/sirupsen/logrus"
 	rediskitcache "github.com/soulteary/redis-kit/cache"
 	rediskitclient "github.com/soulteary/redis-kit/client"
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/soulteary/herald/internal/audit"
+	"github.com/soulteary/herald/internal/audit/storage"
+	"github.com/soulteary/herald/internal/audit/types"
 	"github.com/soulteary/herald/internal/challenge"
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/metrics"
@@ -20,6 +24,7 @@ import (
 	"github.com/soulteary/herald/internal/ratelimit"
 	"github.com/soulteary/herald/internal/session"
 	"github.com/soulteary/herald/internal/template"
+	"github.com/soulteary/herald/internal/tracing"
 )
 
 // Handlers contains all HTTP handlers
@@ -35,6 +40,14 @@ type Handlers struct {
 	sessionManager   *session.Manager    // Optional: nil if session storage is disabled
 }
 
+// StopAuditWriter stops the audit writer gracefully
+func (h *Handlers) StopAuditWriter() error {
+	if h.auditManager != nil {
+		return h.auditManager.Stop()
+	}
+	return nil
+}
+
 // NewHandlers creates a new handlers instance
 func NewHandlers(redisClient *redis.Client, sessionManager *session.Manager) *Handlers {
 	challengeMgr := challenge.NewManager(
@@ -48,7 +61,23 @@ func NewHandlers(redisClient *redis.Client, sessionManager *session.Manager) *Ha
 	rateLimitMgr := ratelimit.NewManager(redisClient)
 
 	// Initialize audit manager
-	auditMgr := audit.NewManager(redisClient)
+	// Initialize audit manager with persistent storage if configured
+	var auditMgr *audit.Manager
+	persistentStorage, err := storage.NewStorageFromConfig()
+	if err != nil {
+		logrus.Warnf("Failed to initialize persistent audit storage: %v, using Redis only", err)
+		auditMgr = audit.NewManager(redisClient)
+	} else if persistentStorage != nil {
+		logrus.Info("Persistent audit storage enabled")
+		auditMgr = audit.NewManagerWithStorage(
+			redisClient,
+			persistentStorage,
+			config.AuditWriterQueueSize,
+			config.AuditWriterWorkers,
+		)
+	} else {
+		auditMgr = audit.NewManager(redisClient)
+	}
 
 	// Initialize template manager
 	templateMgr := template.NewManager(config.TemplateDir)
@@ -134,13 +163,22 @@ type IdempotencyRecord struct {
 
 // CreateChallenge handles challenge creation
 func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
-	ctx := c.Context()
+	// Get trace context from middleware
+	ctx := c.Locals("trace_context")
+	if ctx == nil {
+		ctx = c.Context()
+	}
+	traceCtx := ctx.(context.Context)
+
+	// Start span for challenge creation
+	spanCtx, span := tracing.StartSpan(traceCtx, "otp.challenge.create")
+	defer span.End()
 
 	// Check for idempotency key
 	idempotencyKey := c.Get("Idempotency-Key")
 	if idempotencyKey != "" {
 		var cachedRecord IdempotencyRecord
-		if err := h.idempotencyCache.Get(ctx, idempotencyKey, &cachedRecord); err == nil {
+		if err := h.idempotencyCache.Get(spanCtx, idempotencyKey, &cachedRecord); err == nil {
 			// Return cached response
 			return c.JSON(fiber.Map{
 				"challenge_id":   cachedRecord.ChallengeID,
@@ -152,12 +190,21 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 
 	var req CreateChallengeRequest
 	if err := c.BodyParser(&req); err != nil {
+		tracing.RecordError(span, err)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "invalid_request",
 			"error":  err.Error(),
 		})
 	}
+
+	// Set span attributes
+	span.SetAttributes(
+		attribute.String("channel", req.Channel),
+		attribute.String("purpose", req.Purpose),
+		attribute.String("user_id", req.UserID),
+		attribute.String("destination", maskDestination(req.Destination)),
+	)
 
 	// Validate request
 	if req.UserID == "" {
@@ -209,7 +256,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 	// Check rate limits
 	// 1. Per user
 	allowed, _, _, err := h.rateLimitManager.CheckUserRateLimit(
-		ctx, req.UserID, config.RateLimitPerUser, time.Hour,
+		spanCtx, req.UserID, config.RateLimitPerUser, time.Hour,
 	)
 	if err != nil {
 		logrus.Errorf("Rate limit check failed: %v", err)
@@ -224,7 +271,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 
 	// 2. Per IP
 	allowed, _, _, err = h.rateLimitManager.CheckIPRateLimit(
-		ctx, clientIP, config.RateLimitPerIP, time.Minute,
+		spanCtx, clientIP, config.RateLimitPerIP, time.Minute,
 	)
 	if err != nil {
 		logrus.Errorf("Rate limit check failed: %v", err)
@@ -239,7 +286,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 
 	// 3. Per destination
 	allowed, _, _, err = h.rateLimitManager.CheckDestinationRateLimit(
-		ctx, req.Destination, config.RateLimitPerDestination, time.Hour,
+		spanCtx, req.Destination, config.RateLimitPerDestination, time.Hour,
 	)
 	if err != nil {
 		logrus.Errorf("Rate limit check failed: %v", err)
@@ -254,7 +301,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 
 	// 4. Resend cooldown
 	cooldownKey := fmt.Sprintf("%s:%s", req.UserID, req.Destination)
-	allowed, _, err = h.rateLimitManager.CheckResendCooldown(ctx, cooldownKey, config.ResendCooldown)
+	allowed, _, err = h.rateLimitManager.CheckResendCooldown(spanCtx, cooldownKey, config.ResendCooldown)
 	if err != nil {
 		logrus.Errorf("Cooldown check failed: %v", err)
 	}
@@ -267,7 +314,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 	}
 
 	// Check if user is locked
-	if h.challengeManager.IsUserLocked(ctx, req.UserID) {
+	if h.challengeManager.IsUserLocked(spanCtx, req.UserID) {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "user_locked",
@@ -276,9 +323,10 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 
 	// Create challenge
 	ch, code, err := h.challengeManager.CreateChallenge(
-		ctx, req.UserID, req.Channel, req.Destination, req.Purpose, clientIP,
+		spanCtx, req.UserID, req.Channel, req.Destination, req.Purpose, clientIP,
 	)
 	if err != nil {
+		tracing.RecordError(span, err)
 		logrus.Errorf("Failed to create challenge: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"ok":     false,
@@ -286,9 +334,15 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		})
 	}
 
+	// Update span with challenge ID
+	span.SetAttributes(attribute.String("challenge_id", ch.ID))
+
+	// Update span with result
+	span.SetAttributes(attribute.String("result", "success"))
+
 	// Audit: challenge created
-	h.auditManager.Log(ctx, &audit.AuditRecord{
-		EventType:   audit.EventChallengeCreated,
+	h.auditManager.Log(spanCtx, &types.AuditRecord{
+		EventType:   types.EventChallengeCreated,
 		ChallengeID: ch.ID,
 		UserID:      req.UserID,
 		Channel:     req.Channel,
@@ -303,7 +357,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 
 	// Store code in test mode (for integration testing only)
 	if config.TestMode {
-		if err := h.testCodeCache.Set(ctx, ch.ID, code, config.ChallengeExpiry); err != nil {
+		if err := h.testCodeCache.Set(spanCtx, ch.ID, code, config.ChallengeExpiry); err != nil {
 			logrus.Warnf("Failed to store test code: %v", err)
 		}
 	}
@@ -355,7 +409,17 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 
 	// Record send duration
 	sendStart := time.Now()
-	if err := h.providerRegistry.Send(ctx, channel, msg); err != nil {
+
+	// Start span for provider send
+	providerCtx, providerSpan := tracing.StartSpan(spanCtx, "otp.provider.send")
+	providerSpan.SetAttributes(
+		attribute.String("channel", req.Channel),
+		attribute.String("provider", providerName),
+	)
+
+	if err := h.providerRegistry.Send(providerCtx, channel, msg); err != nil {
+		tracing.RecordError(providerSpan, err)
+		providerSpan.End()
 		sendDuration := time.Since(sendStart)
 		logrus.Errorf("Failed to send verification code via provider: %v", err)
 
@@ -363,8 +427,8 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		metrics.RecordOTPSend(req.Channel, providerName, "failure", sendDuration)
 
 		// Audit: send failed
-		h.auditManager.Log(ctx, &audit.AuditRecord{
-			EventType:   audit.EventSendFailed,
+		h.auditManager.Log(providerCtx, &types.AuditRecord{
+			EventType:   types.EventSendFailed,
 			ChallengeID: ch.ID,
 			UserID:      req.UserID,
 			Channel:     req.Channel,
@@ -379,10 +443,10 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		// Handle provider failure based on policy
 		if config.ProviderFailurePolicy == "strict" {
 			// Strict mode: revoke challenge and return error
-			_ = h.challengeManager.RevokeChallenge(ctx, ch.ID)
+			_ = h.challengeManager.RevokeChallenge(spanCtx, ch.ID)
 			// Also remove idempotency record if it was stored
 			if idempotencyKey != "" {
-				_ = h.idempotencyCache.Del(ctx, idempotencyKey)
+				_ = h.idempotencyCache.Del(spanCtx, idempotencyKey)
 			}
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"ok":     false,
@@ -394,12 +458,18 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		// The code can still be verified manually if needed
 	} else {
 		sendDuration := time.Since(sendStart)
+		providerSpan.SetAttributes(
+			attribute.String("result", "success"),
+			attribute.Int64("duration_ms", sendDuration.Milliseconds()),
+		)
+		providerSpan.End()
+
 		// Metrics: send success
 		metrics.RecordOTPSend(req.Channel, providerName, "success", sendDuration)
 
 		// Audit: send success
-		h.auditManager.Log(ctx, &audit.AuditRecord{
-			EventType:   audit.EventSendSuccess,
+		h.auditManager.Log(providerCtx, &types.AuditRecord{
+			EventType:   types.EventSendSuccess,
 			ChallengeID: ch.ID,
 			UserID:      req.UserID,
 			Channel:     req.Channel,
@@ -426,13 +496,38 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 			NextResendIn: int(config.ResendCooldown.Seconds()),
 			CreatedAt:    time.Now().Unix(),
 		}
-		if err := h.idempotencyCache.Set(ctx, idempotencyKey, idempotencyRecord, config.IdempotencyKeyTTL); err != nil {
+		if err := h.idempotencyCache.Set(spanCtx, idempotencyKey, idempotencyRecord, config.IdempotencyKeyTTL); err != nil {
 			logrus.Warnf("Failed to store idempotency record: %v", err)
 		}
 	}
 
 	// Return response
 	return c.JSON(response)
+}
+
+// maskDestination masks sensitive destination information for tracing
+func maskDestination(dest string) string {
+	if len(dest) == 0 {
+		return ""
+	}
+	if len(dest) <= 4 {
+		return "***"
+	}
+	// Mask email: show first 2 chars and domain
+	if strings.Contains(dest, "@") {
+		parts := strings.Split(dest, "@")
+		if len(parts) == 2 {
+			if len(parts[0]) <= 2 {
+				return "***@" + parts[1]
+			}
+			return parts[0][:2] + "***@" + parts[1]
+		}
+	}
+	// Mask phone: show last 4 digits
+	if len(dest) <= 4 {
+		return "***"
+	}
+	return "***" + dest[len(dest)-4:]
 }
 
 // VerifyChallengeRequest represents the request to verify a challenge
@@ -476,9 +571,23 @@ func (h *Handlers) VerifyChallenge(c *fiber.Ctx) error {
 		})
 	}
 
+	// Get trace context from middleware
+	traceCtx := c.Locals("trace_context")
+	if traceCtx == nil {
+		traceCtx = ctx
+	}
+	spanCtx := traceCtx.(context.Context)
+
+	// Start span for verification
+	verifyCtx, verifySpan := tracing.StartSpan(spanCtx, "otp.verify")
+	defer verifySpan.End()
+
+	verifySpan.SetAttributes(attribute.String("challenge_id", req.ChallengeID))
+
 	// Verify challenge
-	valid, ch, err := h.challengeManager.VerifyChallenge(ctx, req.ChallengeID, req.Code, req.ClientIP)
+	valid, ch, err := h.challengeManager.VerifyChallenge(verifyCtx, req.ChallengeID, req.Code, req.ClientIP)
 	if err != nil {
+		tracing.RecordError(verifySpan, err)
 		logrus.Debugf("Challenge verification failed: %v", err)
 
 		// Determine error reason
@@ -492,12 +601,18 @@ func (h *Handlers) VerifyChallenge(c *fiber.Ctx) error {
 			reason = "invalid"
 		}
 
+		// Set span attributes for failure
+		verifySpan.SetAttributes(
+			attribute.String("result", "failure"),
+			attribute.String("reason", reason),
+		)
+
 		// Metrics: verification failed
 		metrics.RecordVerification("failure", reason)
 
 		// Audit: verification failed
-		h.auditManager.Log(ctx, &audit.AuditRecord{
-			EventType:   audit.EventVerificationFailed,
+		h.auditManager.Log(verifyCtx, &types.AuditRecord{
+			EventType:   types.EventVerificationFailed,
 			ChallengeID: req.ChallengeID,
 			Result:      "failure",
 			Reason:      reason,
@@ -511,12 +626,18 @@ func (h *Handlers) VerifyChallenge(c *fiber.Ctx) error {
 	}
 
 	if !valid {
+		// Set span attributes for failure
+		verifySpan.SetAttributes(
+			attribute.String("result", "failure"),
+			attribute.String("reason", "invalid"),
+		)
+
 		// Metrics: verification failed
 		metrics.RecordVerification("failure", "invalid")
 
 		// Audit: verification failed
-		h.auditManager.Log(ctx, &audit.AuditRecord{
-			EventType:   audit.EventVerificationFailed,
+		h.auditManager.Log(verifyCtx, &types.AuditRecord{
+			EventType:   types.EventVerificationFailed,
 			ChallengeID: req.ChallengeID,
 			Result:      "failure",
 			Reason:      "invalid",
@@ -529,12 +650,20 @@ func (h *Handlers) VerifyChallenge(c *fiber.Ctx) error {
 		})
 	}
 
+	// Set span attributes for success
+	verifySpan.SetAttributes(
+		attribute.String("result", "success"),
+		attribute.String("user_id", ch.UserID),
+		attribute.String("channel", string(ch.Channel)),
+		attribute.String("purpose", ch.Purpose),
+	)
+
 	// Metrics: verification success
 	metrics.RecordVerification("success", "")
 
 	// Audit: challenge verified
-	h.auditManager.Log(ctx, &audit.AuditRecord{
-		EventType:   audit.EventChallengeVerified,
+	h.auditManager.Log(verifyCtx, &types.AuditRecord{
+		EventType:   types.EventChallengeVerified,
 		ChallengeID: ch.ID,
 		UserID:      ch.UserID,
 		Channel:     ch.Channel,
@@ -564,7 +693,13 @@ func (h *Handlers) VerifyChallenge(c *fiber.Ctx) error {
 
 // RevokeChallenge handles challenge revocation
 func (h *Handlers) RevokeChallenge(c *fiber.Ctx) error {
-	ctx := c.Context()
+	// Get trace context from middleware
+	traceCtx := c.Locals("trace_context")
+	if traceCtx == nil {
+		traceCtx = c.Context()
+	}
+	spanCtx := traceCtx.(context.Context)
+
 	challengeID := c.Params("id")
 
 	if challengeID == "" {
@@ -574,7 +709,7 @@ func (h *Handlers) RevokeChallenge(c *fiber.Ctx) error {
 		})
 	}
 
-	if err := h.challengeManager.RevokeChallenge(ctx, challengeID); err != nil {
+	if err := h.challengeManager.RevokeChallenge(spanCtx, challengeID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "internal_error",
@@ -582,8 +717,8 @@ func (h *Handlers) RevokeChallenge(c *fiber.Ctx) error {
 	}
 
 	// Audit: challenge revoked
-	h.auditManager.Log(ctx, &audit.AuditRecord{
-		EventType:   audit.EventChallengeRevoked,
+	h.auditManager.Log(spanCtx, &types.AuditRecord{
+		EventType:   types.EventChallengeRevoked,
 		ChallengeID: challengeID,
 		Result:      "success",
 		IP:          c.IP(),

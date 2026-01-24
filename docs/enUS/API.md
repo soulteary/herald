@@ -35,7 +35,7 @@ Where:
 
 **Note**: The timestamp must be within 5 minutes (300 seconds) of the server time to prevent replay attacks. The timestamp window is configurable but defaults to 5 minutes.
 
-**Note**: Currently, `X-Key-Id` header for key rotation is not supported. This feature is planned for future releases.
+**Note**: `X-Key-Id` header is supported for key rotation. When using `HERALD_HMAC_KEYS` with multiple keys, you can specify which key to use via the `X-Key-Id` header. If not provided, the default key (first key in the map) will be used.
 
 ## Endpoints
 

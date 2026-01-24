@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/soulteary/herald/internal/audit/types"
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/testutil"
 )
@@ -41,15 +42,15 @@ func TestManager_Log(t *testing.T) {
 	tests := []struct {
 		name           string
 		auditEnabled   bool
-		record         *AuditRecord
+		record         *types.AuditRecord
 		shouldStore    bool
 		checkTimestamp bool
 	}{
 		{
 			name:         "challenge created",
 			auditEnabled: true,
-			record: &AuditRecord{
-				EventType:   EventChallengeCreated,
+			record: &types.AuditRecord{
+				EventType:   types.EventChallengeCreated,
 				ChallengeID: "ch_123",
 				UserID:      "user123",
 				Channel:     "email",
@@ -64,8 +65,8 @@ func TestManager_Log(t *testing.T) {
 		{
 			name:         "challenge verified",
 			auditEnabled: true,
-			record: &AuditRecord{
-				EventType:   EventChallengeVerified,
+			record: &types.AuditRecord{
+				EventType:   types.EventChallengeVerified,
 				ChallengeID: "ch_456",
 				UserID:      "user456",
 				Result:      "success",
@@ -77,8 +78,8 @@ func TestManager_Log(t *testing.T) {
 		{
 			name:         "send failed",
 			auditEnabled: true,
-			record: &AuditRecord{
-				EventType:   EventSendFailed,
+			record: &types.AuditRecord{
+				EventType:   types.EventSendFailed,
 				ChallengeID: "ch_789",
 				UserID:      "user789",
 				Channel:     "sms",
@@ -93,8 +94,8 @@ func TestManager_Log(t *testing.T) {
 		{
 			name:         "audit disabled",
 			auditEnabled: false,
-			record: &AuditRecord{
-				EventType: EventChallengeCreated,
+			record: &types.AuditRecord{
+				EventType: types.EventChallengeCreated,
 				Result:    "success",
 			},
 			shouldStore: false,
@@ -102,8 +103,8 @@ func TestManager_Log(t *testing.T) {
 		{
 			name:         "record with timestamp",
 			auditEnabled: true,
-			record: &AuditRecord{
-				EventType:   EventChallengeCreated,
+			record: &types.AuditRecord{
+				EventType:   types.EventChallengeCreated,
 				ChallengeID: "ch_timestamp",
 				Result:      "success",
 				Timestamp:   time.Now().Unix(),
@@ -255,8 +256,8 @@ func TestManager_Log_WithMasking(t *testing.T) {
 	manager := NewManager(redisClient)
 	ctx := context.Background()
 
-	record := &AuditRecord{
-		EventType:   EventChallengeCreated,
+	record := &types.AuditRecord{
+		EventType:   types.EventChallengeCreated,
 		ChallengeID: "ch_mask",
 		UserID:      "user123",
 		Channel:     "email",
@@ -274,13 +275,13 @@ func TestManager_Log_WithMasking(t *testing.T) {
 
 func TestEventTypes(t *testing.T) {
 	// Verify all event types are defined
-	eventTypes := []EventType{
-		EventChallengeCreated,
-		EventChallengeVerified,
-		EventChallengeRevoked,
-		EventSendSuccess,
-		EventSendFailed,
-		EventVerificationFailed,
+	eventTypes := []types.EventType{
+		types.EventChallengeCreated,
+		types.EventChallengeVerified,
+		types.EventChallengeRevoked,
+		types.EventSendSuccess,
+		types.EventSendFailed,
+		types.EventVerificationFailed,
 	}
 
 	for _, et := range eventTypes {
@@ -309,13 +310,13 @@ func TestAuditRecord_KeyGeneration(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		record         *AuditRecord
+		record         *types.AuditRecord
 		expectedPrefix string
 	}{
 		{
 			name: "with challenge_id",
-			record: &AuditRecord{
-				EventType:   EventChallengeCreated,
+			record: &types.AuditRecord{
+				EventType:   types.EventChallengeCreated,
 				ChallengeID: "ch_123",
 				Result:      "success",
 			},
@@ -323,8 +324,8 @@ func TestAuditRecord_KeyGeneration(t *testing.T) {
 		},
 		{
 			name: "with user_id only",
-			record: &AuditRecord{
-				EventType: EventChallengeCreated,
+			record: &types.AuditRecord{
+				EventType: types.EventChallengeCreated,
 				UserID:    "user123",
 				Result:    "success",
 			},
@@ -332,8 +333,8 @@ func TestAuditRecord_KeyGeneration(t *testing.T) {
 		},
 		{
 			name: "with neither challenge_id nor user_id",
-			record: &AuditRecord{
-				EventType: EventChallengeCreated,
+			record: &types.AuditRecord{
+				EventType: types.EventChallengeCreated,
 				Result:    "success",
 			},
 			expectedPrefix: auditKeyPrefix,

@@ -129,6 +129,7 @@ signature = HMAC-SHA256(timestamp:service:body, secret)
 - `X-Signature`: HMAC signature value
 - `X-Timestamp`: Unix timestamp (seconds)
 - `X-Service`: Service identifier (optional)
+- `X-Key-Id`: Key ID for key rotation (optional, required when using `HERALD_HMAC_KEYS` with multiple keys)
 
 **Configuration**:
 ```bash

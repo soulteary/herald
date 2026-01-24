@@ -15,10 +15,12 @@ import (
 	"github.com/soulteary/herald/internal/handlers"
 	"github.com/soulteary/herald/internal/middleware"
 	"github.com/soulteary/herald/internal/session"
+	"github.com/soulteary/herald/internal/tracing"
 )
 
 // NewRouter creates and configures a new Fiber router
 // It initializes Redis client from config
+// Deprecated: Use NewRouterWithClientAndHandlers for graceful shutdown support
 func NewRouter() *fiber.App {
 	// Initialize Redis client using redis-kit
 	cfg := rediskit.DefaultConfig().
@@ -34,9 +36,20 @@ func NewRouter() *fiber.App {
 	return NewRouterWithClient(redisClient)
 }
 
+// RouterWithHandlers wraps the router and handlers for graceful shutdown
+type RouterWithHandlers struct {
+	App      *fiber.App
+	Handlers *handlers.Handlers
+}
+
 // NewRouterWithClient creates and configures a new Fiber router with the provided Redis client
 // This is useful for testing with mock Redis clients
 func NewRouterWithClient(redisClient *redis.Client) *fiber.App {
+	return NewRouterWithClientAndHandlers(redisClient).App
+}
+
+// NewRouterWithClientAndHandlers creates a router with handlers for graceful shutdown
+func NewRouterWithClientAndHandlers(redisClient *redis.Client) *RouterWithHandlers {
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: true,
 	})
@@ -44,10 +57,17 @@ func NewRouterWithClient(redisClient *redis.Client) *fiber.App {
 	// Middleware
 	app.Use(recover.New())
 	app.Use(logger.New())
+
+	// OpenTelemetry tracing middleware (if enabled)
+	if config.OTLPEnabled {
+		app.Use(tracing.TracingMiddleware(config.ServiceName))
+		logrus.Info("OpenTelemetry tracing middleware enabled")
+	}
+
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "*",
 		AllowMethods: "GET,POST,OPTIONS",
-		AllowHeaders: "Content-Type,Authorization,X-Service,X-Signature,X-Timestamp,X-API-Key",
+		AllowHeaders: "Content-Type,Authorization,X-Service,X-Signature,X-Timestamp,X-API-Key,traceparent,tracestate",
 	}))
 
 	// Initialize session manager if enabled
@@ -84,5 +104,8 @@ func NewRouterWithClient(redisClient *redis.Client) *fiber.App {
 	otp.Post("/verifications", middleware.RequireAuth(), h.VerifyChallenge)
 	otp.Post("/challenges/:id/revoke", middleware.RequireAuth(), h.RevokeChallenge)
 
-	return app
+	return &RouterWithHandlers{
+		App:      app,
+		Handlers: h,
+	}
 }

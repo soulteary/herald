@@ -1,7 +1,10 @@
 package config
 
 import (
+	"encoding/json"
+	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -57,8 +60,14 @@ var (
 	AliyunTemplateCode = env.Get("ALIYUN_TEMPLATE_CODE", "")
 
 	// Service authentication (HMAC)
-	HMACSecret  = env.Get("HMAC_SECRET", "")
-	ServiceName = env.Get("SERVICE_NAME", "herald")
+	HMACSecret   = env.Get("HMAC_SECRET", "")
+	HMACKeysJSON = env.Get("HERALD_HMAC_KEYS", "") // JSON format: {"key-id-1":"secret-1","key-id-2":"secret-2"}
+	ServiceName  = env.Get("SERVICE_NAME", "herald")
+
+	// HMAC keys map (parsed from HERALD_HMAC_KEYS)
+	hmacKeysMap      map[string]string
+	hmacKeysMapOnce  sync.Once
+	hmacDefaultKeyID string // Default key ID if X-Key-Id not provided
 
 	// TLS/mTLS config
 	TLSCertFile     = env.Get("TLS_CERT_FILE", "")
@@ -77,8 +86,20 @@ var (
 	AuditMaskDestination = env.GetBool("AUDIT_MASK_DESTINATION", false)
 	AuditTTL             = env.GetDuration("AUDIT_TTL", 7*24*time.Hour) // 7 days default
 
+	// Audit persistent storage config
+	AuditStorageType     = env.Get("AUDIT_STORAGE_TYPE", "") // "database", "file", "loki", or comma-separated list
+	AuditDatabaseURL     = env.Get("AUDIT_DATABASE_URL", "")
+	AuditFilePath        = env.Get("AUDIT_FILE_PATH", "")
+	AuditLokiURL         = env.Get("AUDIT_LOKI_URL", "")
+	AuditWriterQueueSize = env.GetInt("AUDIT_WRITER_QUEUE_SIZE", 1000)
+	AuditWriterWorkers   = env.GetInt("AUDIT_WRITER_WORKERS", 2)
+
 	// Template config
 	TemplateDir = env.Get("TEMPLATE_DIR", "") // Optional: path to template directory
+
+	// OpenTelemetry config
+	OTLPEnabled  = env.GetBool("OTLP_ENABLED", false)
+	OTLPEndpoint = env.Get("OTLP_ENDPOINT", "") // e.g., "http://localhost:4318" for OTLP HTTP
 )
 
 // Initialize validates and initializes configuration
@@ -94,8 +115,22 @@ func Initialize() error {
 		}
 	}
 
-	if APIKey == "" && HMACSecret == "" {
-		logrus.Warn("Neither API_KEY nor HMAC_SECRET is set, service-to-service authentication will be disabled")
+	// Parse HMAC keys if provided
+	if HMACKeysJSON != "" {
+		if err := parseHMACKeys(); err != nil {
+			logrus.Warnf("Failed to parse HERALD_HMAC_KEYS: %v, falling back to HMAC_SECRET", err)
+		} else {
+			logrus.Infof("HMAC keys loaded: %d key(s) configured", len(hmacKeysMap))
+			// Set default key ID to first key if available
+			for keyID := range hmacKeysMap {
+				hmacDefaultKeyID = keyID
+				break
+			}
+		}
+	}
+
+	if APIKey == "" && HMACSecret == "" && len(hmacKeysMap) == 0 {
+		logrus.Warn("Neither API_KEY nor HMAC_SECRET/HERALD_HMAC_KEYS is set, service-to-service authentication will be disabled")
 	}
 
 	// Handle TLS_CA_CERT_FILE alias
@@ -141,4 +176,70 @@ func maskSensitive(s string) string {
 		return "***"
 	}
 	return s[:4] + "***" + s[len(s)-4:]
+}
+
+// parseHMACKeys parses HERALD_HMAC_KEYS JSON string into a map
+func parseHMACKeys() error {
+	var parseErr error
+	hmacKeysMapOnce.Do(func() {
+		hmacKeysMap = make(map[string]string)
+		if HMACKeysJSON == "" {
+			return
+		}
+
+		if err := json.Unmarshal([]byte(HMACKeysJSON), &hmacKeysMap); err != nil {
+			logrus.Errorf("Failed to parse HERALD_HMAC_KEYS JSON: %v", err)
+			hmacKeysMap = nil
+			parseErr = fmt.Errorf("failed to parse HMAC keys JSON: %w", err)
+			return
+		}
+
+		if len(hmacKeysMap) == 0 {
+			logrus.Warn("HERALD_HMAC_KEYS is empty or contains no keys")
+			hmacKeysMap = nil
+			parseErr = fmt.Errorf("HERALD_HMAC_KEYS contains no keys")
+			return
+		}
+
+		// Set default key ID to first key if available
+		for keyID := range hmacKeysMap {
+			hmacDefaultKeyID = keyID
+			break
+		}
+	})
+
+	if parseErr != nil {
+		return parseErr
+	}
+
+	if hmacKeysMap == nil {
+		return fmt.Errorf("failed to parse HMAC keys")
+	}
+	return nil
+}
+
+// GetHMACSecret returns the HMAC secret for the given key ID
+// If keyID is empty, returns the default key or HMACSecret
+func GetHMACSecret(keyID string) string {
+	// If HMAC keys map is configured, use it
+	if len(hmacKeysMap) > 0 {
+		if keyID == "" {
+			// Use default key ID if not provided
+			keyID = hmacDefaultKeyID
+		}
+		if secret, ok := hmacKeysMap[keyID]; ok {
+			return secret
+		}
+		// Key ID not found, return empty (will fail authentication)
+		logrus.Debugf("HMAC key ID '%s' not found in configured keys", keyID)
+		return ""
+	}
+
+	// Fallback to single HMACSecret (backward compatibility)
+	return HMACSecret
+}
+
+// HasHMACKeys returns true if multiple HMAC keys are configured
+func HasHMACKeys() bool {
+	return len(hmacKeysMap) > 0
 }

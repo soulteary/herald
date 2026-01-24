@@ -32,10 +32,21 @@ func RequireAuth() fiber.Handler {
 		signature := c.Get("X-Signature")
 		timestamp := c.Get("X-Timestamp")
 		service := c.Get("X-Service")
+		keyID := c.Get("X-Key-Id") // Support key rotation
 
 		if signature != "" && timestamp != "" {
-			if config.HMACSecret == "" {
-				logrus.Debug("HMAC_SECRET is not configured, trying API key")
+			// Get HMAC secret based on key ID (if provided)
+			hmacSecret := config.GetHMACSecret(keyID)
+
+			if hmacSecret == "" {
+				if config.HasHMACKeys() {
+					// Multiple keys configured but key ID not found or invalid
+					return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+						"ok":     false,
+						"reason": "invalid_key_id",
+					})
+				}
+				logrus.Debug("HMAC_SECRET/HERALD_HMAC_KEYS is not configured, trying API key")
 			} else {
 				// Validate timestamp (prevent replay attacks)
 				ts, err := strconv.ParseInt(timestamp, 10, 64)
@@ -57,10 +68,14 @@ func RequireAuth() fiber.Handler {
 
 				// Verify HMAC signature
 				body := string(c.Body())
-				expectedSig := computeHMAC(timestamp, service, body, config.HMACSecret)
+				expectedSig := computeHMAC(timestamp, service, body, hmacSecret)
 
 				if hmac.Equal([]byte(signature), []byte(expectedSig)) {
-					logrus.Debug("Request authenticated via HMAC")
+					if keyID != "" {
+						logrus.Debugf("Request authenticated via HMAC with key ID: %s", keyID)
+					} else {
+						logrus.Debug("Request authenticated via HMAC")
+					}
 					return c.Next()
 				}
 
@@ -76,8 +91,8 @@ func RequireAuth() fiber.Handler {
 		}
 
 		// If no authentication method is configured, allow in development but warn
-		if config.APIKey == "" && config.HMACSecret == "" {
-			logrus.Warn("No authentication method configured (API_KEY or HMAC_SECRET), allowing request (development mode)")
+		if config.APIKey == "" && config.HMACSecret == "" && !config.HasHMACKeys() {
+			logrus.Warn("No authentication method configured (API_KEY, HMAC_SECRET, or HERALD_HMAC_KEYS), allowing request (development mode)")
 			return c.Next()
 		}
 
