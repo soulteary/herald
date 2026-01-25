@@ -1,19 +1,21 @@
 package router
 
 import (
+	"os"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog"
 	"github.com/sirupsen/logrus"
 	metricskit "github.com/soulteary/metrics-kit"
+	middlewarekit "github.com/soulteary/middleware-kit"
 	rediskit "github.com/soulteary/redis-kit/client"
 
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/handlers"
 	"github.com/soulteary/herald/internal/metrics"
-	"github.com/soulteary/herald/internal/middleware"
 	"github.com/soulteary/herald/internal/session"
 	"github.com/soulteary/herald/internal/tracing"
 )
@@ -54,9 +56,17 @@ func NewRouterWithClientAndHandlers(redisClient *redis.Client) *RouterWithHandle
 		DisableStartupMessage: true,
 	})
 
+	// Create zerolog logger for middleware-kit
+	zerologLogger := zerolog.New(os.Stdout).With().Timestamp().Str("service", config.ServiceName).Logger()
+
 	// Middleware
 	app.Use(recover.New())
-	app.Use(logger.New())
+
+	// Request logging using middleware-kit
+	app.Use(middlewarekit.RequestLogging(middlewarekit.LoggingConfig{
+		Logger:    &zerologLogger,
+		SkipPaths: []string{"/healthz", "/metrics"},
+	}))
 
 	// OpenTelemetry tracing middleware (if enabled)
 	if config.OTLPEnabled {
@@ -98,11 +108,23 @@ func NewRouterWithClientAndHandlers(redisClient *redis.Client) *RouterWithHandle
 	// API routes
 	api := app.Group("/v1")
 
+	// Create authentication middleware using middleware-kit
+	authHandler := middlewarekit.CombinedAuth(middlewarekit.AuthConfig{
+		HMACConfig: &middlewarekit.HMACConfig{
+			KeyProvider: config.GetHMACSecret,
+		},
+		APIKeyConfig: &middlewarekit.APIKeyConfig{
+			APIKey: config.APIKey,
+		},
+		AllowNoAuth: config.APIKey == "" && config.HMACSecret == "" && !config.HasHMACKeys(),
+		Logger:      &zerologLogger,
+	})
+
 	// OTP routes
 	otp := api.Group("/otp")
-	otp.Post("/challenges", middleware.RequireAuth(), h.CreateChallenge)
-	otp.Post("/verifications", middleware.RequireAuth(), h.VerifyChallenge)
-	otp.Post("/challenges/:id/revoke", middleware.RequireAuth(), h.RevokeChallenge)
+	otp.Post("/challenges", authHandler, h.CreateChallenge)
+	otp.Post("/verifications", authHandler, h.VerifyChallenge)
+	otp.Post("/challenges/:id/revoke", authHandler, h.RevokeChallenge)
 
 	return &RouterWithHandlers{
 		App:      app,
