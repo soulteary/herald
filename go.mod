@@ -12,7 +12,7 @@ require (
 	github.com/redis/go-redis/v9 v9.17.2
 	github.com/sirupsen/logrus v1.9.4
 	github.com/soulteary/cli-kit v1.0.0
-	github.com/soulteary/http-kit v0.1.0
+	github.com/soulteary/http-kit v1.0.0
 	github.com/soulteary/redis-kit v1.0.0
 	github.com/soulteary/tracing-kit v1.0.0
 	github.com/stretchr/testify v1.11.1

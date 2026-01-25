@@ -75,8 +75,8 @@ github.com/sirupsen/logrus v1.9.4 h1:TsZE7l11zFCLZnZ+teH4Umoq5BhEIfIzfRDZ1Uzql2w
 github.com/sirupsen/logrus v1.9.4/go.mod h1:ftWc9WdOfJ0a92nsE2jF5u5ZwH8Bv2zdeOC42RjbV2g=
 github.com/soulteary/cli-kit v1.0.0 h1:1Q+o21vQS6jrdM4Fvd5NWZF2pgb8XPU0vb6kBRGtj1E=
 github.com/soulteary/cli-kit v1.0.0/go.mod h1:Z32KzEtl9FEFtKAsGhekTzPMUcg7Js7YvJzIyT/8Urk=
-github.com/soulteary/http-kit v0.1.0 h1:LYPBn2EnDLcxtFbPH+WnSdU8/qOvGMhPxYMKNWyLmFk=
-github.com/soulteary/http-kit v0.1.0/go.mod h1:lgoZM0zvNxM4x0s6mujMYaaAh3Kk3nN3gi/euBI9Hfw=
+github.com/soulteary/http-kit v1.0.0 h1:II1Ws2GJ1VS1kuLlpu7wrU1cINGc0ctr8yQfijpEzrA=
+github.com/soulteary/http-kit v1.0.0/go.mod h1:lgoZM0zvNxM4x0s6mujMYaaAh3Kk3nN3gi/euBI9Hfw=
 github.com/soulteary/redis-kit v1.0.0 h1:9HNj2//n3eK29+xqlPmoQ57D7U3vHV/BBfSbVv8sMy8=
 github.com/soulteary/redis-kit v1.0.0/go.mod h1:q18cqZ8QPaXDoODl1pr5jcbU/iDDMCBscVt/IMXEm7U=
 github.com/soulteary/tracing-kit v1.0.0 h1:GCplc9+yKgHK6ubsgtXGp7PA5DVMT+d5Cnj3NZo1IsQ=
