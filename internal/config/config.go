@@ -90,6 +90,7 @@ var (
 	// Audit persistent storage config
 	AuditStorageType     = env.Get("AUDIT_STORAGE_TYPE", "") // "database", "file", "loki", or comma-separated list
 	AuditDatabaseURL     = env.Get("AUDIT_DATABASE_URL", "")
+	AuditTableName       = env.Get("AUDIT_TABLE_NAME", "audit_logs")
 	AuditFilePath        = env.Get("AUDIT_FILE_PATH", "")
 	AuditLokiURL         = env.Get("AUDIT_LOKI_URL", "")
 	AuditWriterQueueSize = env.GetInt("AUDIT_WRITER_QUEUE_SIZE", 1000)

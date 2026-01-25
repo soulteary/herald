@@ -13,9 +13,7 @@ import (
 	secure "github.com/soulteary/secure-kit"
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/soulteary/herald/internal/audit"
-	"github.com/soulteary/herald/internal/audit/storage"
-	"github.com/soulteary/herald/internal/audit/types"
+	"github.com/soulteary/herald/internal/auditlog"
 	"github.com/soulteary/herald/internal/challenge"
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/metrics"
@@ -32,7 +30,6 @@ type Handlers struct {
 	challengeManager *challenge.Manager
 	rateLimitManager *ratelimit.Manager
 	providerRegistry *provider.Registry
-	auditManager     *audit.Manager
 	templateManager  *template.Manager
 	redis            *redis.Client
 	testCodeCache    rediskitcache.Cache // For test mode code storage
@@ -42,10 +39,7 @@ type Handlers struct {
 
 // StopAuditWriter stops the audit writer gracefully
 func (h *Handlers) StopAuditWriter() error {
-	if h.auditManager != nil {
-		return h.auditManager.Stop()
-	}
-	return nil
+	return auditlog.Stop()
 }
 
 // NewHandlers creates a new handlers instance
@@ -60,24 +54,8 @@ func NewHandlers(redisClient *redis.Client, sessionManager *session.Manager) *Ha
 
 	rateLimitMgr := ratelimit.NewManager(redisClient)
 
-	// Initialize audit manager
-	// Initialize audit manager with persistent storage if configured
-	var auditMgr *audit.Manager
-	persistentStorage, err := storage.NewStorageFromConfig()
-	if err != nil {
-		logrus.Warnf("Failed to initialize persistent audit storage: %v, using Redis only", err)
-		auditMgr = audit.NewManager(redisClient)
-	} else if persistentStorage != nil {
-		logrus.Info("Persistent audit storage enabled")
-		auditMgr = audit.NewManagerWithStorage(
-			redisClient,
-			persistentStorage,
-			config.AuditWriterQueueSize,
-			config.AuditWriterWorkers,
-		)
-	} else {
-		auditMgr = audit.NewManager(redisClient)
-	}
+	// Initialize audit logger with Redis client
+	auditlog.Init(redisClient)
 
 	// Initialize template manager
 	templateMgr := template.NewManager(config.TemplateDir)
@@ -115,7 +93,6 @@ func NewHandlers(redisClient *redis.Client, sessionManager *session.Manager) *Ha
 		challengeManager: challengeMgr,
 		rateLimitManager: rateLimitMgr,
 		providerRegistry: registry,
-		auditManager:     auditMgr,
 		templateManager:  templateMgr,
 		redis:            redisClient,
 		testCodeCache:    testCodeCache,
@@ -323,16 +300,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 	span.SetAttributes(attribute.String("result", "success"))
 
 	// Audit: challenge created
-	h.auditManager.Log(spanCtx, &types.AuditRecord{
-		EventType:   types.EventChallengeCreated,
-		ChallengeID: ch.ID,
-		UserID:      req.UserID,
-		Channel:     req.Channel,
-		Destination: req.Destination,
-		Purpose:     req.Purpose,
-		Result:      "success",
-		IP:          clientIP,
-	})
+	auditlog.LogChallengeCreated(spanCtx, ch.ID, req.UserID, req.Channel, req.Destination, req.Purpose, clientIP)
 
 	// Metrics: challenge created
 	metrics.RecordChallengeCreated(req.Channel, req.Purpose, "success")
@@ -409,18 +377,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		metrics.RecordOTPSend(req.Channel, providerName, "failure", sendDuration)
 
 		// Audit: send failed
-		h.auditManager.Log(providerCtx, &types.AuditRecord{
-			EventType:   types.EventSendFailed,
-			ChallengeID: ch.ID,
-			UserID:      req.UserID,
-			Channel:     req.Channel,
-			Destination: req.Destination,
-			Purpose:     req.Purpose,
-			Result:      "failure",
-			Reason:      "send_failed",
-			Provider:    providerName,
-			IP:          clientIP,
-		})
+		auditlog.LogSendFailed(providerCtx, ch.ID, req.UserID, req.Channel, req.Destination, req.Purpose, providerName, "send_failed", clientIP)
 
 		// Handle provider failure based on policy
 		if config.ProviderFailurePolicy == "strict" {
@@ -450,17 +407,8 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		metrics.RecordOTPSend(req.Channel, providerName, "success", sendDuration)
 
 		// Audit: send success
-		h.auditManager.Log(providerCtx, &types.AuditRecord{
-			EventType:   types.EventSendSuccess,
-			ChallengeID: ch.ID,
-			UserID:      req.UserID,
-			Channel:     req.Channel,
-			Destination: req.Destination,
-			Purpose:     req.Purpose,
-			Result:      "success",
-			Provider:    providerName,
-			IP:          clientIP,
-		})
+		// TODO: messageID should be returned from provider.Send when the Provider interface is extended
+		auditlog.LogSendSuccess(providerCtx, ch.ID, req.UserID, req.Channel, req.Destination, req.Purpose, providerName, "", clientIP)
 	}
 
 	// Prepare response
@@ -581,13 +529,7 @@ func (h *Handlers) VerifyChallenge(c *fiber.Ctx) error {
 		metrics.RecordVerification("failure", reason)
 
 		// Audit: verification failed
-		h.auditManager.Log(verifyCtx, &types.AuditRecord{
-			EventType:   types.EventVerificationFailed,
-			ChallengeID: req.ChallengeID,
-			Result:      "failure",
-			Reason:      reason,
-			IP:          req.ClientIP,
-		})
+		auditlog.LogVerificationFailed(verifyCtx, req.ChallengeID, reason, req.ClientIP)
 
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"ok":     false,
@@ -606,13 +548,7 @@ func (h *Handlers) VerifyChallenge(c *fiber.Ctx) error {
 		metrics.RecordVerification("failure", "invalid")
 
 		// Audit: verification failed
-		h.auditManager.Log(verifyCtx, &types.AuditRecord{
-			EventType:   types.EventVerificationFailed,
-			ChallengeID: req.ChallengeID,
-			Result:      "failure",
-			Reason:      "invalid",
-			IP:          req.ClientIP,
-		})
+		auditlog.LogVerificationFailed(verifyCtx, req.ChallengeID, "invalid", req.ClientIP)
 
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"ok":     false,
@@ -632,16 +568,7 @@ func (h *Handlers) VerifyChallenge(c *fiber.Ctx) error {
 	metrics.RecordVerification("success", "")
 
 	// Audit: challenge verified
-	h.auditManager.Log(verifyCtx, &types.AuditRecord{
-		EventType:   types.EventChallengeVerified,
-		ChallengeID: ch.ID,
-		UserID:      ch.UserID,
-		Channel:     ch.Channel,
-		Destination: ch.Destination,
-		Purpose:     ch.Purpose,
-		Result:      "success",
-		IP:          req.ClientIP,
-	})
+	auditlog.LogVerificationSuccess(verifyCtx, ch.ID, ch.UserID, ch.Channel, ch.Destination, ch.Purpose, req.ClientIP)
 
 	// Generate AMR based on channel
 	amr := []string{"otp"}
@@ -687,12 +614,7 @@ func (h *Handlers) RevokeChallenge(c *fiber.Ctx) error {
 	}
 
 	// Audit: challenge revoked
-	h.auditManager.Log(spanCtx, &types.AuditRecord{
-		EventType:   types.EventChallengeRevoked,
-		ChallengeID: challengeID,
-		Result:      "success",
-		IP:          c.IP(),
-	})
+	auditlog.LogChallengeRevoked(spanCtx, challengeID, c.IP())
 
 	return c.JSON(fiber.Map{
 		"ok": true,
