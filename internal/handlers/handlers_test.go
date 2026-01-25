@@ -97,68 +97,8 @@ func TestNewHandlers(t *testing.T) {
 	}
 }
 
-func TestHandlers_HealthCheck(t *testing.T) {
-	redisClient := testRedisClient(t)
-	defer func() {
-		_ = redisClient.Close()
-	}()
-
-	handlers := NewHandlers(redisClient, nil)
-
-	app := fiber.New()
-	app.Get("/health", handlers.HealthCheck)
-
-	req := httptest.NewRequest("GET", "/health", nil)
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("Test request failed: %v", err)
-	}
-
-	if resp.StatusCode != fiber.StatusOK {
-		t.Errorf("HealthCheck() status = %d, want %d", resp.StatusCode, fiber.StatusOK)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("Failed to read response body: %v", err)
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(body, &result); err != nil {
-		t.Fatalf("Failed to unmarshal response: %v", err)
-	}
-
-	if result["status"] != "ok" {
-		t.Errorf("HealthCheck() status = %v, want 'ok'", result["status"])
-	}
-}
-
-func TestHandlers_HealthCheck_RedisDown(t *testing.T) {
-	// Create a client that will fail health check
-	// We can't easily simulate Redis failure with mock, so we'll test the success path
-	// The failure path requires actual Redis connection failure which is hard to test
-	redisClient := testRedisClient(t)
-	defer func() {
-		_ = redisClient.Close()
-	}()
-
-	handlers := NewHandlers(redisClient, nil)
-
-	app := fiber.New()
-	app.Get("/health", handlers.HealthCheck)
-
-	req := httptest.NewRequest("GET", "/health", nil)
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("Test request failed: %v", err)
-	}
-
-	// With mock Redis, health check should succeed
-	if resp.StatusCode != fiber.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Errorf("HealthCheck() status = %d, want %d, body: %s", resp.StatusCode, fiber.StatusOK, string(body))
-	}
-}
+// Note: Health check is now handled by health-kit in router.go
+// Tests for health check endpoint are in router_test.go
 
 func TestHandlers_CreateChallenge_DefaultPurpose(t *testing.T) {
 	// Save original config

@@ -9,6 +9,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 	"github.com/sirupsen/logrus"
+	health "github.com/soulteary/health-kit"
 	metricskit "github.com/soulteary/metrics-kit"
 	middlewarekit "github.com/soulteary/middleware-kit"
 	rediskit "github.com/soulteary/redis-kit/client"
@@ -94,8 +95,11 @@ func NewRouterWithClientAndHandlers(redisClient *redis.Client) *RouterWithHandle
 	// Initialize handlers
 	h := handlers.NewHandlers(redisClient, sessionManager)
 
-	// Health check
-	app.Get("/healthz", h.HealthCheck)
+	// Health check using health-kit
+	healthConfig := health.DefaultConfig().WithServiceName(config.ServiceName)
+	healthAggregator := health.NewAggregator(healthConfig)
+	healthAggregator.AddChecker(health.NewRedisChecker(redisClient))
+	app.Get("/healthz", health.FiberHandler(healthAggregator))
 
 	// Prometheus metrics endpoint
 	app.Get("/metrics", metricskit.FiberHandlerFor(metrics.Registry))
