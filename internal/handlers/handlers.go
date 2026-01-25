@@ -11,6 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 	rediskitcache "github.com/soulteary/redis-kit/cache"
 	rediskitclient "github.com/soulteary/redis-kit/client"
+	secure "github.com/soulteary/secure-kit"
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/soulteary/herald/internal/audit"
@@ -510,24 +511,12 @@ func maskDestination(dest string) string {
 	if len(dest) == 0 {
 		return ""
 	}
-	if len(dest) <= 4 {
-		return "***"
-	}
 	// Mask email: show first 2 chars and domain
 	if strings.Contains(dest, "@") {
-		parts := strings.Split(dest, "@")
-		if len(parts) == 2 {
-			if len(parts[0]) <= 2 {
-				return "***@" + parts[1]
-			}
-			return parts[0][:2] + "***@" + parts[1]
-		}
+		return secure.MaskEmailPartial(dest)
 	}
-	// Mask phone: show last 4 digits
-	if len(dest) <= 4 {
-		return "***"
-	}
-	return "***" + dest[len(dest)-4:]
+	// Mask phone: use secure-kit MaskString for generic masking
+	return secure.MaskString(dest, 3)
 }
 
 // VerifyChallengeRequest represents the request to verify a challenge

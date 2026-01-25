@@ -3,12 +3,12 @@ package audit
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 	rediskitcache "github.com/soulteary/redis-kit/cache"
+	secure "github.com/soulteary/secure-kit"
 
 	"github.com/soulteary/herald/internal/audit/storage"
 	"github.com/soulteary/herald/internal/audit/types"
@@ -127,32 +127,11 @@ func MaskDestination(dest string, channel string) string {
 
 	switch channel {
 	case "sms", "phone":
-		// Phone number masking: +8613800138000 -> +861380****8000
-		// Keep first 6 digits and last 4 digits
-		if len(dest) <= 10 {
-			return "****"
-		}
-		if len(dest) <= 14 {
-			// Short number: keep first 3 and last 3
-			return dest[:3] + "****" + dest[len(dest)-3:]
-		}
-		// Long number: keep first 6 and last 4
-		return dest[:6] + "****" + dest[len(dest)-4:]
+		// Use secure-kit MaskPhone for phone number masking
+		return secure.MaskPhone(dest)
 	case "email":
-		// Email masking: user@example.com -> u***@example.com
-		parts := strings.Split(dest, "@")
-		if len(parts) != 2 {
-			return "****"
-		}
-		localPart := parts[0]
-		domain := parts[1]
-		if len(localPart) == 0 {
-			return "****@" + domain
-		}
-		if len(localPart) == 1 {
-			return localPart[0:1] + "***@" + domain
-		}
-		return localPart[0:1] + "***@" + domain
+		// Use secure-kit MaskEmail for email masking
+		return secure.MaskEmail(dest)
 	default:
 		// Unknown channel, mask everything
 		return "****"

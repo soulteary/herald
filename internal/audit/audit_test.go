@@ -174,35 +174,35 @@ func TestMaskDestination(t *testing.T) {
 			name:       "email empty local part",
 			dest:       "@example.com",
 			channel:    "email",
-			expected:   "****@example.com",
+			expected:   "***@example.com", // secure-kit format
 			shouldMask: true,
 		},
 		{
 			name:       "phone number long",
 			dest:       "+8613800138000",
 			channel:    "sms",
-			expected:   "+86****000",
+			expected:   "+86*******8000", // secure-kit format: keep first 3 and last 4
 			shouldMask: true,
 		},
 		{
 			name:       "phone number short",
 			dest:       "13800138000",
 			channel:    "sms",
-			expected:   "138****000",
+			expected:   "138****8000", // secure-kit format: keep first 3 and last 4
 			shouldMask: true,
 		},
 		{
 			name:       "phone number very short",
 			dest:       "123456",
 			channel:    "sms",
-			expected:   "****",
+			expected:   "****", // secure-kit format for short strings
 			shouldMask: true,
 		},
 		{
 			name:       "phone number medium",
 			dest:       "1380013800",
 			channel:    "sms",
-			expected:   "****",
+			expected:   "138***3800", // secure-kit format: keep first 3 and last 4
 			shouldMask: true,
 		},
 		{
@@ -223,7 +223,7 @@ func TestMaskDestination(t *testing.T) {
 			name:       "invalid email format",
 			dest:       "notanemail",
 			channel:    "email",
-			expected:   "****",
+			expected:   "***@***", // secure-kit format for invalid email
 			shouldMask: true,
 		},
 	}
