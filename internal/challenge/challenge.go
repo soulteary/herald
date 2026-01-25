@@ -12,6 +12,8 @@ import (
 	"github.com/sirupsen/logrus"
 	rediskitcache "github.com/soulteary/redis-kit/cache"
 	"golang.org/x/crypto/argon2"
+
+	"github.com/soulteary/herald/internal/metrics"
 )
 
 const (
@@ -92,9 +94,12 @@ func (m *Manager) CreateChallenge(ctx context.Context, userID, channel, destinat
 	}
 
 	// Store in Redis using cache interface
+	start := time.Now()
 	if err := m.cache.Set(ctx, challengeID, challenge, m.expiry); err != nil {
+		metrics.RecordRedisFailure("set", time.Since(start))
 		return nil, "", fmt.Errorf("failed to store challenge: %w", err)
 	}
+	metrics.RecordRedisSuccess("set", time.Since(start))
 
 	logrus.Debugf("Challenge created: %s for user %s", challengeID, userID)
 	return challenge, code, nil
@@ -104,9 +109,12 @@ func (m *Manager) CreateChallenge(ctx context.Context, userID, channel, destinat
 // This should only be used in test environments
 func (m *Manager) GetCodeForTesting(ctx context.Context, challengeID string) (string, error) {
 	var challenge Challenge
+	start := time.Now()
 	if err := m.cache.Get(ctx, challengeID, &challenge); err != nil {
+		metrics.RecordRedisFailure("get", time.Since(start))
 		return "", fmt.Errorf("challenge not found: %w", err)
 	}
+	metrics.RecordRedisSuccess("get", time.Since(start))
 
 	// In test mode, we need to store the code separately
 	// For now, return empty - test mode code storage will be handled in handlers
@@ -117,26 +125,35 @@ func (m *Manager) GetCodeForTesting(ctx context.Context, challengeID string) (st
 func (m *Manager) VerifyChallenge(ctx context.Context, challengeID, code, clientIP string) (bool, *Challenge, error) {
 	// Get challenge from Redis using cache interface
 	var challenge Challenge
+	start := time.Now()
 	if err := m.cache.Get(ctx, challengeID, &challenge); err != nil {
+		metrics.RecordRedisFailure("get", time.Since(start))
 		return false, nil, fmt.Errorf("challenge not found or expired: %w", err)
 	}
+	metrics.RecordRedisSuccess("get", time.Since(start))
 
 	// Check if expired
 	if time.Now().After(challenge.ExpiresAt) {
 		// Delete expired challenge
+		start = time.Now()
 		_ = m.cache.Del(ctx, challengeID)
+		metrics.RecordRedisSuccess("del", time.Since(start))
 		return false, nil, fmt.Errorf("challenge expired")
 	}
 
 	// Check if locked
 	if challenge.Attempts >= m.maxAttempts {
 		// Lock the user
+		start = time.Now()
 		_ = m.lockCache.Set(ctx, challenge.UserID, "1", m.lockoutDuration)
+		metrics.RecordRedisSuccess("set", time.Since(start))
 		return false, nil, fmt.Errorf("challenge locked due to too many attempts")
 	}
 
 	// Check if user is locked
+	start = time.Now()
 	exists, err := m.lockCache.Exists(ctx, challenge.UserID)
+	metrics.RecordRedisSuccess("exists", time.Since(start))
 	if err == nil && exists {
 		return false, nil, fmt.Errorf("user is temporarily locked")
 	}
@@ -145,21 +162,29 @@ func (m *Manager) VerifyChallenge(ctx context.Context, challengeID, code, client
 	if !verifyCode(code, challenge.CodeHash) {
 		// Increment attempts
 		challenge.Attempts++
+		start = time.Now()
 		ttl, err := m.cache.TTL(ctx, challengeID)
+		metrics.RecordRedisSuccess("ttl", time.Since(start))
 		if err == nil && ttl > 0 {
+			start = time.Now()
 			_ = m.cache.Set(ctx, challengeID, challenge, ttl)
+			metrics.RecordRedisSuccess("set", time.Since(start))
 		}
 		// Check if should lock after incrementing attempts
 		if challenge.Attempts >= m.maxAttempts {
 			// Lock the user
+			start = time.Now()
 			_ = m.lockCache.Set(ctx, challenge.UserID, "1", m.lockoutDuration)
+			metrics.RecordRedisSuccess("set", time.Since(start))
 			return false, nil, fmt.Errorf("challenge locked due to too many attempts")
 		}
 		return false, nil, fmt.Errorf("invalid code")
 	}
 
 	// Success - delete challenge (one-time use)
+	start = time.Now()
 	_ = m.cache.Del(ctx, challengeID)
+	metrics.RecordRedisSuccess("del", time.Since(start))
 
 	logrus.Debugf("Challenge verified successfully: %s", challengeID)
 	return true, &challenge, nil
@@ -168,21 +193,33 @@ func (m *Manager) VerifyChallenge(ctx context.Context, challengeID, code, client
 // GetChallenge retrieves a challenge by ID
 func (m *Manager) GetChallenge(ctx context.Context, challengeID string) (*Challenge, error) {
 	var challenge Challenge
+	start := time.Now()
 	if err := m.cache.Get(ctx, challengeID, &challenge); err != nil {
+		metrics.RecordRedisFailure("get", time.Since(start))
 		return nil, fmt.Errorf("challenge not found: %w", err)
 	}
+	metrics.RecordRedisSuccess("get", time.Since(start))
 
 	return &challenge, nil
 }
 
 // RevokeChallenge revokes a challenge
 func (m *Manager) RevokeChallenge(ctx context.Context, challengeID string) error {
-	return m.cache.Del(ctx, challengeID)
+	start := time.Now()
+	err := m.cache.Del(ctx, challengeID)
+	if err != nil {
+		metrics.RecordRedisFailure("del", time.Since(start))
+	} else {
+		metrics.RecordRedisSuccess("del", time.Since(start))
+	}
+	return err
 }
 
 // IsUserLocked checks if a user is locked
 func (m *Manager) IsUserLocked(ctx context.Context, userID string) bool {
+	start := time.Now()
 	exists, err := m.lockCache.Exists(ctx, userID)
+	metrics.RecordRedisSuccess("exists", time.Since(start))
 	return err == nil && exists
 }
 

@@ -1,18 +1,18 @@
 package router
 
 import (
-	"github.com/gofiber/adaptor/v2"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
+	metricskit "github.com/soulteary/metrics-kit"
 	rediskit "github.com/soulteary/redis-kit/client"
 
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/handlers"
+	"github.com/soulteary/herald/internal/metrics"
 	"github.com/soulteary/herald/internal/middleware"
 	"github.com/soulteary/herald/internal/session"
 	"github.com/soulteary/herald/internal/tracing"
@@ -88,7 +88,7 @@ func NewRouterWithClientAndHandlers(redisClient *redis.Client) *RouterWithHandle
 	app.Get("/healthz", h.HealthCheck)
 
 	// Prometheus metrics endpoint
-	app.Get("/metrics", adaptor.HTTPHandler(promhttp.Handler()))
+	app.Get("/metrics", metricskit.FiberHandlerFor(metrics.Registry))
 
 	// Test mode endpoint (only available when HERALD_TEST_MODE=true)
 	if config.TestMode {
