@@ -77,8 +77,8 @@ github.com/soulteary/cli-kit v1.0.0 h1:1Q+o21vQS6jrdM4Fvd5NWZF2pgb8XPU0vb6kBRGtj
 github.com/soulteary/cli-kit v1.0.0/go.mod h1:Z32KzEtl9FEFtKAsGhekTzPMUcg7Js7YvJzIyT/8Urk=
 github.com/soulteary/http-kit v0.1.0 h1:LYPBn2EnDLcxtFbPH+WnSdU8/qOvGMhPxYMKNWyLmFk=
 github.com/soulteary/http-kit v0.1.0/go.mod h1:lgoZM0zvNxM4x0s6mujMYaaAh3Kk3nN3gi/euBI9Hfw=
-github.com/soulteary/redis-kit v0.1.1 h1:4mCRuL0U2MTBn6bJmUlsaVUTGgygpELDSfCNu0zRKis=
-github.com/soulteary/redis-kit v0.1.1/go.mod h1:q18cqZ8QPaXDoODl1pr5jcbU/iDDMCBscVt/IMXEm7U=
+github.com/soulteary/redis-kit v1.0.0 h1:9HNj2//n3eK29+xqlPmoQ57D7U3vHV/BBfSbVv8sMy8=
+github.com/soulteary/redis-kit v1.0.0/go.mod h1:q18cqZ8QPaXDoODl1pr5jcbU/iDDMCBscVt/IMXEm7U=
 github.com/soulteary/tracing-kit v1.0.0 h1:GCplc9+yKgHK6ubsgtXGp7PA5DVMT+d5Cnj3NZo1IsQ=
 github.com/soulteary/tracing-kit v1.0.0/go.mod h1:gYw/iBOq0hFtBFzkq+upnrFN7iAfjYe18cISCO/BYto=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
