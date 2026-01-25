@@ -5,25 +5,21 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strconv"
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/propagation"
+	httpkit "github.com/soulteary/http-kit"
 )
 
 // Client is the Herald API client
 type Client struct {
-	httpClient *http.Client
+	httpClient *httpkit.Client
 	baseURL    string
 	apiKey     string
 	hmacSecret string
@@ -155,48 +151,23 @@ func NewClient(opts *Options) (*Client, error) {
 		return nil, err
 	}
 
-	// Configure TLS
-	var tlsConfig *tls.Config
-	if opts.TLSCACertFile != "" || opts.TLSClientCert != "" || opts.InsecureSkipVerify {
-		tlsConfig = &tls.Config{
-			InsecureSkipVerify: opts.InsecureSkipVerify,
-			ServerName:         opts.TLSServerName,
-		}
-
-		// Load CA certificate for server verification
-		if opts.TLSCACertFile != "" {
-			caCert, err := os.ReadFile(opts.TLSCACertFile)
-			if err != nil {
-				return nil, fmt.Errorf("failed to read CA certificate: %w", err)
-			}
-			caCertPool := x509.NewCertPool()
-			if !caCertPool.AppendCertsFromPEM(caCert) {
-				return nil, fmt.Errorf("failed to parse CA certificate")
-			}
-			tlsConfig.RootCAs = caCertPool
-		}
-
-		// Load client certificate for mTLS
-		if opts.TLSClientCert != "" && opts.TLSClientKey != "" {
-			cert, err := tls.LoadX509KeyPair(opts.TLSClientCert, opts.TLSClientKey)
-			if err != nil {
-				return nil, fmt.Errorf("failed to load client certificate: %w", err)
-			}
-			tlsConfig.Certificates = []tls.Certificate{cert}
-		}
+	clientOpts := &httpkit.Options{
+		BaseURL:            opts.BaseURL,
+		Timeout:            opts.Timeout,
+		TLSCACertFile:      opts.TLSCACertFile,
+		TLSClientCert:      opts.TLSClientCert,
+		TLSClientKey:       opts.TLSClientKey,
+		TLSServerName:      opts.TLSServerName,
+		InsecureSkipVerify: opts.InsecureSkipVerify,
 	}
 
-	// Create HTTP client with TLS config
-	transport := &http.Transport{}
-	if tlsConfig != nil {
-		transport.TLSClientConfig = tlsConfig
+	httpClient, err := httpkit.NewClient(clientOpts)
+	if err != nil {
+		return nil, err
 	}
 
 	client := &Client{
-		httpClient: &http.Client{
-			Timeout:   opts.Timeout,
-			Transport: transport,
-		},
+		httpClient: httpClient,
 		baseURL:    opts.BaseURL,
 		apiKey:     opts.APIKey,
 		hmacSecret: opts.HMACSecret,
@@ -260,8 +231,7 @@ func (c *Client) CreateChallenge(ctx context.Context, req *CreateChallengeReques
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	// Inject trace context into headers
-	propagator := otel.GetTextMapPropagator()
-	propagator.Inject(ctx, propagation.HeaderCarrier(httpReq.Header))
+	c.httpClient.InjectTraceContext(ctx, httpReq)
 
 	c.addAuthHeaders(httpReq, body)
 
@@ -316,8 +286,7 @@ func (c *Client) VerifyChallenge(ctx context.Context, req *VerifyChallengeReques
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	// Inject trace context into headers
-	propagator := otel.GetTextMapPropagator()
-	propagator.Inject(ctx, propagation.HeaderCarrier(httpReq.Header))
+	c.httpClient.InjectTraceContext(ctx, httpReq)
 
 	c.addAuthHeaders(httpReq, body)
 

@@ -67,7 +67,7 @@ func TestNewClient_Success(t *testing.T) {
 	assert.Equal(t, "api-key", client.apiKey)
 	assert.Equal(t, "hmac-secret", client.hmacSecret)
 	assert.Equal(t, "custom-service", client.service)
-	assert.Equal(t, 5*time.Second, client.httpClient.Timeout)
+	assert.Equal(t, 5*time.Second, client.httpClient.GetHTTPClient().Timeout)
 }
 
 func TestAddAuthHeaders_APIKeyOnly(t *testing.T) {

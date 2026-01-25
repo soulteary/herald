@@ -13,8 +13,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/router"
-	"github.com/soulteary/herald/internal/tracing"
 	rediskit "github.com/soulteary/redis-kit/client"
+	"github.com/soulteary/tracing-kit"
 )
 
 func main() {

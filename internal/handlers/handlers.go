@@ -24,7 +24,7 @@ import (
 	"github.com/soulteary/herald/internal/ratelimit"
 	"github.com/soulteary/herald/internal/session"
 	"github.com/soulteary/herald/internal/template"
-	"github.com/soulteary/herald/internal/tracing"
+	"github.com/soulteary/tracing-kit"
 )
 
 // Handlers contains all HTTP handlers
