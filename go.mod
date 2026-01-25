@@ -12,9 +12,11 @@ require (
 	github.com/sirupsen/logrus v1.9.4
 	github.com/soulteary/cli-kit v1.0.0
 	github.com/soulteary/http-kit v1.0.0
+	github.com/soulteary/i18n-kit v1.0.0
 	github.com/soulteary/metrics-kit v1.0.0
 	github.com/soulteary/middleware-kit v1.0.0
 	github.com/soulteary/redis-kit v1.0.0
+	github.com/soulteary/secure-kit v1.0.0
 	github.com/soulteary/tracing-kit v1.0.0
 	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/otel v1.39.0
@@ -44,7 +46,6 @@ require (
 	github.com/prometheus/client_golang v1.23.2 // indirect
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.19.2 // indirect
-	github.com/soulteary/secure-kit v1.0.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.69.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect

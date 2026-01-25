@@ -1,0 +1,11 @@
+{
+  "purpose.login": "login",
+  "purpose.reset": "password reset",
+  "purpose.bind": "binding",
+  "purpose.stepup": "step-up authentication",
+  "email.subject": "Verification Code",
+  "email.body": "Your verification code is: {code}\n\nThis code will expire in {minutes} minutes.",
+  "email.body_with_purpose": "Your {purpose} verification code is: {code}\n\nThis code will expire in {minutes} minutes.",
+  "sms.body": "Your verification code is: {code}. Valid for {minutes} minutes.",
+  "sms.body_with_purpose": "Your {purpose} verification code is: {code}. Valid for {minutes} minutes."
+}
