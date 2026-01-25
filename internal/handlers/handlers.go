@@ -10,7 +10,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 	rediskitcache "github.com/soulteary/redis-kit/cache"
-	rediskitclient "github.com/soulteary/redis-kit/client"
 	secure "github.com/soulteary/secure-kit"
 	"go.opentelemetry.io/otel/attribute"
 
@@ -123,24 +122,6 @@ func NewHandlers(redisClient *redis.Client, sessionManager *session.Manager) *Ha
 		idempotencyCache: idempotencyCache,
 		sessionManager:   sessionManager,
 	}
-}
-
-// HealthCheck handles health check requests
-func (h *Handlers) HealthCheck(c *fiber.Ctx) error {
-	ctx := c.Context()
-
-	// Check Redis connection using redis-kit
-	if !rediskitclient.HealthCheck(ctx, h.redis) {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-			"status": "unhealthy",
-			"error":  "Redis connection failed",
-		})
-	}
-
-	return c.JSON(fiber.Map{
-		"status":  "ok",
-		"service": "herald",
-	})
 }
 
 // CreateChallengeRequest represents the request to create a challenge
