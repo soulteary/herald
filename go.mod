@@ -3,13 +3,12 @@ module github.com/soulteary/herald
 go 1.25.4
 
 require (
-	github.com/go-sql-driver/mysql v1.9.3
 	github.com/gofiber/fiber/v2 v2.52.10
-	github.com/lib/pq v1.10.9
 	github.com/prometheus/client_model v0.6.2
 	github.com/redis/go-redis/v9 v9.17.2
 	github.com/rs/zerolog v1.34.0
 	github.com/sirupsen/logrus v1.9.4
+	github.com/soulteary/audit-kit v1.0.0
 	github.com/soulteary/cli-kit v1.0.0
 	github.com/soulteary/health-kit v1.0.0
 	github.com/soulteary/http-kit v1.0.0
@@ -36,9 +35,11 @@ require (
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/go-sql-driver/mysql v1.9.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.5 // indirect
 	github.com/klauspost/compress v1.18.3 // indirect
+	github.com/lib/pq v1.10.9 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.19 // indirect
