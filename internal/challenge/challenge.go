@@ -2,16 +2,13 @@ package challenge
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 	rediskitcache "github.com/soulteary/redis-kit/cache"
-	"golang.org/x/crypto/argon2"
+	secure "github.com/soulteary/secure-kit"
 
 	"github.com/soulteary/herald/internal/metrics"
 )
@@ -223,66 +220,43 @@ func (m *Manager) IsUserLocked(ctx context.Context, userID string) bool {
 	return err == nil && exists
 }
 
+// argon2Hasher is a singleton instance for code hashing
+var argon2Hasher = secure.NewArgon2Hasher()
+
 // Helper functions
 
 func generateChallengeID() string {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		// Fallback: use current time as seed (not secure, but better than panic)
-		for i := range b {
-			b[i] = byte(int(time.Now().UnixNano()+int64(i)) % 256)
-		}
+	token, err := secure.RandomToken(16)
+	if err != nil {
+		// This should never happen with crypto/rand, but handle gracefully
+		logrus.Errorf("Failed to generate challenge ID: %v", err)
+		token, _ = secure.RandomHex(16)
 	}
-	return "ch_" + base64.URLEncoding.EncodeToString(b)[:22]
+	return "ch_" + token[:22]
 }
 
 func generateCode(length int) string {
-	b := make([]byte, length)
-	// Generate random bytes
-	randomBytes := make([]byte, length)
-	if _, err := rand.Read(randomBytes); err != nil {
-		// Fallback: use current time as seed (not secure, but better than panic)
-		for i := range b {
-			b[i] = byte('0' + (int(time.Now().UnixNano()+int64(i)) % 10))
-		}
-		return string(b)
+	code, err := secure.RandomDigits(length)
+	if err != nil {
+		// This should never happen with crypto/rand, but handle gracefully
+		logrus.Errorf("Failed to generate code: %v", err)
+		// Return a fallback - but this is logged for debugging
+		code, _ = secure.RandomDigits(length)
 	}
-	// Convert to digits 0-9
-	for i := range b {
-		b[i] = byte('0' + (randomBytes[i] % 10))
-	}
-	return string(b)
+	return code
 }
 
 func hashCode(code string) string {
-	// Use Argon2 for hashing
-	salt := make([]byte, 16)
-	if _, err := rand.Read(salt); err != nil {
-		// Fallback: use current time as seed (not secure, but better than panic)
-		for i := range salt {
-			salt[i] = byte(int(time.Now().UnixNano()+int64(i)) % 256)
-		}
+	hash, err := argon2Hasher.Hash(code)
+	if err != nil {
+		// This should never happen, but handle gracefully
+		logrus.Errorf("Failed to hash code: %v", err)
+		return ""
 	}
-	hash := argon2.IDKey([]byte(code), salt, 1, 64*1024, 4, 32)
-	return base64.URLEncoding.EncodeToString(salt) + ":" + base64.URLEncoding.EncodeToString(hash)
+	return hash
 }
 
 func verifyCode(code, hash string) bool {
-	parts := strings.Split(hash, ":")
-	if len(parts) != 2 {
-		return false
-	}
-
-	salt, err := base64.URLEncoding.DecodeString(parts[0])
-	if err != nil {
-		return false
-	}
-
-	expectedHash, err := base64.URLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return false
-	}
-
-	actualHash := argon2.IDKey([]byte(code), salt, 1, 64*1024, 4, 32)
-	return string(actualHash) == string(expectedHash)
+	// secure.Argon2Hasher.Verify uses constant-time comparison internally
+	return argon2Hasher.Verify(hash, code)
 }

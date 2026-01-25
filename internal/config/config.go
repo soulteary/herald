@@ -10,6 +10,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/soulteary/cli-kit/env"
 	"github.com/soulteary/cli-kit/validator"
+	secure "github.com/soulteary/secure-kit"
 )
 
 var (
@@ -169,13 +170,7 @@ func GetPort() string {
 }
 
 func maskSensitive(s string) string {
-	if len(s) == 0 {
-		return ""
-	}
-	if len(s) <= 8 {
-		return "***"
-	}
-	return s[:4] + "***" + s[len(s)-4:]
+	return secure.MaskAPIKey(s)
 }
 
 // parseHMACKeys parses HERALD_HMAC_KEYS JSON string into a map

@@ -2,14 +2,13 @@ package session
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 	rediskitcache "github.com/soulteary/redis-kit/cache"
+	secure "github.com/soulteary/secure-kit"
 )
 
 // Session represents a session object stored in Redis
@@ -158,12 +157,11 @@ func (m *Manager) Refresh(ctx context.Context, sessionID string, ttl time.Durati
 // Helper functions
 
 func generateSessionID() string {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		// Fallback: use current time as seed (not secure, but better than panic)
-		for i := range b {
-			b[i] = byte(int(time.Now().UnixNano()+int64(i)) % 256)
-		}
+	token, err := secure.RandomToken(16)
+	if err != nil {
+		// This should never happen with crypto/rand, but handle gracefully
+		logrus.Errorf("Failed to generate session ID: %v", err)
+		token, _ = secure.RandomHex(16)
 	}
-	return "sess_" + base64.URLEncoding.EncodeToString(b)[:22]
+	return "sess_" + token[:22]
 }
