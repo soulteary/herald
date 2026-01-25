@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"text/template"
+
+	i18n "github.com/soulteary/i18n-kit"
 )
 
 // TemplateData represents the data available in templates
@@ -20,16 +22,68 @@ type TemplateData struct {
 type Manager struct {
 	templates map[string]*template.Template // key: "locale:channel:purpose"
 	dir       string
+	bundle    *i18n.Bundle
+	formatter *i18n.Formatter
 }
 
 // NewManager creates a new template manager
 func NewManager(templateDir string) *Manager {
+	bundle := i18n.NewBundle(i18n.LangEN)
+
 	m := &Manager{
 		templates: make(map[string]*template.Template),
 		dir:       templateDir,
+		bundle:    bundle,
+		formatter: i18n.NewFormatter(bundle),
 	}
+	m.loadTranslations()
 	m.loadTemplates()
 	return m
+}
+
+// loadTranslations loads translations from the locales directory or uses built-in translations
+func (m *Manager) loadTranslations() {
+	// Try to load from locales directory
+	localesDir := "locales"
+	if m.dir != "" {
+		// Check for locales relative to template directory
+		parentDir := filepath.Dir(m.dir)
+		localesDir = filepath.Join(parentDir, "locales")
+	}
+
+	if err := m.bundle.LoadDirectory(localesDir); err != nil {
+		// Fallback to built-in translations if locales directory not found
+		m.loadBuiltInTranslations()
+	}
+}
+
+// loadBuiltInTranslations adds built-in translations as fallback
+func (m *Manager) loadBuiltInTranslations() {
+	// English translations
+	m.bundle.AddTranslations(i18n.LangEN, map[string]string{
+		"purpose.login":           "login",
+		"purpose.reset":           "password reset",
+		"purpose.bind":            "binding",
+		"purpose.stepup":          "step-up authentication",
+		"email.subject":           "Verification Code",
+		"email.body":              "Your verification code is: {code}\n\nThis code will expire in {minutes} minutes.",
+		"email.body_with_purpose": "Your {purpose} verification code is: {code}\n\nThis code will expire in {minutes} minutes.",
+		"sms.body":                "Your verification code is: {code}. Valid for {minutes} minutes.",
+		"sms.body_with_purpose":   "Your {purpose} verification code is: {code}. Valid for {minutes} minutes.",
+	})
+
+	// Chinese translations
+	m.bundle.AddTranslations(i18n.LangZH, map[string]string{
+		"purpose.login":           "登录",
+		"purpose.reset":           "重置密码",
+		"purpose.bind":            "绑定",
+		"purpose.stepup":          "二次验证",
+		"email.subject":           "验证码",
+		"email.body":              "您的验证码是：{code}\n\n此验证码将在 {minutes} 分钟后过期。",
+		"email.body_with_purpose": "您的{purpose}验证码是：{code}\n\n此验证码将在 {minutes} 分钟后过期。",
+		"sms.body":                "您的验证码是：{code}，{minutes}分钟内有效。",
+		"sms.body_with_purpose":   "您的{purpose}验证码是：{code}，{minutes}分钟内有效。",
+	})
 }
 
 // loadTemplates loads templates from the template directory
@@ -149,60 +203,62 @@ func (m *Manager) renderBuiltIn(locale, channel, purpose string, data TemplateDa
 
 // renderEmailBuiltIn renders built-in email templates
 func (m *Manager) renderEmailBuiltIn(locale, purpose string, data TemplateData) (subject, body string) {
-	if strings.HasPrefix(locale, "zh") {
-		subject = "验证码"
-		body = fmt.Sprintf("您的验证码是：%s\n\n此验证码将在 %d 分钟后过期。", data.Code, data.ExpiresIn/60)
-		if purpose != "login" {
-			body = fmt.Sprintf("您的%s验证码是：%s\n\n此验证码将在 %d 分钟后过期。", getPurposeName(locale, purpose), data.Code, data.ExpiresIn/60)
-		}
-	} else {
-		subject = "Verification Code"
-		body = fmt.Sprintf("Your verification code is: %s\n\nThis code will expire in %d minutes.", data.Code, data.ExpiresIn/60)
-		if purpose != "login" {
-			body = fmt.Sprintf("Your %s verification code is: %s\n\nThis code will expire in %d minutes.", getPurposeName(locale, purpose), data.Code, data.ExpiresIn/60)
-		}
+	lang := m.parseLanguage(locale)
+	minutes := data.ExpiresIn / 60
+
+	subject = m.bundle.GetTranslation(lang, "email.subject")
+
+	params := map[string]interface{}{
+		"code":    data.Code,
+		"minutes": minutes,
 	}
+
+	if purpose != "login" {
+		purposeName := m.bundle.GetTranslation(lang, "purpose."+purpose)
+		params["purpose"] = purposeName
+		body = m.formatter.Format(lang, "email.body_with_purpose", params)
+	} else {
+		body = m.formatter.Format(lang, "email.body", params)
+	}
+
 	return subject, body
 }
 
 // renderSMSBuiltIn renders built-in SMS templates
 func (m *Manager) renderSMSBuiltIn(locale, purpose string, data TemplateData) string {
-	if strings.HasPrefix(locale, "zh") {
-		message := fmt.Sprintf("您的验证码是：%s，%d分钟内有效。", data.Code, data.ExpiresIn/60)
-		if purpose != "login" {
-			message = fmt.Sprintf("您的%s验证码是：%s，%d分钟内有效。", getPurposeName(locale, purpose), data.Code, data.ExpiresIn/60)
-		}
-		return message
+	lang := m.parseLanguage(locale)
+	minutes := data.ExpiresIn / 60
+
+	params := map[string]interface{}{
+		"code":    data.Code,
+		"minutes": minutes,
 	}
-	message := fmt.Sprintf("Your verification code is: %s. Valid for %d minutes.", data.Code, data.ExpiresIn/60)
+
 	if purpose != "login" {
-		message = fmt.Sprintf("Your %s verification code is: %s. Valid for %d minutes.", getPurposeName(locale, purpose), data.Code, data.ExpiresIn/60)
+		purposeName := m.bundle.GetTranslation(lang, "purpose."+purpose)
+		params["purpose"] = purposeName
+		return m.formatter.Format(lang, "sms.body_with_purpose", params)
 	}
-	return message
+
+	return m.formatter.Format(lang, "sms.body", params)
 }
 
-// getPurposeName returns the localized name for a purpose
-func getPurposeName(locale, purpose string) string {
-	if strings.HasPrefix(locale, "zh") {
-		switch purpose {
-		case "reset":
-			return "重置密码"
-		case "bind":
-			return "绑定"
-		case "stepup":
-			return "二次验证"
-		default:
-			return "登录"
-		}
+// parseLanguage parses a locale string to i18n.Language
+func (m *Manager) parseLanguage(locale string) i18n.Language {
+	lang, ok := i18n.ParseLanguage(locale)
+	if !ok {
+		return i18n.LangEN
 	}
-	switch purpose {
-	case "reset":
-		return "password reset"
-	case "bind":
-		return "binding"
-	case "stepup":
-		return "step-up authentication"
-	default:
-		return "login"
-	}
+	return lang
+}
+
+// GetPurposeName returns the localized name for a purpose
+func (m *Manager) GetPurposeName(locale, purpose string) string {
+	lang := m.parseLanguage(locale)
+	return m.bundle.GetTranslation(lang, "purpose."+purpose)
+}
+
+// GetBundle returns the i18n bundle for external use
+func (m *Manager) GetBundle() *i18n.Bundle {
+	return m.bundle
 }
