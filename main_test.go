@@ -64,9 +64,9 @@ func TestLoggerKitParseLevelFromEnv(t *testing.T) {
 			// Test ParseLevel from logger-kit
 			parsed, err := logger.ParseLevel(tt.level)
 
-			// For invalid/empty levels, ParseLevel returns an error
-			// Use default level (InfoLevel) when there's an error
-			if err != nil {
+			// For invalid/empty levels, ParseLevel returns an error or NoLevel
+			// Use default level (InfoLevel) when there's an error or NoLevel
+			if err != nil || parsed == logger.NoLevel {
 				parsed = logger.InfoLevel
 			}
 
