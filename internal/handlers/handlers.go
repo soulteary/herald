@@ -8,7 +8,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/redis/go-redis/v9"
-	"github.com/sirupsen/logrus"
+	logger "github.com/soulteary/logger-kit"
 	rediskitcache "github.com/soulteary/redis-kit/cache"
 	secure "github.com/soulteary/secure-kit"
 	"go.opentelemetry.io/otel/attribute"
@@ -35,6 +35,7 @@ type Handlers struct {
 	testCodeCache    rediskitcache.Cache // For test mode code storage
 	idempotencyCache rediskitcache.Cache // For idempotency key storage
 	sessionManager   *session.Manager    // Optional: nil if session storage is disabled
+	log              *logger.Logger
 }
 
 // StopAuditWriter stops the audit writer gracefully
@@ -43,13 +44,14 @@ func (h *Handlers) StopAuditWriter() error {
 }
 
 // NewHandlers creates a new handlers instance
-func NewHandlers(redisClient *redis.Client, sessionManager *session.Manager) *Handlers {
+func NewHandlers(redisClient *redis.Client, sessionManager *session.Manager, log *logger.Logger) *Handlers {
 	challengeMgr := challenge.NewManager(
 		redisClient,
 		config.ChallengeExpiry,
 		config.MaxAttempts,
 		config.LockoutDuration,
 		config.CodeLength,
+		log,
 	)
 
 	rateLimitMgr := ratelimit.NewManager(redisClient)
@@ -67,9 +69,9 @@ func NewHandlers(redisClient *redis.Client, sessionManager *session.Manager) *Ha
 	if config.SMTPHost != "" {
 		smtpProvider := provider.NewSMTPProvider()
 		if err := registry.Register(smtpProvider); err != nil {
-			logrus.Warnf("Failed to register SMTP provider: %v", err)
+			log.Warn().Err(err).Msg("Failed to register SMTP provider")
 		} else {
-			logrus.Info("SMTP provider registered")
+			log.Info().Msg("SMTP provider registered")
 		}
 	}
 
@@ -77,9 +79,9 @@ func NewHandlers(redisClient *redis.Client, sessionManager *session.Manager) *Ha
 	if config.SMSProvider != "" {
 		smsProvider := provider.NewSMSProvider()
 		if err := registry.Register(smsProvider); err != nil {
-			logrus.Warnf("Failed to register SMS provider: %v", err)
+			log.Warn().Err(err).Msg("Failed to register SMS provider")
 		} else {
-			logrus.Info("SMS provider registered")
+			log.Info().Msg("SMS provider registered")
 		}
 	}
 
@@ -98,6 +100,7 @@ func NewHandlers(redisClient *redis.Client, sessionManager *session.Manager) *Ha
 		testCodeCache:    testCodeCache,
 		idempotencyCache: idempotencyCache,
 		sessionManager:   sessionManager,
+		log:              log,
 	}
 }
 
@@ -218,7 +221,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		spanCtx, req.UserID, config.RateLimitPerUser, time.Hour,
 	)
 	if err != nil {
-		logrus.Errorf("Rate limit check failed: %v", err)
+		h.log.Error().Err(err).Msg("Rate limit check failed")
 	}
 	if !allowed {
 		metrics.RecordRateLimitHit("user")
@@ -233,7 +236,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		spanCtx, clientIP, config.RateLimitPerIP, time.Minute,
 	)
 	if err != nil {
-		logrus.Errorf("Rate limit check failed: %v", err)
+		h.log.Error().Err(err).Msg("Rate limit check failed")
 	}
 	if !allowed {
 		metrics.RecordRateLimitHit("ip")
@@ -248,7 +251,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		spanCtx, req.Destination, config.RateLimitPerDestination, time.Hour,
 	)
 	if err != nil {
-		logrus.Errorf("Rate limit check failed: %v", err)
+		h.log.Error().Err(err).Msg("Rate limit check failed")
 	}
 	if !allowed {
 		metrics.RecordRateLimitHit("destination")
@@ -262,7 +265,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 	cooldownKey := fmt.Sprintf("%s:%s", req.UserID, req.Destination)
 	allowed, _, err = h.rateLimitManager.CheckResendCooldown(spanCtx, cooldownKey, config.ResendCooldown)
 	if err != nil {
-		logrus.Errorf("Cooldown check failed: %v", err)
+		h.log.Error().Err(err).Msg("Cooldown check failed")
 	}
 	if !allowed {
 		metrics.RecordRateLimitHit("resend_cooldown")
@@ -286,7 +289,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 	)
 	if err != nil {
 		tracing.RecordError(span, err)
-		logrus.Errorf("Failed to create challenge: %v", err)
+		h.log.Error().Err(err).Msg("Failed to create challenge")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "internal_error",
@@ -308,7 +311,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 	// Store code in test mode (for integration testing only)
 	if config.TestMode {
 		if err := h.testCodeCache.Set(spanCtx, ch.ID, code, config.ChallengeExpiry); err != nil {
-			logrus.Warnf("Failed to store test code: %v", err)
+			h.log.Warn().Err(err).Msg("Failed to store test code")
 		}
 	}
 
@@ -371,7 +374,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		tracing.RecordError(providerSpan, err)
 		providerSpan.End()
 		sendDuration := time.Since(sendStart)
-		logrus.Errorf("Failed to send verification code via provider: %v", err)
+		h.log.Error().Err(err).Msg("Failed to send verification code via provider")
 
 		// Metrics: send failed
 		metrics.RecordOTPSend(req.Channel, providerName, "failure", sendDuration)
@@ -427,7 +430,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 			CreatedAt:    time.Now().Unix(),
 		}
 		if err := h.idempotencyCache.Set(spanCtx, idempotencyKey, idempotencyRecord, config.IdempotencyKeyTTL); err != nil {
-			logrus.Warnf("Failed to store idempotency record: %v", err)
+			h.log.Warn().Err(err).Msg("Failed to store idempotency record")
 		}
 	}
 
@@ -506,7 +509,7 @@ func (h *Handlers) VerifyChallenge(c *fiber.Ctx) error {
 	valid, ch, err := h.challengeManager.VerifyChallenge(verifyCtx, req.ChallengeID, req.Code, req.ClientIP)
 	if err != nil {
 		tracing.RecordError(verifySpan, err)
-		logrus.Debugf("Challenge verification failed: %v", err)
+		h.log.Debug().Err(err).Msg("Challenge verification failed")
 
 		// Determine error reason
 		reason := "verification_failed"

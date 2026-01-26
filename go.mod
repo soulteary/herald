@@ -6,13 +6,12 @@ require (
 	github.com/gofiber/fiber/v2 v2.52.10
 	github.com/prometheus/client_model v0.6.2
 	github.com/redis/go-redis/v9 v9.17.2
-	github.com/rs/zerolog v1.34.0
-	github.com/sirupsen/logrus v1.9.4
 	github.com/soulteary/audit-kit v1.0.0
 	github.com/soulteary/cli-kit v1.0.0
 	github.com/soulteary/health-kit v1.0.0
 	github.com/soulteary/http-kit v1.0.0
 	github.com/soulteary/i18n-kit v1.0.0
+	github.com/soulteary/logger-kit v1.0.0
 	github.com/soulteary/metrics-kit v1.0.0
 	github.com/soulteary/middleware-kit v1.0.0
 	github.com/soulteary/redis-kit v1.0.0
@@ -48,6 +47,7 @@ require (
 	github.com/prometheus/client_golang v1.23.2 // indirect
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.19.2 // indirect
+	github.com/rs/zerolog v1.34.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.69.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect

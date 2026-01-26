@@ -6,25 +6,33 @@ import (
 	"crypto/x509"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	logger "github.com/soulteary/logger-kit"
+
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/router"
 	rediskit "github.com/soulteary/redis-kit/client"
 	"github.com/soulteary/tracing-kit"
 )
 
-func main() {
-	// Initialize configuration
-	if err := config.Initialize(); err != nil {
-		logrus.Fatalf("Failed to initialize configuration: %v", err)
-	}
+// log is the global logger instance
+var log *logger.Logger
 
-	// Set log level
-	setLogLevel(config.LogLevel)
+func main() {
+	// Initialize logger using logger-kit
+	log = logger.New(logger.Config{
+		Level:          logger.ParseLevelFromEnv("LOG_LEVEL", logger.InfoLevel),
+		Format:         logger.FormatJSON,
+		ServiceName:    config.ServiceName,
+		ServiceVersion: config.Version,
+	})
+
+	// Initialize configuration
+	if err := config.Initialize(log); err != nil {
+		log.Fatal().Err(err).Msg("Failed to initialize configuration")
+	}
 
 	// Initialize OpenTelemetry tracing if enabled
 	if config.OTLPEnabled {
@@ -34,9 +42,9 @@ func main() {
 			config.OTLPEndpoint,
 		)
 		if err != nil {
-			logrus.Warnf("Failed to initialize OpenTelemetry tracing: %v", err)
+			log.Warn().Err(err).Msg("Failed to initialize OpenTelemetry tracing")
 		} else {
-			logrus.Info("OpenTelemetry tracing initialized")
+			log.Info().Msg("OpenTelemetry tracing initialized")
 			// Setup graceful shutdown for tracer
 			go func() {
 				sigChan := make(chan os.Signal, 1)
@@ -45,7 +53,7 @@ func main() {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
 				if err := tracing.Shutdown(ctx); err != nil {
-					logrus.Errorf("Failed to shutdown tracer: %v", err)
+					log.Error().Err(err).Msg("Failed to shutdown tracer")
 				}
 			}()
 		}
@@ -59,22 +67,22 @@ func main() {
 
 	redisClient, err := rediskit.NewClient(cfg)
 	if err != nil {
-		logrus.Fatalf("Failed to connect to Redis: %v", err)
+		log.Fatal().Err(err).Msg("Failed to connect to Redis")
 	}
 
 	// Create and start server
-	routerWithHandlers := router.NewRouterWithClientAndHandlers(redisClient)
+	routerWithHandlers := router.NewRouterWithClientAndHandlers(redisClient, log)
 	app := routerWithHandlers.App
 	port := config.GetPort()
 
 	// Check if TLS is configured
 	if config.TLSCertFile != "" && config.TLSKeyFile != "" {
-		logrus.Infof("Herald service starting with TLS on port %s", port)
+		log.Info().Str("port", port).Msg("Herald service starting with TLS")
 
 		// Load server certificate
 		cert, err := tls.LoadX509KeyPair(config.TLSCertFile, config.TLSKeyFile)
 		if err != nil {
-			logrus.Fatalf("Failed to load TLS certificate: %v", err)
+			log.Fatal().Err(err).Msg("Failed to load TLS certificate")
 		}
 
 		// Configure TLS
@@ -85,17 +93,17 @@ func main() {
 
 		// Configure mTLS if CA certificate is provided
 		if config.TLSCACertFile != "" {
-			logrus.Info("mTLS enabled: client certificate verification required")
+			log.Info().Msg("mTLS enabled: client certificate verification required")
 
 			// Load CA certificate for client verification
 			caCert, err := os.ReadFile(config.TLSCACertFile)
 			if err != nil {
-				logrus.Fatalf("Failed to read CA certificate: %v", err)
+				log.Fatal().Err(err).Msg("Failed to read CA certificate")
 			}
 
 			caCertPool := x509.NewCertPool()
 			if !caCertPool.AppendCertsFromPEM(caCert) {
-				logrus.Fatalf("Failed to parse CA certificate")
+				log.Fatal().Msg("Failed to parse CA certificate")
 			}
 
 			tlsConfig.ClientCAs = caCertPool
@@ -106,7 +114,7 @@ func main() {
 		// Start server with TLS
 		ln, err := tls.Listen("tcp", port, tlsConfig)
 		if err != nil {
-			logrus.Fatalf("Failed to start TLS listener: %v", err)
+			log.Fatal().Err(err).Msg("Failed to start TLS listener")
 		}
 
 		// Setup graceful shutdown
@@ -122,15 +130,15 @@ func main() {
 		select {
 		case err := <-serverErr:
 			if err != nil {
-				logrus.Fatalf("Failed to start server: %v", err)
+				log.Fatal().Err(err).Msg("Failed to start server")
 			}
 		case sig := <-sigChan:
-			logrus.Infof("Received signal: %v, shutting down gracefully...", sig)
+			log.Info().Str("signal", sig.String()).Msg("Received signal, shutting down gracefully...")
 
 			// Shutdown audit writer
 			if routerWithHandlers.Handlers != nil {
 				if err := routerWithHandlers.Handlers.StopAuditWriter(); err != nil {
-					logrus.Errorf("Failed to shutdown audit writer: %v", err)
+					log.Error().Err(err).Msg("Failed to shutdown audit writer")
 				}
 			}
 
@@ -139,14 +147,14 @@ func main() {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
 				if err := tracing.Shutdown(ctx); err != nil {
-					logrus.Errorf("Failed to shutdown tracer: %v", err)
+					log.Error().Err(err).Msg("Failed to shutdown tracer")
 				}
 			}
 
-			logrus.Info("Herald service stopped")
+			log.Info().Msg("Herald service stopped")
 		}
 	} else {
-		logrus.Infof("Herald service starting on port %s", port)
+		log.Info().Str("port", port).Msg("Herald service starting")
 
 		// Setup graceful shutdown
 		sigChan := make(chan os.Signal, 1)
@@ -161,15 +169,15 @@ func main() {
 		select {
 		case err := <-serverErr:
 			if err != nil {
-				logrus.Fatalf("Failed to start server: %v", err)
+				log.Fatal().Err(err).Msg("Failed to start server")
 			}
 		case sig := <-sigChan:
-			logrus.Infof("Received signal: %v, shutting down gracefully...", sig)
+			log.Info().Str("signal", sig.String()).Msg("Received signal, shutting down gracefully...")
 
 			// Shutdown audit writer
 			if routerWithHandlers.Handlers != nil {
 				if err := routerWithHandlers.Handlers.StopAuditWriter(); err != nil {
-					logrus.Errorf("Failed to shutdown audit writer: %v", err)
+					log.Error().Err(err).Msg("Failed to shutdown audit writer")
 				}
 			}
 
@@ -178,33 +186,11 @@ func main() {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
 				if err := tracing.Shutdown(ctx); err != nil {
-					logrus.Errorf("Failed to shutdown tracer: %v", err)
+					log.Error().Err(err).Msg("Failed to shutdown tracer")
 				}
 			}
 
-			logrus.Info("Herald service stopped")
+			log.Info().Msg("Herald service stopped")
 		}
-	}
-}
-
-// setLogLevel sets the log level based on configuration
-func setLogLevel(level string) {
-	switch strings.ToLower(level) {
-	case "trace":
-		logrus.SetLevel(logrus.TraceLevel)
-	case "debug":
-		logrus.SetLevel(logrus.DebugLevel)
-	case "info":
-		logrus.SetLevel(logrus.InfoLevel)
-	case "warn", "warning":
-		logrus.SetLevel(logrus.WarnLevel)
-	case "error":
-		logrus.SetLevel(logrus.ErrorLevel)
-	case "fatal":
-		logrus.SetLevel(logrus.FatalLevel)
-	case "panic":
-		logrus.SetLevel(logrus.PanicLevel)
-	default:
-		logrus.SetLevel(logrus.InfoLevel)
 	}
 }

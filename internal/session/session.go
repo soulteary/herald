@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/sirupsen/logrus"
+	logger "github.com/soulteary/logger-kit"
 	rediskitcache "github.com/soulteary/redis-kit/cache"
 	secure "github.com/soulteary/secure-kit"
 )
@@ -23,14 +23,16 @@ type Session struct {
 type Manager struct {
 	cache      rediskitcache.Cache
 	defaultTTL time.Duration
+	log        *logger.Logger
 }
 
 // NewManager creates a new session manager
-func NewManager(redisClient *redis.Client, keyPrefix string, defaultTTL time.Duration) *Manager {
+func NewManager(redisClient *redis.Client, keyPrefix string, defaultTTL time.Duration, log *logger.Logger) *Manager {
 	cache := rediskitcache.NewCache(redisClient, keyPrefix)
 	return &Manager{
 		cache:      cache,
 		defaultTTL: defaultTTL,
+		log:        log,
 	}
 }
 
@@ -58,7 +60,7 @@ func (m *Manager) Create(ctx context.Context, data map[string]interface{}, ttl t
 		return "", fmt.Errorf("failed to store session: %w", err)
 	}
 
-	logrus.Debugf("Session created: %s (TTL: %v)", sessionID, ttl)
+	m.log.Debug().Str("session_id", sessionID).Dur("ttl", ttl).Msg("Session created")
 	return sessionID, nil
 }
 
@@ -111,7 +113,7 @@ func (m *Manager) Set(ctx context.Context, sessionID string, data map[string]int
 		return fmt.Errorf("failed to update session: %w", err)
 	}
 
-	logrus.Debugf("Session updated: %s (TTL: %v)", sessionID, ttl)
+	m.log.Debug().Str("session_id", sessionID).Dur("ttl", ttl).Msg("Session updated")
 	return nil
 }
 
@@ -120,7 +122,7 @@ func (m *Manager) Delete(ctx context.Context, sessionID string) error {
 	if err := m.cache.Del(ctx, sessionID); err != nil {
 		return fmt.Errorf("failed to delete session: %w", err)
 	}
-	logrus.Debugf("Session deleted: %s", sessionID)
+	m.log.Debug().Str("session_id", sessionID).Msg("Session deleted")
 	return nil
 }
 
@@ -150,7 +152,7 @@ func (m *Manager) Refresh(ctx context.Context, sessionID string, ttl time.Durati
 		return fmt.Errorf("failed to refresh session: %w", err)
 	}
 
-	logrus.Debugf("Session refreshed: %s (new TTL: %v)", sessionID, ttl)
+	m.log.Debug().Str("session_id", sessionID).Dur("ttl", ttl).Msg("Session refreshed")
 	return nil
 }
 
@@ -160,7 +162,7 @@ func generateSessionID() string {
 	token, err := secure.RandomToken(16)
 	if err != nil {
 		// This should never happen with crypto/rand, but handle gracefully
-		logrus.Errorf("Failed to generate session ID: %v", err)
+		// Use fallback without logging since we don't have logger instance here
 		token, _ = secure.RandomHex(16)
 	}
 	return "sess_" + token[:22]

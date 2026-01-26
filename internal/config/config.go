@@ -7,11 +7,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/soulteary/cli-kit/env"
 	"github.com/soulteary/cli-kit/validator"
+	logger "github.com/soulteary/logger-kit"
 	secure "github.com/soulteary/secure-kit"
 )
+
+// log is the package-level logger, initialized in Initialize
+var log *logger.Logger
 
 var (
 	// Version is set at build time
@@ -105,14 +108,16 @@ var (
 )
 
 // Initialize validates and initializes configuration
-func Initialize() error {
+func Initialize(l *logger.Logger) error {
+	log = l
+
 	// Validate required configs
 	if RedisAddr == "" {
-		logrus.Warn("REDIS_ADDR is not set, using default: localhost:6379")
+		log.Warn().Msg("REDIS_ADDR is not set, using default: localhost:6379")
 	} else {
 		// Validate Redis address format using cli-kit validator
 		if _, _, err := validator.ValidateHostPort(RedisAddr); err != nil {
-			logrus.Warnf("Invalid REDIS_ADDR format: %s (%v), using default: localhost:6379", RedisAddr, err)
+			log.Warn().Str("addr", RedisAddr).Err(err).Msg("Invalid REDIS_ADDR format, using default: localhost:6379")
 			RedisAddr = "localhost:6379"
 		}
 	}
@@ -120,9 +125,9 @@ func Initialize() error {
 	// Parse HMAC keys if provided
 	if HMACKeysJSON != "" {
 		if err := parseHMACKeys(); err != nil {
-			logrus.Warnf("Failed to parse HERALD_HMAC_KEYS: %v, falling back to HMAC_SECRET", err)
+			log.Warn().Err(err).Msg("Failed to parse HERALD_HMAC_KEYS, falling back to HMAC_SECRET")
 		} else {
-			logrus.Infof("HMAC keys loaded: %d key(s) configured", len(hmacKeysMap))
+			log.Info().Int("count", len(hmacKeysMap)).Msg("HMAC keys loaded")
 			// Set default key ID to first key if available
 			for keyID := range hmacKeysMap {
 				hmacDefaultKeyID = keyID
@@ -132,7 +137,7 @@ func Initialize() error {
 	}
 
 	if APIKey == "" && HMACSecret == "" && len(hmacKeysMap) == 0 {
-		logrus.Warn("Neither API_KEY nor HMAC_SECRET/HERALD_HMAC_KEYS is set, service-to-service authentication will be disabled")
+		log.Warn().Msg("Neither API_KEY nor HMAC_SECRET/HERALD_HMAC_KEYS is set, service-to-service authentication will be disabled")
 	}
 
 	// Handle TLS_CA_CERT_FILE alias
@@ -146,18 +151,16 @@ func Initialize() error {
 	}
 
 	// Log configuration (excluding sensitive data)
-	logrus.Infof("Configuration initialized:")
-	logrus.Infof("  Port: %s", Port)
-	logrus.Infof("  Redis: %s (DB: %d)", maskSensitive(RedisAddr), RedisDB)
-	logrus.Infof("  Log Level: %s", LogLevel)
-	logrus.Infof("  Challenge Expiry: %v", ChallengeExpiry)
-	logrus.Infof("  Max Attempts: %d", MaxAttempts)
-	logrus.Infof("  Code Length: %d", CodeLength)
-	if SessionStorageEnabled {
-		logrus.Infof("  Session Storage: enabled (TTL: %v, Prefix: %s)", SessionDefaultTTL, SessionKeyPrefix)
-	} else {
-		logrus.Infof("  Session Storage: disabled")
-	}
+	log.Info().
+		Str("port", Port).
+		Str("redis", maskSensitive(RedisAddr)).
+		Int("redis_db", RedisDB).
+		Str("log_level", LogLevel).
+		Dur("challenge_expiry", ChallengeExpiry).
+		Int("max_attempts", MaxAttempts).
+		Int("code_length", CodeLength).
+		Bool("session_storage", SessionStorageEnabled).
+		Msg("Configuration initialized")
 
 	return nil
 }
@@ -184,14 +187,18 @@ func parseHMACKeys() error {
 		}
 
 		if err := json.Unmarshal([]byte(HMACKeysJSON), &hmacKeysMap); err != nil {
-			logrus.Errorf("Failed to parse HERALD_HMAC_KEYS JSON: %v", err)
+			if log != nil {
+				log.Error().Err(err).Msg("Failed to parse HERALD_HMAC_KEYS JSON")
+			}
 			hmacKeysMap = nil
 			parseErr = fmt.Errorf("failed to parse HMAC keys JSON: %w", err)
 			return
 		}
 
 		if len(hmacKeysMap) == 0 {
-			logrus.Warn("HERALD_HMAC_KEYS is empty or contains no keys")
+			if log != nil {
+				log.Warn().Msg("HERALD_HMAC_KEYS is empty or contains no keys")
+			}
 			hmacKeysMap = nil
 			parseErr = fmt.Errorf("HERALD_HMAC_KEYS contains no keys")
 			return
@@ -227,7 +234,9 @@ func GetHMACSecret(keyID string) string {
 			return secret
 		}
 		// Key ID not found, return empty (will fail authentication)
-		logrus.Debugf("HMAC key ID '%s' not found in configured keys", keyID)
+		if log != nil {
+			log.Debug().Str("key_id", keyID).Msg("HMAC key ID not found in configured keys")
+		}
 		return ""
 	}
 

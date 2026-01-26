@@ -7,8 +7,18 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	logger "github.com/soulteary/logger-kit"
+
 	"github.com/soulteary/herald/internal/testutil"
 )
+
+// testLogger returns a logger for testing (disabled output)
+func testLogger() *logger.Logger {
+	return logger.New(logger.Config{
+		Level:  logger.ErrorLevel, // Only log errors during tests
+		Format: logger.FormatJSON,
+	})
+}
 
 // testRedisClient returns a mock Redis client for testing
 func testRedisClient(t *testing.T) *redis.Client {
@@ -27,7 +37,7 @@ func TestNewManager(t *testing.T) {
 	lockoutDuration := 10 * time.Minute
 	codeLength := 6
 
-	manager := NewManager(redisClient, expiry, maxAttempts, lockoutDuration, codeLength)
+	manager := NewManager(redisClient, expiry, maxAttempts, lockoutDuration, codeLength, testLogger())
 
 	if manager == nil {
 		t.Fatal("NewManager() returned nil")
@@ -52,7 +62,7 @@ func TestManager_CreateChallenge(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6)
+	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6, testLogger())
 
 	ctx := context.Background()
 	userID := "user123"
@@ -117,7 +127,7 @@ func TestManager_VerifyChallenge(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6)
+	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6, testLogger())
 
 	ctx := context.Background()
 	userID := "user123"
@@ -164,7 +174,7 @@ func TestManager_VerifyChallenge_InvalidCode(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6)
+	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6, testLogger())
 
 	ctx := context.Background()
 	userID := "user123"
@@ -204,7 +214,7 @@ func TestManager_VerifyChallenge_TTLExpired(t *testing.T) {
 	}()
 
 	// Use very short expiry for testing
-	manager := NewManager(redisClient, 1*time.Millisecond, 5, 10*time.Minute, 6)
+	manager := NewManager(redisClient, 1*time.Millisecond, 5, 10*time.Minute, 6, testLogger())
 
 	ctx := context.Background()
 	userID := "user123"
@@ -239,7 +249,7 @@ func TestManager_VerifyChallenge_Expired(t *testing.T) {
 	}()
 
 	// Use very short expiry for testing
-	manager := NewManager(redisClient, 1*time.Millisecond, 5, 10*time.Minute, 6)
+	manager := NewManager(redisClient, 1*time.Millisecond, 5, 10*time.Minute, 6, testLogger())
 
 	ctx := context.Background()
 	userID := "user123"
@@ -274,7 +284,7 @@ func TestManager_VerifyChallenge_UserLockedBeforeVerify(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6)
+	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6, testLogger())
 
 	ctx := context.Background()
 	userID := "user123"
@@ -309,7 +319,7 @@ func TestManager_VerifyChallenge_TTLError(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6)
+	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6, testLogger())
 
 	ctx := context.Background()
 	userID := "user123"
@@ -341,7 +351,7 @@ func TestManager_VerifyChallenge_MaxAttempts(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, 5*time.Minute, 3, 10*time.Minute, 6)
+	manager := NewManager(redisClient, 5*time.Minute, 3, 10*time.Minute, 6, testLogger())
 
 	ctx := context.Background()
 	userID := "user123"
@@ -387,7 +397,7 @@ func TestManager_GetChallenge(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6)
+	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6, testLogger())
 
 	ctx := context.Background()
 	userID := "user123"
@@ -427,7 +437,7 @@ func TestManager_GetChallenge_NotFound(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6)
+	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6, testLogger())
 
 	ctx := context.Background()
 
@@ -444,7 +454,7 @@ func TestManager_RevokeChallenge(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6)
+	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6, testLogger())
 
 	ctx := context.Background()
 	userID := "user123"
@@ -479,7 +489,7 @@ func TestManager_IsUserLocked(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, 5*time.Minute, 3, 10*time.Minute, 6)
+	manager := NewManager(redisClient, 5*time.Minute, 3, 10*time.Minute, 6, testLogger())
 
 	ctx := context.Background()
 	userID := "user123"
@@ -584,7 +594,7 @@ func TestManager_GetCodeForTesting(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6)
+	manager := NewManager(redisClient, 5*time.Minute, 5, 10*time.Minute, 6, testLogger())
 
 	ctx := context.Background()
 

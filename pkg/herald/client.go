@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	httpkit "github.com/soulteary/http-kit"
 )
 
@@ -174,7 +173,6 @@ func NewClient(opts *Options) (*Client, error) {
 		service:    opts.Service,
 	}
 
-	logrus.Debugf("Herald client created: URL=%s", opts.BaseURL)
 	return client, nil
 }
 

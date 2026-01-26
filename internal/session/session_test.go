@@ -6,8 +6,18 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	logger "github.com/soulteary/logger-kit"
+
 	"github.com/soulteary/herald/internal/testutil"
 )
+
+// testLogger returns a logger for testing (disabled output)
+func testLogger() *logger.Logger {
+	return logger.New(logger.Config{
+		Level:  logger.ErrorLevel, // Only log errors during tests
+		Format: logger.FormatJSON,
+	})
+}
 
 // testRedisClient returns a mock Redis client for testing
 func testRedisClient(t *testing.T) *redis.Client {
@@ -25,7 +35,7 @@ func TestNewManager(t *testing.T) {
 	keyPrefix := "test_session:"
 	defaultTTL := 1 * time.Hour
 
-	manager := NewManager(redisClient, keyPrefix, defaultTTL)
+	manager := NewManager(redisClient, keyPrefix, defaultTTL, testLogger())
 
 	if manager == nil {
 		t.Fatal("NewManager() returned nil")
@@ -44,7 +54,7 @@ func TestManager_Create(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, "test_session:", 1*time.Hour)
+	manager := NewManager(redisClient, "test_session:", 1*time.Hour, testLogger())
 
 	ctx := context.Background()
 	data := map[string]interface{}{
@@ -78,7 +88,7 @@ func TestManager_Create_WithCustomTTL(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, "test_session:", 1*time.Hour)
+	manager := NewManager(redisClient, "test_session:", 1*time.Hour, testLogger())
 
 	ctx := context.Background()
 	data := map[string]interface{}{
@@ -105,7 +115,7 @@ func TestManager_Get(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, "test_session:", 1*time.Hour)
+	manager := NewManager(redisClient, "test_session:", 1*time.Hour, testLogger())
 
 	ctx := context.Background()
 	data := map[string]interface{}{
@@ -147,7 +157,7 @@ func TestManager_Get_NotFound(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, "test_session:", 1*time.Hour)
+	manager := NewManager(redisClient, "test_session:", 1*time.Hour, testLogger())
 
 	ctx := context.Background()
 	_, err := manager.Get(ctx, "nonexistent_session_id")
@@ -162,7 +172,7 @@ func TestManager_Set(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, "test_session:", 1*time.Hour)
+	manager := NewManager(redisClient, "test_session:", 1*time.Hour, testLogger())
 
 	ctx := context.Background()
 	initialData := map[string]interface{}{
@@ -206,7 +216,7 @@ func TestManager_Set_WithCustomTTL(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, "test_session:", 1*time.Hour)
+	manager := NewManager(redisClient, "test_session:", 1*time.Hour, testLogger())
 
 	ctx := context.Background()
 	data := map[string]interface{}{
@@ -239,7 +249,7 @@ func TestManager_Delete(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, "test_session:", 1*time.Hour)
+	manager := NewManager(redisClient, "test_session:", 1*time.Hour, testLogger())
 
 	ctx := context.Background()
 	data := map[string]interface{}{
@@ -282,7 +292,7 @@ func TestManager_Exists(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, "test_session:", 1*time.Hour)
+	manager := NewManager(redisClient, "test_session:", 1*time.Hour, testLogger())
 
 	ctx := context.Background()
 	data := map[string]interface{}{
@@ -319,7 +329,7 @@ func TestManager_Refresh(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, "test_session:", 1*time.Hour)
+	manager := NewManager(redisClient, "test_session:", 1*time.Hour, testLogger())
 
 	ctx := context.Background()
 	data := map[string]interface{}{
@@ -362,7 +372,7 @@ func TestManager_Refresh_NotFound(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, "test_session:", 1*time.Hour)
+	manager := NewManager(redisClient, "test_session:", 1*time.Hour, testLogger())
 
 	ctx := context.Background()
 	err := manager.Refresh(ctx, "nonexistent_session_id", 1*time.Hour)
@@ -377,7 +387,7 @@ func TestManager_Get_Expired(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, "test_session:", 1*time.Hour)
+	manager := NewManager(redisClient, "test_session:", 1*time.Hour, testLogger())
 
 	ctx := context.Background()
 	data := map[string]interface{}{
@@ -406,7 +416,7 @@ func TestManager_ConcurrentAccess(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, "test_session:", 1*time.Hour)
+	manager := NewManager(redisClient, "test_session:", 1*time.Hour, testLogger())
 
 	ctx := context.Background()
 	data := map[string]interface{}{
@@ -445,7 +455,7 @@ func TestManager_Get_ExpiredByExpiresAt(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, "test_session:", 1*time.Hour)
+	manager := NewManager(redisClient, "test_session:", 1*time.Hour, testLogger())
 
 	ctx := context.Background()
 	data := map[string]interface{}{
@@ -485,7 +495,7 @@ func TestManager_Get_ExpiredSession(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, "test_session:", 1*time.Hour)
+	manager := NewManager(redisClient, "test_session:", 1*time.Hour, testLogger())
 
 	ctx := context.Background()
 	data := map[string]interface{}{
@@ -514,7 +524,7 @@ func TestManager_Set_NotFound(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, "test_session:", 1*time.Hour)
+	manager := NewManager(redisClient, "test_session:", 1*time.Hour, testLogger())
 
 	ctx := context.Background()
 	data := map[string]interface{}{
@@ -533,7 +543,7 @@ func TestManager_Set_WithZeroTTL(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, "test_session:", 1*time.Hour)
+	manager := NewManager(redisClient, "test_session:", 1*time.Hour, testLogger())
 
 	ctx := context.Background()
 	data := map[string]interface{}{
@@ -575,7 +585,7 @@ func TestManager_Set_WithZeroTTL_NoRemainingTTL(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	manager := NewManager(redisClient, "test_session:", 1*time.Hour)
+	manager := NewManager(redisClient, "test_session:", 1*time.Hour, testLogger())
 
 	ctx := context.Background()
 	data := map[string]interface{}{
