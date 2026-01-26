@@ -10,6 +10,7 @@ import (
 	"time"
 
 	logger "github.com/soulteary/logger-kit"
+	version "github.com/soulteary/version-kit"
 
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/router"
@@ -26,7 +27,7 @@ func main() {
 		Level:          logger.ParseLevelFromEnv("LOG_LEVEL", logger.InfoLevel),
 		Format:         logger.FormatJSON,
 		ServiceName:    config.ServiceName,
-		ServiceVersion: config.Version,
+		ServiceVersion: version.Version,
 	})
 
 	// Initialize configuration
@@ -38,7 +39,7 @@ func main() {
 	if config.OTLPEnabled {
 		_, err := tracing.InitTracer(
 			config.ServiceName,
-			config.Version,
+			version.Version,
 			config.OTLPEndpoint,
 		)
 		if err != nil {

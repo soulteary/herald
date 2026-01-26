@@ -17,9 +17,6 @@ import (
 var log *logger.Logger
 
 var (
-	// Version is set at build time
-	Version = "dev"
-
 	// Server config
 	Port = env.Get("PORT", ":8082")
 
