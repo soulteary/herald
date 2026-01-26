@@ -255,7 +255,9 @@ jobs:
       - name: Build project
         run: |
           VERSION=${{ steps.version.outputs.version }}
-          LDFLAGS="-s -w -X github.com/soulteary/herald/internal/config.Version=${VERSION}"
+          COMMIT=${{ github.sha }}
+          BUILD_DATE=$(date +%FT%T%z)
+          LDFLAGS="-s -w -X 'github.com/soulteary/version-kit.Version=${VERSION}' -X 'github.com/soulteary/version-kit.Commit=${COMMIT}' -X 'github.com/soulteary/version-kit.BuildDate=${BUILD_DATE}'"
           CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o herald${{ matrix.os == 'windows-latest' && '.exe' || '' }} ./main.go
 
       - name: Verify build artifacts

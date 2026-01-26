@@ -108,6 +108,8 @@ github.com/soulteary/secure-kit v1.0.0 h1:CTcPVbkxEod0jawefqChrgjh/JxCO9DiHsoBbF
 github.com/soulteary/secure-kit v1.0.0/go.mod h1:ZXtNJW6nX3w7d+qW9aKRJXYeIzLAJINkvbkPbV4GZsw=
 github.com/soulteary/tracing-kit v1.0.0 h1:GCplc9+yKgHK6ubsgtXGp7PA5DVMT+d5Cnj3NZo1IsQ=
 github.com/soulteary/tracing-kit v1.0.0/go.mod h1:gYw/iBOq0hFtBFzkq+upnrFN7iAfjYe18cISCO/BYto=
+github.com/soulteary/version-kit v1.0.0 h1:9XQqsl4QczXxMYsyzDLDI0G3LVobKSJ+aDAijYf5kXs=
+github.com/soulteary/version-kit v1.0.0/go.mod h1:oIIYE4eTeAYIBZMvC8j4KCwHbJKn73cMrTC6Onw98PA=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
 github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6KllzawFIhcdPw=

@@ -17,6 +17,7 @@ require (
 	github.com/soulteary/redis-kit v1.0.0
 	github.com/soulteary/secure-kit v1.0.0
 	github.com/soulteary/tracing-kit v1.0.0
+	github.com/soulteary/version-kit v1.0.0
 	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/otel v1.39.0
 	go.opentelemetry.io/otel/trace v1.39.0
