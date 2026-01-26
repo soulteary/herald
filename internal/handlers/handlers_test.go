@@ -12,11 +12,21 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/redis/go-redis/v9"
+	logger "github.com/soulteary/logger-kit"
+
 	"github.com/soulteary/herald/internal/challenge"
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/session"
 	"github.com/soulteary/herald/internal/testutil"
 )
+
+// testLogger returns a logger for testing (disabled output)
+func testLogger() *logger.Logger {
+	return logger.New(logger.Config{
+		Level:  logger.ErrorLevel, // Only log errors during tests
+		Format: logger.FormatJSON,
+	})
+}
 
 // testRedisClient returns a mock Redis client for testing
 func testRedisClient(t *testing.T) *redis.Client {
@@ -42,7 +52,7 @@ func TestNewHandlers(t *testing.T) {
 	// Test without providers
 	config.SMTPHost = ""
 	config.SMSProvider = ""
-	handlers := NewHandlers(redisClient, nil)
+	handlers := NewHandlers(redisClient, nil, testLogger())
 
 	if handlers == nil {
 		t.Fatal("NewHandlers() returned nil")
@@ -64,7 +74,7 @@ func TestNewHandlers(t *testing.T) {
 	config.SMTPHost = "smtp.example.com"
 	config.SMTPPort = 587
 	config.SMTPFrom = "test@example.com"
-	handlers2 := NewHandlers(redisClient, nil)
+	handlers2 := NewHandlers(redisClient, nil, testLogger())
 	if handlers2 == nil {
 		t.Fatal("NewHandlers() returned nil")
 	}
@@ -73,7 +83,7 @@ func TestNewHandlers(t *testing.T) {
 	config.SMSProvider = "aliyun"
 	config.AliyunAccessKey = "test-key"
 	config.AliyunSecretKey = "test-secret"
-	handlers3 := NewHandlers(redisClient, nil)
+	handlers3 := NewHandlers(redisClient, nil, testLogger())
 	if handlers3 == nil {
 		t.Fatal("NewHandlers() returned nil")
 	}
@@ -81,14 +91,14 @@ func TestNewHandlers(t *testing.T) {
 	// Test with invalid SMTP config (should log warning but not fail)
 	config.SMTPHost = "invalid"
 	config.SMTPPort = 0 // Invalid port
-	handlers4 := NewHandlers(redisClient, nil)
+	handlers4 := NewHandlers(redisClient, nil, testLogger())
 	if handlers4 == nil {
 		t.Fatal("NewHandlers() returned nil")
 	}
 
 	// Test with session manager
-	sessionManager := session.NewManager(redisClient, "test_session:", 1*time.Hour)
-	handlers5 := NewHandlers(redisClient, sessionManager)
+	sessionManager := session.NewManager(redisClient, "test_session:", 1*time.Hour, testLogger())
+	handlers5 := NewHandlers(redisClient, sessionManager, testLogger())
 	if handlers5 == nil {
 		t.Fatal("NewHandlers() returned nil")
 	}
@@ -126,7 +136,7 @@ func TestHandlers_CreateChallenge_DefaultPurpose(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient, nil)
+	handlers := NewHandlers(redisClient, nil, testLogger())
 
 	app := fiber.New()
 	app.Post("/challenge", handlers.CreateChallenge)
@@ -183,7 +193,7 @@ func TestHandlers_CreateChallenge_Success(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient, nil)
+	handlers := NewHandlers(redisClient, nil, testLogger())
 
 	app := fiber.New()
 	app.Post("/challenge", handlers.CreateChallenge)
@@ -232,7 +242,7 @@ func TestHandlers_CreateChallenge_InvalidRequest(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient, nil)
+	handlers := NewHandlers(redisClient, nil, testLogger())
 
 	app := fiber.New()
 	app.Post("/challenge", handlers.CreateChallenge)
@@ -311,7 +321,7 @@ func TestHandlers_VerifyChallenge_Success(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient, nil)
+	handlers := NewHandlers(redisClient, nil, testLogger())
 
 	// Create a challenge first
 	challengeMgr := challenge.NewManager(
@@ -320,6 +330,7 @@ func TestHandlers_VerifyChallenge_Success(t *testing.T) {
 		config.MaxAttempts,
 		config.LockoutDuration,
 		config.CodeLength,
+		testLogger(),
 	)
 
 	ctx := context.Background()
@@ -429,7 +440,7 @@ func TestHandlers_VerifyChallenge_AMR_ByChannel(t *testing.T) {
 				_ = redisClient.Close()
 			}()
 
-			handlers := NewHandlers(redisClient, nil)
+			handlers := NewHandlers(redisClient, nil, testLogger())
 
 			// Create a challenge first
 			challengeMgr := challenge.NewManager(
@@ -438,6 +449,7 @@ func TestHandlers_VerifyChallenge_AMR_ByChannel(t *testing.T) {
 				config.MaxAttempts,
 				config.LockoutDuration,
 				config.CodeLength,
+				testLogger(),
 			)
 
 			ctx := context.Background()
@@ -517,7 +529,7 @@ func TestHandlers_VerifyChallenge_InvalidRequest(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient, nil)
+	handlers := NewHandlers(redisClient, nil, testLogger())
 
 	app := fiber.New()
 	app.Post("/verify", handlers.VerifyChallenge)
@@ -585,7 +597,7 @@ func TestHandlers_RevokeChallenge(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient, nil)
+	handlers := NewHandlers(redisClient, nil, testLogger())
 
 	// Create a challenge first
 	challengeMgr := challenge.NewManager(
@@ -594,6 +606,7 @@ func TestHandlers_RevokeChallenge(t *testing.T) {
 		config.MaxAttempts,
 		config.LockoutDuration,
 		config.CodeLength,
+		testLogger(),
 	)
 
 	ctx := context.Background()
@@ -637,7 +650,7 @@ func TestHandlers_RevokeChallenge_NotFound(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient, nil)
+	handlers := NewHandlers(redisClient, nil, testLogger())
 
 	app := fiber.New()
 	app.Delete("/challenge/:id", handlers.RevokeChallenge)
@@ -662,7 +675,7 @@ func TestHandlers_RevokeChallenge_EmptyID(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient, nil)
+	handlers := NewHandlers(redisClient, nil, testLogger())
 
 	app := fiber.New()
 	app.Delete("/challenge/:id", handlers.RevokeChallenge)
@@ -688,7 +701,7 @@ func TestHandlers_RevokeChallenge_MissingID(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient, nil)
+	handlers := NewHandlers(redisClient, nil, testLogger())
 
 	app := fiber.New()
 	app.Delete("/challenge/:id", handlers.RevokeChallenge)
@@ -783,7 +796,7 @@ func TestHandlers_CreateChallenge_IdempotencyCacheError(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient, nil)
+	handlers := NewHandlers(redisClient, nil, testLogger())
 
 	app := fiber.New()
 	app.Post("/challenge", handlers.CreateChallenge)
@@ -845,7 +858,7 @@ func TestHandlers_CreateChallenge_Idempotency(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient, nil)
+	handlers := NewHandlers(redisClient, nil, testLogger())
 
 	app := fiber.New()
 	app.Post("/challenge", handlers.CreateChallenge)
@@ -938,7 +951,7 @@ func TestHandlers_CreateChallenge_ClientIPFromRequest(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient, nil)
+	handlers := NewHandlers(redisClient, nil, testLogger())
 
 	app := fiber.New()
 	app.Post("/challenge", handlers.CreateChallenge)
@@ -994,7 +1007,7 @@ func TestHandlers_CreateChallenge_RateLimit(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient, nil)
+	handlers := NewHandlers(redisClient, nil, testLogger())
 
 	app := fiber.New()
 	app.Post("/challenge", handlers.CreateChallenge)
@@ -1078,7 +1091,7 @@ func TestHandlers_CreateChallenge_ResendCooldown(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient, nil)
+	handlers := NewHandlers(redisClient, nil, testLogger())
 
 	app := fiber.New()
 	app.Post("/challenge", handlers.CreateChallenge)
@@ -1147,7 +1160,7 @@ func TestHandlers_CreateChallenge_InvalidPurpose(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient, nil)
+	handlers := NewHandlers(redisClient, nil, testLogger())
 
 	app := fiber.New()
 	app.Post("/challenge", handlers.CreateChallenge)
@@ -1218,7 +1231,7 @@ func TestHandlers_CreateChallenge_UserLocked(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient, nil)
+	handlers := NewHandlers(redisClient, nil, testLogger())
 
 	// Manually lock the user by using the challenge manager's lock functionality
 	challengeMgr := challenge.NewManager(
@@ -1227,6 +1240,7 @@ func TestHandlers_CreateChallenge_UserLocked(t *testing.T) {
 		config.MaxAttempts,
 		config.LockoutDuration,
 		6,
+		testLogger(),
 	)
 	ctx := context.Background()
 
@@ -1307,7 +1321,7 @@ func TestHandlers_VerifyChallenge_FailureReasons(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient, nil)
+	handlers := NewHandlers(redisClient, nil, testLogger())
 
 	app := fiber.New()
 	app.Post("/verify", handlers.VerifyChallenge)
@@ -1320,6 +1334,7 @@ func TestHandlers_VerifyChallenge_FailureReasons(t *testing.T) {
 			config.MaxAttempts,
 			config.LockoutDuration,
 			config.CodeLength,
+			testLogger(),
 		)
 
 		ctx := context.Background()
@@ -1371,6 +1386,7 @@ func TestHandlers_VerifyChallenge_FailureReasons(t *testing.T) {
 			3, // Max attempts = 3
 			config.LockoutDuration,
 			config.CodeLength,
+			testLogger(),
 		)
 
 		ctx := context.Background()
@@ -1432,6 +1448,7 @@ func TestHandlers_VerifyChallenge_FailureReasons(t *testing.T) {
 			config.MaxAttempts,
 			config.LockoutDuration,
 			config.CodeLength,
+			testLogger(),
 		)
 
 		ctx := context.Background()
@@ -1501,7 +1518,7 @@ func TestHandlers_CreateChallenge_TemplateErrorFallback(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient, nil)
+	handlers := NewHandlers(redisClient, nil, testLogger())
 
 	app := fiber.New()
 	app.Post("/challenge", handlers.CreateChallenge)
@@ -1561,7 +1578,7 @@ func TestHandlers_CreateChallenge_TemplateFallback(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient, nil)
+	handlers := NewHandlers(redisClient, nil, testLogger())
 
 	app := fiber.New()
 	app.Post("/challenge", handlers.CreateChallenge)
@@ -1605,7 +1622,7 @@ func TestHandlers_GetTestCode(t *testing.T) {
 		_ = redisClient.Close()
 	}()
 
-	handlers := NewHandlers(redisClient, nil)
+	handlers := NewHandlers(redisClient, nil, testLogger())
 
 	// Create a challenge and store test code
 	challengeMgr := challenge.NewManager(
@@ -1614,6 +1631,7 @@ func TestHandlers_GetTestCode(t *testing.T) {
 		5,
 		10*time.Minute,
 		6,
+		testLogger(),
 	)
 
 	ctx := context.Background()

@@ -1,15 +1,12 @@
 package router
 
 import (
-	"os"
-
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/redis/go-redis/v9"
-	"github.com/rs/zerolog"
-	"github.com/sirupsen/logrus"
 	health "github.com/soulteary/health-kit"
+	logger "github.com/soulteary/logger-kit"
 	metricskit "github.com/soulteary/metrics-kit"
 	middlewarekit "github.com/soulteary/middleware-kit"
 	rediskit "github.com/soulteary/redis-kit/client"
@@ -24,7 +21,7 @@ import (
 // NewRouter creates and configures a new Fiber router
 // It initializes Redis client from config
 // Deprecated: Use NewRouterWithClientAndHandlers for graceful shutdown support
-func NewRouter() *fiber.App {
+func NewRouter(log *logger.Logger) *fiber.App {
 	// Initialize Redis client using redis-kit
 	cfg := rediskit.DefaultConfig().
 		WithAddr(config.RedisAddr).
@@ -33,10 +30,10 @@ func NewRouter() *fiber.App {
 
 	redisClient, err := rediskit.NewClient(cfg)
 	if err != nil {
-		logrus.Fatalf("Failed to connect to Redis: %v", err)
+		log.Fatal().Err(err).Msg("Failed to connect to Redis")
 	}
 
-	return NewRouterWithClient(redisClient)
+	return NewRouterWithClient(redisClient, log)
 }
 
 // RouterWithHandlers wraps the router and handlers for graceful shutdown
@@ -47,32 +44,31 @@ type RouterWithHandlers struct {
 
 // NewRouterWithClient creates and configures a new Fiber router with the provided Redis client
 // This is useful for testing with mock Redis clients
-func NewRouterWithClient(redisClient *redis.Client) *fiber.App {
-	return NewRouterWithClientAndHandlers(redisClient).App
+func NewRouterWithClient(redisClient *redis.Client, log *logger.Logger) *fiber.App {
+	return NewRouterWithClientAndHandlers(redisClient, log).App
 }
 
 // NewRouterWithClientAndHandlers creates a router with handlers for graceful shutdown
-func NewRouterWithClientAndHandlers(redisClient *redis.Client) *RouterWithHandlers {
+func NewRouterWithClientAndHandlers(redisClient *redis.Client, log *logger.Logger) *RouterWithHandlers {
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: true,
 	})
 
-	// Create zerolog logger for middleware-kit
-	zerologLogger := zerolog.New(os.Stdout).With().Timestamp().Str("service", config.ServiceName).Logger()
-
 	// Middleware
 	app.Use(recover.New())
 
-	// Request logging using middleware-kit
-	app.Use(middlewarekit.RequestLogging(middlewarekit.LoggingConfig{
-		Logger:    &zerologLogger,
-		SkipPaths: []string{"/healthz", "/metrics"},
+	// Request logging using logger-kit
+	app.Use(logger.FiberMiddleware(logger.MiddlewareConfig{
+		Logger:           log,
+		SkipPaths:        []string{"/healthz", "/metrics"},
+		IncludeRequestID: true,
+		IncludeLatency:   true,
 	}))
 
 	// OpenTelemetry tracing middleware (if enabled)
 	if config.OTLPEnabled {
 		app.Use(tracing.TracingMiddleware(config.ServiceName))
-		logrus.Info("OpenTelemetry tracing middleware enabled")
+		log.Info().Msg("OpenTelemetry tracing middleware enabled")
 	}
 
 	app.Use(cors.New(cors.Config{
@@ -88,12 +84,13 @@ func NewRouterWithClientAndHandlers(redisClient *redis.Client) *RouterWithHandle
 			redisClient,
 			config.SessionKeyPrefix,
 			config.SessionDefaultTTL,
+			log,
 		)
-		logrus.Info("Session storage manager initialized")
+		log.Info().Msg("Session storage manager initialized")
 	}
 
 	// Initialize handlers
-	h := handlers.NewHandlers(redisClient, sessionManager)
+	h := handlers.NewHandlers(redisClient, sessionManager, log)
 
 	// Health check using health-kit
 	healthConfig := health.DefaultConfig().WithServiceName(config.ServiceName)
@@ -113,6 +110,7 @@ func NewRouterWithClientAndHandlers(redisClient *redis.Client) *RouterWithHandle
 	api := app.Group("/v1")
 
 	// Create authentication middleware using middleware-kit
+	zerologLogger := log.Zerolog()
 	authHandler := middlewarekit.CombinedAuth(middlewarekit.AuthConfig{
 		HMACConfig: &middlewarekit.HMACConfig{
 			KeyProvider: config.GetHMACSecret,

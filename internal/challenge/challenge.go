@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/sirupsen/logrus"
+	logger "github.com/soulteary/logger-kit"
 	rediskitcache "github.com/soulteary/redis-kit/cache"
 	secure "github.com/soulteary/secure-kit"
 
@@ -47,10 +47,11 @@ type Manager struct {
 	maxAttempts     int
 	lockoutDuration time.Duration
 	codeLength      int
+	log             *logger.Logger
 }
 
 // NewManager creates a new challenge manager
-func NewManager(redisClient *redis.Client, expiry time.Duration, maxAttempts int, lockoutDuration time.Duration, codeLength int) *Manager {
+func NewManager(redisClient *redis.Client, expiry time.Duration, maxAttempts int, lockoutDuration time.Duration, codeLength int, log *logger.Logger) *Manager {
 	// Create cache instances with appropriate prefixes
 	challengeCache := rediskitcache.NewCache(redisClient, challengeKeyPrefix)
 	lockCache := rediskitcache.NewCache(redisClient, lockKeyPrefix)
@@ -62,6 +63,7 @@ func NewManager(redisClient *redis.Client, expiry time.Duration, maxAttempts int
 		maxAttempts:     maxAttempts,
 		lockoutDuration: lockoutDuration,
 		codeLength:      codeLength,
+		log:             log,
 	}
 }
 
@@ -98,7 +100,7 @@ func (m *Manager) CreateChallenge(ctx context.Context, userID, channel, destinat
 	}
 	metrics.RecordRedisSuccess("set", time.Since(start))
 
-	logrus.Debugf("Challenge created: %s for user %s", challengeID, userID)
+	m.log.Debug().Str("challenge_id", challengeID).Str("user_id", userID).Msg("Challenge created")
 	return challenge, code, nil
 }
 
@@ -183,7 +185,7 @@ func (m *Manager) VerifyChallenge(ctx context.Context, challengeID, code, client
 	_ = m.cache.Del(ctx, challengeID)
 	metrics.RecordRedisSuccess("del", time.Since(start))
 
-	logrus.Debugf("Challenge verified successfully: %s", challengeID)
+	m.log.Debug().Str("challenge_id", challengeID).Msg("Challenge verified successfully")
 	return true, &challenge, nil
 }
 
@@ -229,7 +231,7 @@ func generateChallengeID() string {
 	token, err := secure.RandomToken(16)
 	if err != nil {
 		// This should never happen with crypto/rand, but handle gracefully
-		logrus.Errorf("Failed to generate challenge ID: %v", err)
+		// Use fallback without logging since we don't have logger instance here
 		token, _ = secure.RandomHex(16)
 	}
 	return "ch_" + token[:22]
@@ -239,8 +241,7 @@ func generateCode(length int) string {
 	code, err := secure.RandomDigits(length)
 	if err != nil {
 		// This should never happen with crypto/rand, but handle gracefully
-		logrus.Errorf("Failed to generate code: %v", err)
-		// Return a fallback - but this is logged for debugging
+		// Use fallback without logging since we don't have logger instance here
 		code, _ = secure.RandomDigits(length)
 	}
 	return code
@@ -250,7 +251,6 @@ func hashCode(code string) string {
 	hash, err := argon2Hasher.Hash(code)
 	if err != nil {
 		// This should never happen, but handle gracefully
-		logrus.Errorf("Failed to hash code: %v", err)
 		return ""
 	}
 	return hash

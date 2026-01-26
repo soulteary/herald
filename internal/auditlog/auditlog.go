@@ -5,20 +5,27 @@ import (
 	"sync"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/sirupsen/logrus"
 	audit "github.com/soulteary/audit-kit"
+	logger "github.com/soulteary/logger-kit"
 
 	"github.com/soulteary/herald/internal/config"
 )
 
+var log *logger.Logger
+
+// SetLogger sets the logger instance for the audit package
+func SetLogger(l *logger.Logger) {
+	log = l
+}
+
 var (
-	logger     *audit.Logger
-	loggerInit sync.Once
+	auditLogger     *audit.Logger
+	auditLoggerInit sync.Once
 )
 
 // Init initializes the audit logger with the given storage
 func Init(redisClient *redis.Client) {
-	loggerInit.Do(func() {
+	auditLoggerInit.Do(func() {
 		cfg := audit.DefaultConfig()
 		cfg.Enabled = config.AuditEnabled
 		cfg.MaskDestination = config.AuditMaskDestination
@@ -53,7 +60,9 @@ func Init(redisClient *redis.Client) {
 
 			storage, err = audit.NewStorageFromType(storageType, opts)
 			if err != nil {
-				logrus.Warnf("Failed to initialize audit storage: %v, using no-op storage", err)
+				if log != nil {
+					log.Warn().Err(err).Msg("Failed to initialize audit storage, using no-op storage")
+				}
 				storage = audit.NewNoopStorage()
 			}
 		} else if redisClient != nil {
@@ -66,22 +75,22 @@ func Init(redisClient *redis.Client) {
 			storage = audit.NewNoopStorage()
 		}
 
-		logger = audit.NewLoggerWithWriter(storage, cfg)
+		auditLogger = audit.NewLoggerWithWriter(storage, cfg)
 	})
 }
 
 // GetLogger returns the audit logger instance
 func GetLogger() *audit.Logger {
-	if logger == nil {
+	if auditLogger == nil {
 		Init(nil)
 	}
-	return logger
+	return auditLogger
 }
 
 // Stop stops the audit logger
 func Stop() error {
-	if logger != nil {
-		return logger.Stop()
+	if auditLogger != nil {
+		return auditLogger.Stop()
 	}
 	return nil
 }

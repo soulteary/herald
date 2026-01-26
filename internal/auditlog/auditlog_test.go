@@ -11,14 +11,14 @@ import (
 
 func TestAuditLogFunctions(t *testing.T) {
 	// Reset logger for testing
-	logger = nil
-	loggerInit = sync.Once{}
+	auditLogger = nil
+	auditLoggerInit = sync.Once{}
 
 	// Initialize with no-op storage for testing
 	storage := audit.NewNoopStorage()
 	cfg := audit.DefaultConfig()
 	cfg.Enabled = true
-	logger = audit.NewLoggerWithWriter(storage, cfg)
+	auditLogger = audit.NewLoggerWithWriter(storage, cfg)
 
 	l := GetLogger()
 	assert.NotNil(t, l)
@@ -57,8 +57,8 @@ func TestAuditLogFunctions(t *testing.T) {
 
 func TestGetLoggerWithoutInit(t *testing.T) {
 	// Reset logger
-	logger = nil
-	loggerInit = sync.Once{}
+	auditLogger = nil
+	auditLoggerInit = sync.Once{}
 
 	// GetLogger should auto-initialize with no-op storage
 	l := GetLogger()
@@ -67,14 +67,14 @@ func TestGetLoggerWithoutInit(t *testing.T) {
 
 func TestQuery(t *testing.T) {
 	// Reset logger for testing
-	logger = nil
-	loggerInit = sync.Once{}
+	auditLogger = nil
+	auditLoggerInit = sync.Once{}
 
 	// Initialize with no-op storage for testing
 	storage := audit.NewNoopStorage()
 	cfg := audit.DefaultConfig()
 	cfg.Enabled = true
-	logger = audit.NewLoggerWithWriter(storage, cfg)
+	auditLogger = audit.NewLoggerWithWriter(storage, cfg)
 
 	ctx := context.Background()
 	filter := audit.DefaultQueryFilter()

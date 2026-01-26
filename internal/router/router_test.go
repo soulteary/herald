@@ -3,9 +3,19 @@ package router
 import (
 	"testing"
 
+	logger "github.com/soulteary/logger-kit"
+
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/testutil"
 )
+
+// testLogger returns a logger for testing (disabled output)
+func testLogger() *logger.Logger {
+	return logger.New(logger.Config{
+		Level:  logger.ErrorLevel, // Only log errors during tests
+		Format: logger.FormatJSON,
+	})
+}
 
 func TestNewRouterWithClient(t *testing.T) {
 	// Setup mock Redis
@@ -15,7 +25,7 @@ func TestNewRouterWithClient(t *testing.T) {
 	}()
 
 	// Test that NewRouterWithClient creates a valid Fiber app
-	app := NewRouterWithClient(redisClient)
+	app := NewRouterWithClient(redisClient, testLogger())
 	if app == nil {
 		t.Fatal("NewRouterWithClient() returned nil")
 	}
@@ -28,7 +38,7 @@ func TestNewRouterWithClient(t *testing.T) {
 	}()
 
 	config.SessionStorageEnabled = true
-	app2 := NewRouterWithClient(redisClient)
+	app2 := NewRouterWithClient(redisClient, testLogger())
 	if app2 == nil {
 		t.Fatal("NewRouterWithClient() with session storage returned nil")
 	}
@@ -40,7 +50,7 @@ func TestNewRouterWithClient(t *testing.T) {
 	}()
 
 	config.TestMode = true
-	app3 := NewRouterWithClient(redisClient)
+	app3 := NewRouterWithClient(redisClient, testLogger())
 	if app3 == nil {
 		t.Fatal("NewRouterWithClient() with test mode returned nil")
 	}

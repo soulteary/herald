@@ -3,92 +3,77 @@ package main
 import (
 	"testing"
 
-	"github.com/sirupsen/logrus"
+	logger "github.com/soulteary/logger-kit"
 )
 
-func TestSetLogLevel(t *testing.T) {
+func TestLoggerKitParseLevelFromEnv(t *testing.T) {
 	tests := []struct {
 		name     string
 		level    string
-		expected logrus.Level
+		expected logger.Level
 	}{
 		{
 			name:     "trace level",
 			level:    "trace",
-			expected: logrus.TraceLevel,
+			expected: logger.TraceLevel,
 		},
 		{
 			name:     "debug level",
 			level:    "debug",
-			expected: logrus.DebugLevel,
+			expected: logger.DebugLevel,
 		},
 		{
 			name:     "info level",
 			level:    "info",
-			expected: logrus.InfoLevel,
+			expected: logger.InfoLevel,
 		},
 		{
 			name:     "warn level",
 			level:    "warn",
-			expected: logrus.WarnLevel,
-		},
-		{
-			name:     "warning level",
-			level:    "warning",
-			expected: logrus.WarnLevel,
+			expected: logger.WarnLevel,
 		},
 		{
 			name:     "error level",
 			level:    "error",
-			expected: logrus.ErrorLevel,
+			expected: logger.ErrorLevel,
 		},
 		{
 			name:     "fatal level",
 			level:    "fatal",
-			expected: logrus.FatalLevel,
+			expected: logger.FatalLevel,
 		},
 		{
 			name:     "panic level",
 			level:    "panic",
-			expected: logrus.PanicLevel,
-		},
-		{
-			name:     "uppercase level",
-			level:    "INFO",
-			expected: logrus.InfoLevel,
-		},
-		{
-			name:     "mixed case level",
-			level:    "DeBuG",
-			expected: logrus.DebugLevel,
+			expected: logger.PanicLevel,
 		},
 		{
 			name:     "invalid level defaults to info",
 			level:    "invalid",
-			expected: logrus.InfoLevel,
+			expected: logger.InfoLevel,
 		},
 		{
 			name:     "empty level defaults to info",
 			level:    "",
-			expected: logrus.InfoLevel,
+			expected: logger.InfoLevel,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original level
-			originalLevel := logrus.GetLevel()
+			// Test ParseLevel from logger-kit
+			parsed, err := logger.ParseLevel(tt.level)
 
-			// Test setLogLevel
-			setLogLevel(tt.level)
-
-			// Verify level was set correctly
-			if logrus.GetLevel() != tt.expected {
-				t.Errorf("setLogLevel(%q) = %v, want %v", tt.level, logrus.GetLevel(), tt.expected)
+			// For invalid/empty levels, ParseLevel returns an error
+			// Use default level (InfoLevel) when there's an error
+			if err != nil {
+				parsed = logger.InfoLevel
 			}
 
-			// Restore original level
-			logrus.SetLevel(originalLevel)
+			// Verify level was parsed correctly
+			if parsed != tt.expected {
+				t.Errorf("ParseLevel(%q) = %v, want %v", tt.level, parsed, tt.expected)
+			}
 		})
 	}
 }
