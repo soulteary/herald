@@ -18,6 +18,7 @@ require (
 	github.com/soulteary/provider-kit v1.0.0
 	github.com/soulteary/redis-kit v1.0.0
 	github.com/soulteary/secure-kit v1.0.0
+	github.com/soulteary/session-kit v1.0.0
 	github.com/soulteary/tracing-kit v1.0.0
 	github.com/soulteary/version-kit v1.0.0
 	github.com/stretchr/testify v1.11.1

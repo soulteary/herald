@@ -16,8 +16,8 @@ import (
 
 	challengekit "github.com/soulteary/challenge-kit"
 	"github.com/soulteary/herald/internal/config"
-	"github.com/soulteary/herald/internal/session"
 	"github.com/soulteary/herald/internal/testutil"
+	sessionkit "github.com/soulteary/session-kit"
 )
 
 // testLogger returns a logger for testing (disabled output)
@@ -108,8 +108,9 @@ func TestNewHandlers(t *testing.T) {
 		t.Fatal("NewHandlers() returned nil")
 	}
 
-	// Test with session manager
-	sessionManager := session.NewManager(redisClient, "test_session:", 1*time.Hour, testLogger())
+	// Test with session manager (session-kit Store + KVManager)
+	store := sessionkit.NewRedisStore(redisClient, "test_session:")
+	sessionManager := sessionkit.NewKVManager(store, 1*time.Hour)
 	handlers5 := NewHandlers(redisClient, sessionManager, testLogger())
 	if handlers5 == nil {
 		t.Fatal("NewHandlers() returned nil")

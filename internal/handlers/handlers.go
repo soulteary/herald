@@ -21,8 +21,8 @@ import (
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/metrics"
 	"github.com/soulteary/herald/internal/ratelimit"
-	"github.com/soulteary/herald/internal/session"
 	"github.com/soulteary/herald/internal/template"
+	sessionkit "github.com/soulteary/session-kit"
 )
 
 // Handlers contains all HTTP handlers
@@ -34,7 +34,7 @@ type Handlers struct {
 	redis            *redis.Client
 	testCodeCache    rediskitcache.Cache // For test mode code storage
 	idempotencyCache rediskitcache.Cache // For idempotency key storage
-	sessionManager   *session.Manager    // Optional: nil if session storage is disabled
+	sessionManager   *sessionkit.KVManager // Optional: nil if session storage is disabled
 	log              *logger.Logger
 }
 
@@ -44,7 +44,7 @@ func (h *Handlers) StopAuditWriter() error {
 }
 
 // NewHandlers creates a new handlers instance
-func NewHandlers(redisClient *redis.Client, sessionManager *session.Manager, log *logger.Logger) *Handlers {
+func NewHandlers(redisClient *redis.Client, sessionManager *sessionkit.KVManager, log *logger.Logger) *Handlers {
 	challengeConfig := challengekit.Config{
 		Expiry:             config.ChallengeExpiry,
 		MaxAttempts:        config.MaxAttempts,

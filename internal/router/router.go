@@ -14,8 +14,8 @@ import (
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/handlers"
 	"github.com/soulteary/herald/internal/metrics"
-	"github.com/soulteary/herald/internal/session"
 	"github.com/soulteary/herald/internal/tracing"
+	sessionkit "github.com/soulteary/session-kit"
 )
 
 // NewRouter creates and configures a new Fiber router
@@ -77,15 +77,11 @@ func NewRouterWithClientAndHandlers(redisClient *redis.Client, log *logger.Logge
 		AllowHeaders: "Content-Type,Authorization,X-Service,X-Signature,X-Timestamp,X-API-Key,traceparent,tracestate",
 	}))
 
-	// Initialize session manager if enabled
-	var sessionManager *session.Manager
+	// Initialize session manager if enabled (uses session-kit Store + KVManager)
+	var sessionManager *sessionkit.KVManager
 	if config.SessionStorageEnabled {
-		sessionManager = session.NewManager(
-			redisClient,
-			config.SessionKeyPrefix,
-			config.SessionDefaultTTL,
-			log,
-		)
+		store := sessionkit.NewRedisStore(redisClient, config.SessionKeyPrefix)
+		sessionManager = sessionkit.NewKVManager(store, config.SessionDefaultTTL)
 		log.Info().Msg("Session storage manager initialized")
 	}
 

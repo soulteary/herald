@@ -8,6 +8,7 @@ import (
 	"text/template"
 
 	i18n "github.com/soulteary/i18n-kit"
+	"github.com/soulteary/provider-kit"
 )
 
 // TemplateData represents the data available in templates
@@ -201,46 +202,48 @@ func (m *Manager) renderBuiltIn(locale, channel, purpose string, data TemplateDa
 	}
 }
 
-// renderEmailBuiltIn renders built-in email templates
+// renderEmailBuiltIn renders built-in email templates.
+// For purpose "login", reuses provider-kit FormatVerificationEmailWithMinutes for simple verification copy.
 func (m *Manager) renderEmailBuiltIn(locale, purpose string, data TemplateData) (subject, body string) {
+	if purpose == "login" {
+		minutes := data.ExpiresIn / 60
+		if minutes <= 0 {
+			minutes = 5
+		}
+		return provider.FormatVerificationEmailWithMinutes(data.Code, locale, minutes)
+	}
 	lang := m.parseLanguage(locale)
 	minutes := data.ExpiresIn / 60
-
 	subject = m.bundle.GetTranslation(lang, "email.subject")
-
 	params := map[string]interface{}{
 		"code":    data.Code,
 		"minutes": minutes,
 	}
-
-	if purpose != "login" {
-		purposeName := m.bundle.GetTranslation(lang, "purpose."+purpose)
-		params["purpose"] = purposeName
-		body = m.formatter.Format(lang, "email.body_with_purpose", params)
-	} else {
-		body = m.formatter.Format(lang, "email.body", params)
-	}
-
+	purposeName := m.bundle.GetTranslation(lang, "purpose."+purpose)
+	params["purpose"] = purposeName
+	body = m.formatter.Format(lang, "email.body_with_purpose", params)
 	return subject, body
 }
 
-// renderSMSBuiltIn renders built-in SMS templates
+// renderSMSBuiltIn renders built-in SMS templates.
+// For purpose "login", reuses provider-kit FormatVerificationSMSWithMinutes for simple verification copy.
 func (m *Manager) renderSMSBuiltIn(locale, purpose string, data TemplateData) string {
+	if purpose == "login" {
+		minutes := data.ExpiresIn / 60
+		if minutes <= 0 {
+			minutes = 5
+		}
+		return provider.FormatVerificationSMSWithMinutes(data.Code, locale, minutes)
+	}
 	lang := m.parseLanguage(locale)
 	minutes := data.ExpiresIn / 60
-
 	params := map[string]interface{}{
 		"code":    data.Code,
 		"minutes": minutes,
 	}
-
-	if purpose != "login" {
-		purposeName := m.bundle.GetTranslation(lang, "purpose."+purpose)
-		params["purpose"] = purposeName
-		return m.formatter.Format(lang, "sms.body_with_purpose", params)
-	}
-
-	return m.formatter.Format(lang, "sms.body", params)
+	purposeName := m.bundle.GetTranslation(lang, "purpose."+purpose)
+	params["purpose"] = purposeName
+	return m.formatter.Format(lang, "sms.body_with_purpose", params)
 }
 
 // parseLanguage parses a locale string to i18n.Language
