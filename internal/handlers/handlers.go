@@ -16,11 +16,10 @@ import (
 	provider "github.com/soulteary/provider-kit"
 	"github.com/soulteary/tracing-kit"
 
+	challengekit "github.com/soulteary/challenge-kit"
 	"github.com/soulteary/herald/internal/auditlog"
-	"github.com/soulteary/herald/internal/challenge"
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/metrics"
-	"github.com/soulteary/herald/internal/otp"
 	"github.com/soulteary/herald/internal/ratelimit"
 	"github.com/soulteary/herald/internal/session"
 	"github.com/soulteary/herald/internal/template"
@@ -28,7 +27,7 @@ import (
 
 // Handlers contains all HTTP handlers
 type Handlers struct {
-	challengeManager *challenge.Manager
+	challengeManager challengekit.ManagerInterface
 	rateLimitManager *ratelimit.Manager
 	providerRegistry *provider.Registry
 	templateManager  *template.Manager
@@ -46,14 +45,15 @@ func (h *Handlers) StopAuditWriter() error {
 
 // NewHandlers creates a new handlers instance
 func NewHandlers(redisClient *redis.Client, sessionManager *session.Manager, log *logger.Logger) *Handlers {
-	challengeMgr := challenge.NewManager(
-		redisClient,
-		config.ChallengeExpiry,
-		config.MaxAttempts,
-		config.LockoutDuration,
-		config.CodeLength,
-		log,
-	)
+	challengeConfig := challengekit.Config{
+		Expiry:             config.ChallengeExpiry,
+		MaxAttempts:        config.MaxAttempts,
+		LockoutDuration:    config.LockoutDuration,
+		CodeLength:         config.CodeLength,
+		ChallengeKeyPrefix: "otp:ch:",
+		LockKeyPrefix:      "otp:lock:",
+	}
+	challengeMgr := challengekit.NewManager(redisClient, challengeConfig)
 
 	rateLimitMgr := ratelimit.NewManager(redisClient)
 
@@ -304,9 +304,14 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 	}
 
 	// Create challenge
-	ch, code, err := h.challengeManager.CreateChallenge(
-		spanCtx, req.UserID, req.Channel, req.Destination, req.Purpose, clientIP,
-	)
+	createReq := challengekit.CreateRequest{
+		UserID:      req.UserID,
+		Channel:     challengekit.Channel(req.Channel),
+		Destination: req.Destination,
+		Purpose:     req.Purpose,
+		ClientIP:    clientIP,
+	}
+	ch, code, err := h.challengeManager.Create(spanCtx, createReq)
 	if err != nil {
 		tracing.RecordError(span, err)
 		h.log.Error().Err(err).Msg("Failed to create challenge")
@@ -413,7 +418,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		// Handle provider failure based on policy
 		if config.ProviderFailurePolicy == "strict" {
 			// Strict mode: revoke challenge and return error
-			_ = h.challengeManager.RevokeChallenge(spanCtx, ch.ID)
+			_ = h.challengeManager.Revoke(spanCtx, ch.ID)
 			// Also remove idempotency record if it was stored
 			if idempotencyKey != "" {
 				_ = h.idempotencyCache.Del(spanCtx, idempotencyKey)
@@ -515,7 +520,7 @@ func (h *Handlers) VerifyChallenge(c *fiber.Ctx) error {
 	}
 
 	// Validate code format
-	if !otp.ValidateCodeFormat(req.Code, config.CodeLength) {
+	if !challengekit.ValidateCodeFormat(req.Code, config.CodeLength) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "invalid_code_format",
@@ -536,21 +541,24 @@ func (h *Handlers) VerifyChallenge(c *fiber.Ctx) error {
 	verifySpan.SetAttributes(attribute.String("challenge_id", req.ChallengeID))
 
 	// Verify challenge
-	valid, ch, err := h.challengeManager.VerifyChallenge(verifyCtx, req.ChallengeID, req.Code, req.ClientIP)
-	if err != nil {
+	result, err := h.challengeManager.Verify(verifyCtx, req.ChallengeID, req.Code, req.ClientIP)
+	if err != nil || !result.OK {
+		reason := "verification_failed"
+		if result != nil && result.Reason != "" {
+			reason = result.Reason
+		} else if err != nil {
+			errStr := err.Error()
+			if contains(errStr, "expired") {
+				reason = "expired"
+			} else if contains(errStr, "locked") {
+				reason = "locked"
+			} else if contains(errStr, "invalid") {
+				reason = "invalid"
+			}
+		}
+
 		tracing.RecordError(verifySpan, err)
 		h.log.Debug().Err(err).Msg("Challenge verification failed")
-
-		// Determine error reason
-		reason := "verification_failed"
-		errStr := err.Error()
-		if contains(errStr, "expired") {
-			reason = "expired"
-		} else if contains(errStr, "locked") {
-			reason = "locked"
-		} else if contains(errStr, "invalid") {
-			reason = "invalid"
-		}
 
 		// Set span attributes for failure
 		verifySpan.SetAttributes(
@@ -564,32 +572,19 @@ func (h *Handlers) VerifyChallenge(c *fiber.Ctx) error {
 		// Audit: verification failed
 		auditlog.LogVerificationFailed(verifyCtx, req.ChallengeID, reason, req.ClientIP)
 
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+		response := fiber.Map{
 			"ok":     false,
 			"reason": reason,
-		})
-	}
+		}
+		if result != nil && result.RemainingAttempts != nil {
+			response["remaining_attempts"] = *result.RemainingAttempts
+		}
 
-	if !valid {
-		// Set span attributes for failure
-		verifySpan.SetAttributes(
-			attribute.String("result", "failure"),
-			attribute.String("reason", "invalid"),
-		)
-
-		// Metrics: verification failed
-		metrics.RecordVerification("failure", "invalid")
-
-		// Audit: verification failed
-		auditlog.LogVerificationFailed(verifyCtx, req.ChallengeID, "invalid", req.ClientIP)
-
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "invalid",
-		})
+		return c.Status(fiber.StatusUnauthorized).JSON(response)
 	}
 
 	// Set span attributes for success
+	ch := result.Challenge
 	verifySpan.SetAttributes(
 		attribute.String("result", "success"),
 		attribute.String("user_id", ch.UserID),
@@ -601,14 +596,14 @@ func (h *Handlers) VerifyChallenge(c *fiber.Ctx) error {
 	metrics.RecordVerification("success", "")
 
 	// Audit: challenge verified
-	auditlog.LogVerificationSuccess(verifyCtx, ch.ID, ch.UserID, ch.Channel, ch.Destination, ch.Purpose, req.ClientIP)
+	auditlog.LogVerificationSuccess(verifyCtx, ch.ID, ch.UserID, string(ch.Channel), ch.Destination, ch.Purpose, req.ClientIP)
 
 	// Generate AMR based on channel
 	amr := []string{"otp"}
 	switch ch.Channel {
-	case "sms":
+	case challengekit.ChannelSMS:
 		amr = append(amr, "sms")
-	case "email":
+	case challengekit.ChannelEmail:
 		amr = append(amr, "email")
 	}
 
@@ -639,7 +634,7 @@ func (h *Handlers) RevokeChallenge(c *fiber.Ctx) error {
 		})
 	}
 
-	if err := h.challengeManager.RevokeChallenge(spanCtx, challengeID); err != nil {
+	if err := h.challengeManager.Revoke(spanCtx, challengeID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "internal_error",

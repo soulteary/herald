@@ -14,7 +14,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	logger "github.com/soulteary/logger-kit"
 
-	"github.com/soulteary/herald/internal/challenge"
+	challengekit "github.com/soulteary/challenge-kit"
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/session"
 	"github.com/soulteary/herald/internal/testutil"
@@ -33,6 +33,18 @@ func testRedisClient(t *testing.T) *redis.Client {
 	t.Helper()
 	client, _ := testutil.NewTestRedisClient()
 	return client
+}
+
+// testChallengeManager creates a challenge manager for testing
+func testChallengeManager(t *testing.T, redisClient *redis.Client) challengekit.ManagerInterface {
+	t.Helper()
+	config := challengekit.Config{
+		Expiry:          config.ChallengeExpiry,
+		MaxAttempts:     config.MaxAttempts,
+		LockoutDuration: config.LockoutDuration,
+		CodeLength:      config.CodeLength,
+	}
+	return challengekit.NewManager(redisClient, config)
 }
 
 func TestNewHandlers(t *testing.T) {
@@ -324,17 +336,23 @@ func TestHandlers_VerifyChallenge_Success(t *testing.T) {
 	handlers := NewHandlers(redisClient, nil, testLogger())
 
 	// Create a challenge first
-	challengeMgr := challenge.NewManager(
-		redisClient,
-		config.ChallengeExpiry,
-		config.MaxAttempts,
-		config.LockoutDuration,
-		config.CodeLength,
-		testLogger(),
-	)
+	challengeConfig := challengekit.Config{
+		Expiry:          config.ChallengeExpiry,
+		MaxAttempts:     config.MaxAttempts,
+		LockoutDuration: config.LockoutDuration,
+		CodeLength:      config.CodeLength,
+	}
+	challengeMgr := challengekit.NewManager(redisClient, challengeConfig)
 
 	ctx := context.Background()
-	ch, code, err := challengeMgr.CreateChallenge(ctx, "user123", "email", "test@example.com", "login", "127.0.0.1")
+	createReq := challengekit.CreateRequest{
+		UserID:      "user123",
+		Channel:     challengekit.ChannelEmail,
+		Destination: "test@example.com",
+		Purpose:     "login",
+		ClientIP:    "127.0.0.1",
+	}
+	ch, code, err := challengeMgr.Create(ctx, createReq)
 	if err != nil {
 		t.Fatalf("Failed to create challenge: %v", err)
 	}
@@ -443,17 +461,29 @@ func TestHandlers_VerifyChallenge_AMR_ByChannel(t *testing.T) {
 			handlers := NewHandlers(redisClient, nil, testLogger())
 
 			// Create a challenge first
-			challengeMgr := challenge.NewManager(
-				redisClient,
-				config.ChallengeExpiry,
-				config.MaxAttempts,
-				config.LockoutDuration,
-				config.CodeLength,
-				testLogger(),
-			)
+			challengeConfig := challengekit.Config{
+				Expiry:          config.ChallengeExpiry,
+				MaxAttempts:     config.MaxAttempts,
+				LockoutDuration: config.LockoutDuration,
+				CodeLength:      config.CodeLength,
+			}
+			challengeMgr := challengekit.NewManager(redisClient, challengeConfig)
 
 			ctx := context.Background()
-			ch, code, err := challengeMgr.CreateChallenge(ctx, "user123", tt.channel, tt.destination, "login", "127.0.0.1")
+			var channel challengekit.Channel
+			if tt.channel == "sms" {
+				channel = challengekit.ChannelSMS
+			} else {
+				channel = challengekit.ChannelEmail
+			}
+			createReq := challengekit.CreateRequest{
+				UserID:      "user123",
+				Channel:     channel,
+				Destination: tt.destination,
+				Purpose:     "login",
+				ClientIP:    "127.0.0.1",
+			}
+			ch, code, err := challengeMgr.Create(ctx, createReq)
 			if err != nil {
 				t.Fatalf("Failed to create challenge: %v", err)
 			}
@@ -600,17 +630,17 @@ func TestHandlers_RevokeChallenge(t *testing.T) {
 	handlers := NewHandlers(redisClient, nil, testLogger())
 
 	// Create a challenge first
-	challengeMgr := challenge.NewManager(
-		redisClient,
-		config.ChallengeExpiry,
-		config.MaxAttempts,
-		config.LockoutDuration,
-		config.CodeLength,
-		testLogger(),
-	)
+	challengeMgr := testChallengeManager(t, redisClient)
 
 	ctx := context.Background()
-	ch, _, err := challengeMgr.CreateChallenge(ctx, "user123", "email", "test@example.com", "login", "127.0.0.1")
+	createReq := challengekit.CreateRequest{
+		UserID:      "user123",
+		Channel:     challengekit.ChannelEmail,
+		Destination: "test@example.com",
+		Purpose:     "login",
+		ClientIP:    "127.0.0.1",
+	}
+	ch, _, err := challengeMgr.Create(ctx, createReq)
 	if err != nil {
 		t.Fatalf("Failed to create challenge: %v", err)
 	}
@@ -1234,18 +1264,24 @@ func TestHandlers_CreateChallenge_UserLocked(t *testing.T) {
 	handlers := NewHandlers(redisClient, nil, testLogger())
 
 	// Manually lock the user by using the challenge manager's lock functionality
-	challengeMgr := challenge.NewManager(
-		redisClient,
-		config.ChallengeExpiry,
-		config.MaxAttempts,
-		config.LockoutDuration,
-		6,
-		testLogger(),
-	)
+	challengeConfig := challengekit.Config{
+		Expiry:          config.ChallengeExpiry,
+		MaxAttempts:     config.MaxAttempts,
+		LockoutDuration: config.LockoutDuration,
+		CodeLength:      6,
+	}
+	challengeMgr := challengekit.NewManager(redisClient, challengeConfig)
 	ctx := context.Background()
 
 	// Create a challenge and fail verification maxAttempts times on the SAME challenge to trigger lock
-	ch, _, err := challengeMgr.CreateChallenge(ctx, "user123", "email", "test@example.com", "login", "127.0.0.1")
+	createReq := challengekit.CreateRequest{
+		UserID:      "user123",
+		Channel:     challengekit.ChannelEmail,
+		Destination: "test@example.com",
+		Purpose:     "login",
+		ClientIP:    "127.0.0.1",
+	}
+	ch, _, err := challengeMgr.Create(ctx, createReq)
 	if err != nil {
 		t.Fatalf("Failed to create challenge: %v", err)
 	}
@@ -1253,7 +1289,7 @@ func TestHandlers_CreateChallenge_UserLocked(t *testing.T) {
 	// Fail verification maxAttempts times on the same challenge
 	// Each failure increments attempts, and after maxAttempts, user gets locked
 	for i := 0; i < config.MaxAttempts; i++ {
-		_, _, _ = challengeMgr.VerifyChallenge(ctx, ch.ID, "000000", "127.0.0.1")
+		_, _ = challengeMgr.Verify(ctx, ch.ID, "000000", "127.0.0.1")
 	}
 
 	// Verify user is locked
@@ -1328,17 +1364,17 @@ func TestHandlers_VerifyChallenge_FailureReasons(t *testing.T) {
 
 	// Test expired challenge
 	t.Run("expired challenge", func(t *testing.T) {
-		challengeMgr := challenge.NewManager(
-			redisClient,
-			config.ChallengeExpiry,
-			config.MaxAttempts,
-			config.LockoutDuration,
-			config.CodeLength,
-			testLogger(),
-		)
+		challengeMgr := testChallengeManager(t, redisClient)
 
 		ctx := context.Background()
-		ch, code, err := challengeMgr.CreateChallenge(ctx, "user123", "email", "test@example.com", "login", "127.0.0.1")
+		createReq := challengekit.CreateRequest{
+			UserID:      "user123",
+			Channel:     challengekit.ChannelEmail,
+			Destination: "test@example.com",
+			Purpose:     "login",
+			ClientIP:    "127.0.0.1",
+		}
+		ch, code, err := challengeMgr.Create(ctx, createReq)
 		if err != nil {
 			t.Fatalf("Failed to create challenge: %v", err)
 		}
@@ -1380,28 +1416,41 @@ func TestHandlers_VerifyChallenge_FailureReasons(t *testing.T) {
 	// Test locked challenge
 	t.Run("locked challenge", func(t *testing.T) {
 		config.ChallengeExpiry = 5 * time.Minute
-		challengeMgr := challenge.NewManager(
-			redisClient,
-			config.ChallengeExpiry,
-			3, // Max attempts = 3
-			config.LockoutDuration,
-			config.CodeLength,
-			testLogger(),
-		)
+		challengeConfig := challengekit.Config{
+			Expiry:          config.ChallengeExpiry,
+			MaxAttempts:     3, // Max attempts = 3
+			LockoutDuration: config.LockoutDuration,
+			CodeLength:      config.CodeLength,
+		}
+		challengeMgr := challengekit.NewManager(redisClient, challengeConfig)
 
 		ctx := context.Background()
-		ch, _, err := challengeMgr.CreateChallenge(ctx, "user789", "email", "test3@example.com", "login", "127.0.0.1")
+		createReq := challengekit.CreateRequest{
+			UserID:      "user789",
+			Channel:     challengekit.ChannelEmail,
+			Destination: "test3@example.com",
+			Purpose:     "login",
+			ClientIP:    "127.0.0.1",
+		}
+		ch, _, err := challengeMgr.Create(ctx, createReq)
 		if err != nil {
 			t.Fatalf("Failed to create challenge: %v", err)
 		}
 
 		// Fail verification 3 times to lock
 		for i := 0; i < 3; i++ {
-			_, _, _ = challengeMgr.VerifyChallenge(ctx, ch.ID, "000000", "127.0.0.1")
+			_, _ = challengeMgr.Verify(ctx, ch.ID, "000000", "127.0.0.1")
 		}
 
 		// Create new challenge for locked user
-		ch2, _, err := challengeMgr.CreateChallenge(ctx, "user789", "email", "test3@example.com", "login", "127.0.0.1")
+		createReq2 := challengekit.CreateRequest{
+			UserID:      "user789",
+			Channel:     challengekit.ChannelEmail,
+			Destination: "test3@example.com",
+			Purpose:     "login",
+			ClientIP:    "127.0.0.1",
+		}
+		ch2, _, err := challengeMgr.Create(ctx, createReq2)
 		if err != nil {
 			t.Fatalf("Failed to create challenge: %v", err)
 		}
@@ -1432,27 +1481,27 @@ func TestHandlers_VerifyChallenge_FailureReasons(t *testing.T) {
 			t.Fatalf("Failed to unmarshal response: %v", err)
 		}
 
-		// Should return locked or invalid reason
+		// Should return user_locked reason (user was locked before verification)
 		reason := result["reason"].(string)
-		if reason != "locked" && reason != "invalid" {
-			t.Errorf("Expected reason=locked or invalid, got %v", reason)
+		if reason != "user_locked" {
+			t.Errorf("Expected reason=user_locked, got %v", reason)
 		}
 	})
 
 	// Test invalid code
 	t.Run("invalid code", func(t *testing.T) {
 		config.ChallengeExpiry = 5 * time.Minute
-		challengeMgr := challenge.NewManager(
-			redisClient,
-			config.ChallengeExpiry,
-			config.MaxAttempts,
-			config.LockoutDuration,
-			config.CodeLength,
-			testLogger(),
-		)
+		challengeMgr := testChallengeManager(t, redisClient)
 
 		ctx := context.Background()
-		ch, _, err := challengeMgr.CreateChallenge(ctx, "user456", "email", "test2@example.com", "login", "127.0.0.1")
+		createReq := challengekit.CreateRequest{
+			UserID:      "user456",
+			Channel:     challengekit.ChannelEmail,
+			Destination: "test2@example.com",
+			Purpose:     "login",
+			ClientIP:    "127.0.0.1",
+		}
+		ch, _, err := challengeMgr.Create(ctx, createReq)
 		if err != nil {
 			t.Fatalf("Failed to create challenge: %v", err)
 		}
@@ -1625,17 +1674,23 @@ func TestHandlers_GetTestCode(t *testing.T) {
 	handlers := NewHandlers(redisClient, nil, testLogger())
 
 	// Create a challenge and store test code
-	challengeMgr := challenge.NewManager(
-		redisClient,
-		5*time.Minute,
-		5,
-		10*time.Minute,
-		6,
-		testLogger(),
-	)
+	challengeConfig := challengekit.Config{
+		Expiry:          5 * time.Minute,
+		MaxAttempts:     5,
+		LockoutDuration: 10 * time.Minute,
+		CodeLength:      6,
+	}
+	challengeMgr := challengekit.NewManager(redisClient, challengeConfig)
 
 	ctx := context.Background()
-	ch, code, err := challengeMgr.CreateChallenge(ctx, "user123", "email", "test@example.com", "login", "127.0.0.1")
+	createReq := challengekit.CreateRequest{
+		UserID:      "user123",
+		Channel:     challengekit.ChannelEmail,
+		Destination: "test@example.com",
+		Purpose:     "login",
+		ClientIP:    "127.0.0.1",
+	}
+	ch, code, err := challengeMgr.Create(ctx, createReq)
 	if err != nil {
 		t.Fatalf("Failed to create challenge: %v", err)
 	}

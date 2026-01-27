@@ -7,6 +7,7 @@ require (
 	github.com/prometheus/client_model v0.6.2
 	github.com/redis/go-redis/v9 v9.17.2
 	github.com/soulteary/audit-kit v1.0.0
+	github.com/soulteary/challenge-kit v1.0.0
 	github.com/soulteary/cli-kit v1.0.0
 	github.com/soulteary/health-kit v1.0.0
 	github.com/soulteary/http-kit v1.0.0
