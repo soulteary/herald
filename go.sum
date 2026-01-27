@@ -102,8 +102,8 @@ github.com/soulteary/logger-kit v1.0.0 h1:fL8QeTi3x7Xlz2xoRcRSYxEYXMWmnwe54iwR9u
 github.com/soulteary/logger-kit v1.0.0/go.mod h1:WtU0zitXvden6yGhI1sFVo30EnSdwviKJDzYkylvmB0=
 github.com/soulteary/metrics-kit v1.0.0 h1:4tpy1h6exgLTWgWA5H17g+l3QUCPJKpVTGyP4HnoKU0=
 github.com/soulteary/metrics-kit v1.0.0/go.mod h1:sMpOwB9SH5A0Pb8i1L//N8k/HvWK8zC+l634w3AH0Qo=
-github.com/soulteary/middleware-kit v1.0.0 h1:uTZZ9kW/sYH7sXJDNRytnr8vPJIC/NMVzk4EsnPx9LM=
-github.com/soulteary/middleware-kit v1.0.0/go.mod h1:dih5kyBIWKOALV9yGXKHKsHMVs/IzAkNxcbi0gZwFZI=
+github.com/soulteary/middleware-kit v1.1.0 h1:pYMFIDBzOEg/Nrb/32LsvGq+NJECRIeWrzBiYVnNOIU=
+github.com/soulteary/middleware-kit v1.1.0/go.mod h1:dih5kyBIWKOALV9yGXKHKsHMVs/IzAkNxcbi0gZwFZI=
 github.com/soulteary/provider-kit v1.1.0 h1:oyS4VG/CUdlOKJCG/0kvZ7JUOLlMUzAshFC8Bd0lKSQ=
 github.com/soulteary/provider-kit v1.1.0/go.mod h1:q3HiM97zf/LJpbf6Xf5eYPGLkd9IDCnzLOnut4KFsO0=
 github.com/soulteary/redis-kit v1.0.0 h1:9HNj2//n3eK29+xqlPmoQ57D7U3vHV/BBfSbVv8sMy8=
