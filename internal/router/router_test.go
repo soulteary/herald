@@ -1,8 +1,12 @@
 package router
 
 import (
+	"io"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"github.com/gofiber/fiber/v2"
 	logger "github.com/soulteary/logger-kit"
 
 	"github.com/soulteary/herald/internal/config"
@@ -53,5 +57,67 @@ func TestNewRouterWithClient(t *testing.T) {
 	app3 := NewRouterWithClient(redisClient, testLogger())
 	if app3 == nil {
 		t.Fatal("NewRouterWithClient() with test mode returned nil")
+	}
+}
+
+func TestHealthz_Returns200(t *testing.T) {
+	redisClient, _ := testutil.NewTestRedisClient()
+	defer func() { _ = redisClient.Close() }()
+
+	rw := NewRouterWithClientAndHandlers(redisClient, testLogger())
+	req := httptest.NewRequest("GET", "/healthz", nil)
+	resp, err := rw.App.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Errorf("GET /healthz status = %d, want 200, body=%s", resp.StatusCode, string(body))
+	}
+}
+
+func TestHealthz_BodyContainsStatusOrOk(t *testing.T) {
+	redisClient, _ := testutil.NewTestRedisClient()
+	defer func() { _ = redisClient.Close() }()
+
+	rw := NewRouterWithClientAndHandlers(redisClient, testLogger())
+	req := httptest.NewRequest("GET", "/healthz", nil)
+	resp, err := rw.App.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	s := string(body)
+	if !strings.Contains(s, "ok") && !strings.Contains(s, "status") {
+		t.Errorf("GET /healthz body should contain 'ok' or 'status', got %s", s)
+	}
+}
+
+// TestOTPRoute_RequiresAuthWhenConfigured verifies that when auth is required (HMAC or API key set),
+// POST /v1/otp/challenges without headers returns 401. Behavior covered by router_auth_test.go.
+// This test ensures the OTP route is mounted and returns 401 when unauthenticated.
+func TestOTPRoute_RequiresAuthWhenConfigured(t *testing.T) {
+	redisClient, _ := testutil.NewTestRedisClient()
+	defer func() { _ = redisClient.Close() }()
+
+	origAPIKey, origHMAC := config.APIKey, config.HMACSecret
+	config.APIKey = ""
+	config.HMACSecret = "require-auth-secret"
+	defer func() {
+		config.APIKey = origAPIKey
+		config.HMACSecret = origHMAC
+	}()
+
+	rw := NewRouterWithClientAndHandlers(redisClient, testLogger())
+	req := httptest.NewRequest("POST", "/v1/otp/challenges", strings.NewReader(`{"user_id":"u1","channel":"email","destination":"a@b.com","purpose":"login"}`))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := rw.App.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		body, _ := io.ReadAll(resp.Body)
+		t.Errorf("POST /v1/otp/challenges without auth status = %d, want 401, body=%s", resp.StatusCode, string(body))
 	}
 }
