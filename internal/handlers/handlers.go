@@ -13,16 +13,17 @@ import (
 	secure "github.com/soulteary/secure-kit"
 	"go.opentelemetry.io/otel/attribute"
 
+	provider "github.com/soulteary/provider-kit"
+	"github.com/soulteary/tracing-kit"
+
 	"github.com/soulteary/herald/internal/auditlog"
 	"github.com/soulteary/herald/internal/challenge"
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/metrics"
 	"github.com/soulteary/herald/internal/otp"
-	"github.com/soulteary/herald/internal/provider"
 	"github.com/soulteary/herald/internal/ratelimit"
 	"github.com/soulteary/herald/internal/session"
 	"github.com/soulteary/herald/internal/template"
-	"github.com/soulteary/tracing-kit"
 )
 
 // Handlers contains all HTTP handlers
@@ -62,26 +63,45 @@ func NewHandlers(redisClient *redis.Client, sessionManager *session.Manager, log
 	// Initialize template manager
 	templateMgr := template.NewManager(config.TemplateDir)
 
-	// Initialize provider registry
+	// Initialize provider registry (using provider-kit)
 	registry := provider.NewRegistry()
 
 	// Register SMTP provider if configured
 	if config.SMTPHost != "" {
-		smtpProvider := provider.NewSMTPProvider()
-		if err := registry.Register(smtpProvider); err != nil {
+		smtpConfig := &provider.SMTPConfig{
+			Host:        config.SMTPHost,
+			Port:        config.SMTPPort,
+			Username:    config.SMTPUser,
+			Password:    config.SMTPPassword,
+			From:        config.SMTPFrom,
+			UseStartTLS: true,
+		}
+		smtpProvider, err := provider.NewSMTPProvider(smtpConfig)
+		if err != nil {
+			log.Warn().Err(err).Msg("Failed to create SMTP provider")
+		} else if err := registry.Register(smtpProvider); err != nil {
 			log.Warn().Err(err).Msg("Failed to register SMTP provider")
 		} else {
 			log.Info().Msg("SMTP provider registered")
 		}
 	}
 
-	// Register SMS provider if configured
+	// Register HTTP SMS provider if configured (using HTTP API for SMS delivery)
 	if config.SMSProvider != "" {
-		smsProvider := provider.NewSMSProvider()
-		if err := registry.Register(smsProvider); err != nil {
-			log.Warn().Err(err).Msg("Failed to register SMS provider")
+		httpConfig := &provider.HTTPConfig{
+			BaseURL:      config.SMSAPIBaseURL,
+			SendEndpoint: "/v1/send",
+			APIKey:       config.SMSAPIKey,
+			ChannelType:  provider.ChannelSMS,
+			ProviderName: config.SMSProvider,
+		}
+		httpProvider, err := provider.NewHTTPProvider(httpConfig)
+		if err != nil {
+			log.Warn().Err(err).Msg("Failed to create HTTP SMS provider")
+		} else if err := registry.Register(httpProvider); err != nil {
+			log.Warn().Err(err).Msg("Failed to register HTTP SMS provider")
 		} else {
-			log.Info().Msg("SMS provider registered")
+			log.Info().Str("provider", config.SMSProvider).Msg("HTTP SMS provider registered")
 		}
 	}
 
@@ -317,10 +337,6 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 
 	// Send verification code via provider
 	channel := provider.Channel(req.Channel)
-	msg := &provider.Message{
-		To:   req.Destination,
-		Code: code,
-	}
 
 	// Use template manager to format message
 	templateData := template.TemplateData{
@@ -330,23 +346,26 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		Locale:    req.Locale,
 	}
 
+	// Build message using provider-kit fluent API
+	msg := provider.NewMessage(req.Destination).
+		WithCode(code).
+		WithLocale(req.Locale).
+		WithIdempotencyKey(ch.ID) // Use challenge ID as idempotency key
+
 	if channel == provider.ChannelEmail {
 		subject, body, err := h.templateManager.RenderEmail(req.Locale, req.Purpose, templateData)
 		if err != nil {
-			// Fallback to built-in formatting
-			msg.Subject, msg.Body = provider.FormatVerificationEmail(code, req.Locale)
-		} else {
-			msg.Subject = subject
-			msg.Body = body
+			// Fallback to built-in formatting from provider-kit
+			subject, body = provider.FormatVerificationEmail(code, req.Locale)
 		}
+		msg.WithSubject(subject).WithBody(body)
 	} else {
 		body, err := h.templateManager.RenderSMS(req.Locale, req.Purpose, templateData)
 		if err != nil {
-			// Fallback to built-in formatting
-			msg.Body = provider.FormatVerificationSMS(code, req.Locale)
-		} else {
-			msg.Body = body
+			// Fallback to built-in formatting from provider-kit
+			body = provider.FormatVerificationSMS(code, req.Locale)
 		}
+		msg.WithBody(body)
 	}
 
 	// Determine provider name for audit
@@ -370,17 +389,26 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		attribute.String("provider", providerName),
 	)
 
-	if err := h.providerRegistry.Send(providerCtx, channel, msg); err != nil {
+	// Send using provider-kit Registry (returns *SendResult, error)
+	sendResult, err := h.providerRegistry.Send(providerCtx, channel, msg)
+	sendDuration := time.Since(sendStart)
+
+	if err != nil || (sendResult != nil && !sendResult.OK) {
 		tracing.RecordError(providerSpan, err)
 		providerSpan.End()
-		sendDuration := time.Since(sendStart)
 		h.log.Error().Err(err).Msg("Failed to send verification code via provider")
+
+		// Get error reason from provider-kit result
+		errorReason := "send_failed"
+		if sendResult != nil && sendResult.Error != nil {
+			errorReason = string(sendResult.Error.Reason)
+		}
 
 		// Metrics: send failed
 		metrics.RecordOTPSend(req.Channel, providerName, "failure", sendDuration)
 
 		// Audit: send failed
-		auditlog.LogSendFailed(providerCtx, ch.ID, req.UserID, req.Channel, req.Destination, req.Purpose, providerName, "send_failed", clientIP)
+		auditlog.LogSendFailed(providerCtx, ch.ID, req.UserID, req.Channel, req.Destination, req.Purpose, providerName, errorReason, clientIP)
 
 		// Handle provider failure based on policy
 		if config.ProviderFailurePolicy == "strict" {
@@ -399,7 +427,6 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		// Soft mode: log error but continue (challenge is already created)
 		// The code can still be verified manually if needed
 	} else {
-		sendDuration := time.Since(sendStart)
 		providerSpan.SetAttributes(
 			attribute.String("result", "success"),
 			attribute.Int64("duration_ms", sendDuration.Milliseconds()),
@@ -409,9 +436,12 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		// Metrics: send success
 		metrics.RecordOTPSend(req.Channel, providerName, "success", sendDuration)
 
-		// Audit: send success
-		// TODO: messageID should be returned from provider.Send when the Provider interface is extended
-		auditlog.LogSendSuccess(providerCtx, ch.ID, req.UserID, req.Channel, req.Destination, req.Purpose, providerName, "", clientIP)
+		// Audit: send success (now includes messageID from provider-kit)
+		messageID := ""
+		if sendResult != nil {
+			messageID = sendResult.MessageID
+		}
+		auditlog.LogSendSuccess(providerCtx, ch.ID, req.UserID, req.Channel, req.Destination, req.Purpose, providerName, messageID, clientIP)
 	}
 
 	// Prepare response

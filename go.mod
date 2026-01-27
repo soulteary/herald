@@ -14,6 +14,7 @@ require (
 	github.com/soulteary/logger-kit v1.0.0
 	github.com/soulteary/metrics-kit v1.0.0
 	github.com/soulteary/middleware-kit v1.0.0
+	github.com/soulteary/provider-kit v1.0.0
 	github.com/soulteary/redis-kit v1.0.0
 	github.com/soulteary/secure-kit v1.0.0
 	github.com/soulteary/tracing-kit v1.0.0

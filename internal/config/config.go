@@ -53,12 +53,10 @@ var (
 	SMTPFrom              = env.Get("SMTP_FROM", "")
 	ProviderFailurePolicy = env.Get("PROVIDER_FAILURE_POLICY", "soft") // "strict" | "soft"
 
-	// SMS Provider config (example: Aliyun)
-	SMSProvider        = env.Get("SMS_PROVIDER", "") // "aliyun", "tencent", etc.
-	AliyunAccessKey    = env.Get("ALIYUN_ACCESS_KEY", "")
-	AliyunSecretKey    = env.Get("ALIYUN_SECRET_KEY", "")
-	AliyunSignName     = env.Get("ALIYUN_SIGN_NAME", "")
-	AliyunTemplateCode = env.Get("ALIYUN_TEMPLATE_CODE", "")
+	// SMS Provider config (HTTP API mode - recommended)
+	SMSProvider   = env.Get("SMS_PROVIDER", "")     // Provider name (e.g., "aliyun", "tencent", "http")
+	SMSAPIBaseURL = env.Get("SMS_API_BASE_URL", "") // HTTP API base URL for SMS provider
+	SMSAPIKey     = env.Get("SMS_API_KEY", "")      // HTTP API key for SMS provider
 
 	// Service authentication (HMAC)
 	HMACSecret   = env.Get("HMAC_SECRET", "")

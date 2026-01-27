@@ -79,10 +79,10 @@ func TestNewHandlers(t *testing.T) {
 		t.Fatal("NewHandlers() returned nil")
 	}
 
-	// Test with SMS provider configured
+	// Test with SMS provider configured (uses HTTP API mode)
 	config.SMSProvider = "aliyun"
-	config.AliyunAccessKey = "test-key"
-	config.AliyunSecretKey = "test-secret"
+	config.SMSAPIBaseURL = "http://localhost:8080"
+	config.SMSAPIKey = "test-key"
 	handlers3 := NewHandlers(redisClient, nil, testLogger())
 	if handlers3 == nil {
 		t.Fatal("NewHandlers() returned nil")

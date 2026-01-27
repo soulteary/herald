@@ -102,6 +102,8 @@ github.com/soulteary/metrics-kit v1.0.0 h1:4tpy1h6exgLTWgWA5H17g+l3QUCPJKpVTGyP4
 github.com/soulteary/metrics-kit v1.0.0/go.mod h1:sMpOwB9SH5A0Pb8i1L//N8k/HvWK8zC+l634w3AH0Qo=
 github.com/soulteary/middleware-kit v1.0.0 h1:uTZZ9kW/sYH7sXJDNRytnr8vPJIC/NMVzk4EsnPx9LM=
 github.com/soulteary/middleware-kit v1.0.0/go.mod h1:dih5kyBIWKOALV9yGXKHKsHMVs/IzAkNxcbi0gZwFZI=
+github.com/soulteary/provider-kit v1.0.0 h1:KUapyb0XkO8vTK9AajBv93nPkOrkAXkH04byO/1uV1E=
+github.com/soulteary/provider-kit v1.0.0/go.mod h1:q3HiM97zf/LJpbf6Xf5eYPGLkd9IDCnzLOnut4KFsO0=
 github.com/soulteary/redis-kit v1.0.0 h1:9HNj2//n3eK29+xqlPmoQ57D7U3vHV/BBfSbVv8sMy8=
 github.com/soulteary/redis-kit v1.0.0/go.mod h1:q18cqZ8QPaXDoODl1pr5jcbU/iDDMCBscVt/IMXEm7U=
 github.com/soulteary/secure-kit v1.0.0 h1:CTcPVbkxEod0jawefqChrgjh/JxCO9DiHsoBbFVcEdc=
