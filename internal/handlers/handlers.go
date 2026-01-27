@@ -32,8 +32,8 @@ type Handlers struct {
 	providerRegistry *provider.Registry
 	templateManager  *template.Manager
 	redis            *redis.Client
-	testCodeCache    rediskitcache.Cache // For test mode code storage
-	idempotencyCache rediskitcache.Cache // For idempotency key storage
+	testCodeCache    rediskitcache.Cache   // For test mode code storage
+	idempotencyCache rediskitcache.Cache   // For idempotency key storage
 	sessionManager   *sessionkit.KVManager // Optional: nil if session storage is disabled
 	log              *logger.Logger
 }
