@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pterm/pterm"
+	"github.com/pterm/pterm/putils"
 	logger "github.com/soulteary/logger-kit"
 	version "github.com/soulteary/version-kit"
 
@@ -21,7 +23,22 @@ import (
 // log is the global logger instance
 var log *logger.Logger
 
+// showBanner displays the startup banner with version
+func showBanner() {
+	pterm.DefaultBox.Println(
+		putils.CenterText(
+			"Herald\n" +
+				"OTP and Verification Code Service\n" +
+				"Version: " + version.Version,
+		),
+	)
+	time.Sleep(time.Millisecond) // Don't ask why, but this fixes the docker-compose log
+}
+
 func main() {
+	// Display startup banner
+	showBanner()
+
 	// Initialize logger using logger-kit
 	log = logger.New(logger.Config{
 		Level:          logger.ParseLevelFromEnv("LOG_LEVEL", logger.InfoLevel),
