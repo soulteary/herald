@@ -16,7 +16,7 @@ require (
 	github.com/soulteary/logger-kit v1.1.0
 	github.com/soulteary/metrics-kit v1.0.0
 	github.com/soulteary/middleware-kit v1.1.0
-	github.com/soulteary/provider-kit v1.1.1
+	github.com/soulteary/provider-kit v1.2.0
 	github.com/soulteary/redis-kit v1.0.1
 	github.com/soulteary/secure-kit v1.1.1
 	github.com/soulteary/session-kit v1.1.2
@@ -37,7 +37,7 @@ require (
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/clipperhouse/stringish v0.1.1 // indirect
-	github.com/clipperhouse/uax29/v2 v2.4.0 // indirect
+	github.com/clipperhouse/uax29/v2 v2.5.0 // indirect
 	github.com/containerd/console v1.0.5 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
@@ -45,7 +45,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/gookit/color v1.5.4 // indirect
+	github.com/gookit/color v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.7 // indirect
 	github.com/klauspost/compress v1.18.3 // indirect
 	github.com/lib/pq v1.11.1 // indirect

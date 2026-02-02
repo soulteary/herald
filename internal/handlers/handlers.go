@@ -105,6 +105,25 @@ func NewHandlers(redisClient *redis.Client, sessionManager *sessionkit.KVManager
 		}
 	}
 
+	// Register DingTalk channel via herald-dingtalk HTTP service (no DingTalk credentials in Herald)
+	if config.HeraldDingtalkAPIURL != "" {
+		httpConfig := &provider.HTTPConfig{
+			BaseURL:      config.HeraldDingtalkAPIURL,
+			SendEndpoint: "/v1/send",
+			APIKey:       config.HeraldDingtalkAPIKey,
+			ChannelType:  provider.ChannelDingTalk,
+			ProviderName: "dingtalk",
+		}
+		httpProvider, err := provider.NewHTTPProvider(httpConfig)
+		if err != nil {
+			log.Warn().Err(err).Msg("Failed to create DingTalk HTTP provider")
+		} else if err := registry.Register(httpProvider); err != nil {
+			log.Warn().Err(err).Msg("Failed to register DingTalk HTTP provider")
+		} else {
+			log.Info().Msg("DingTalk HTTP provider registered (herald-dingtalk)")
+		}
+	}
+
 	// Create test code cache for test mode
 	testCodeCache := rediskitcache.NewCache(redisClient, "otp:test:code:")
 
@@ -196,7 +215,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		})
 	}
 
-	if req.Channel != "sms" && req.Channel != "email" {
+	if req.Channel != "sms" && req.Channel != "email" && req.Channel != "dingtalk" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "invalid_channel",
@@ -365,6 +384,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		}
 		msg.WithSubject(subject).WithBody(body)
 	} else {
+		// SMS and DingTalk: body only (DingTalk via herald-dingtalk receives body)
 		body, err := h.templateManager.RenderSMS(req.Locale, req.Purpose, templateData)
 		if err != nil {
 			// Fallback to built-in formatting from provider-kit
@@ -380,6 +400,8 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		providerName = "smtp"
 	case "sms":
 		providerName = config.SMSProvider
+	case "dingtalk":
+		providerName = "dingtalk"
 	default:
 		providerName = req.Channel
 	}
@@ -598,13 +620,15 @@ func (h *Handlers) VerifyChallenge(c *fiber.Ctx) error {
 	// Audit: challenge verified
 	auditlog.LogVerificationSuccess(verifyCtx, ch.ID, ch.UserID, string(ch.Channel), ch.Destination, ch.Purpose, req.ClientIP)
 
-	// Generate AMR based on channel
+	// Generate AMR based on channel (use string to avoid depending on challengekit.ChannelDingTalk in v1.0.0)
 	amr := []string{"otp"}
-	switch ch.Channel {
-	case challengekit.ChannelSMS:
+	switch string(ch.Channel) {
+	case "sms":
 		amr = append(amr, "sms")
-	case challengekit.ChannelEmail:
+	case "email":
 		amr = append(amr, "email")
+	case "dingtalk":
+		amr = append(amr, "dingtalk")
 	}
 
 	// Success
