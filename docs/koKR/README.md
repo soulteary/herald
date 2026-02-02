@@ -14,6 +14,11 @@ Herald OTP 및 인증 코드 서비스 문서에 오신 것을 환영합니다.
 
 ### 상세 문서
 
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - 풀스택 아키텍처
+  - Stargate / Warden / Herald / Redis / 제공자
+  - 데이터 흐름 및 주요 인터페이스(challenge, verify, 제공자 전송)
+  - 보안 경계(HMAC/mTLS, PII)
+
 - **[API.md](API.md)** - 완전한 API 엔드포인트 문서
   - 인증 방법
   - 헬스 체크 엔드포인트
@@ -49,8 +54,9 @@ Herald OTP 및 인증 코드 서비스 문서에 오신 것을 환영합니다.
 
 ### 개발자
 
-1. [API.md](API.md)를 확인하여 API 인터페이스를 이해하세요
-2. [DEPLOYMENT.md](DEPLOYMENT.md)를 검토하여 배포 옵션을 확인하세요
+1. [ARCHITECTURE.md](ARCHITECTURE.md)를 읽어 풀스택 개요를 파악하세요
+2. [API.md](API.md)를 확인하여 API 인터페이스를 이해하세요
+3. [DEPLOYMENT.md](DEPLOYMENT.md)를 검토하여 배포 옵션을 확인하세요
 
 ### 운영
 
@@ -69,12 +75,14 @@ herald/
 ├── docs/
 │   ├── enUS/
 │   │   ├── README.md       # 문서 인덱스 (영어)
+│   │   ├── ARCHITECTURE.md # 풀스택 아키텍처 (영어)
 │   │   ├── API.md          # API 문서 (영어)
 │   │   ├── DEPLOYMENT.md   # 배포 가이드 (영어)
 │   │   ├── MONITORING.md   # 모니터링 가이드 (영어)
 │   │   └── TROUBLESHOOTING.md # 문제 해결 가이드 (영어)
 │   └── koKR/
 │       ├── README.md       # 문서 인덱스 (한국어, 이 파일)
+│       ├── ARCHITECTURE.md # 풀스택 아키텍처 (한국어)
 │       ├── API.md          # API 문서 (한국어)
 │       ├── DEPLOYMENT.md   # 배포 가이드 (한국어)
 │       ├── MONITORING.md   # 모니터링 가이드 (한국어)

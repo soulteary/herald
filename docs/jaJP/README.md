@@ -14,6 +14,11 @@ Herald OTP および検証コードサービスのドキュメントへようこ
 
 ### 詳細ドキュメント
 
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - フルスタックアーキテクチャ
+  - Stargate / Warden / Herald / Redis / プロバイダー
+  - データフローと主要インターフェース（challenge、verify、プロバイダー送信）
+  - セキュリティ境界（HMAC/mTLS、PII）
+
 - **[API.md](API.md)** - 完全な API エンドポイントドキュメント
   - 認証方法
   - ヘルスチェックエンドポイント
@@ -49,8 +54,9 @@ Herald OTP および検証コードサービスのドキュメントへようこ
 
 ### 開発者
 
-1. [API.md](API.md) を確認して API インターフェースを理解する
-2. [DEPLOYMENT.md](DEPLOYMENT.md) を確認してデプロイメントオプションを理解する
+1. [ARCHITECTURE.md](ARCHITECTURE.md) を読んでフルスタックの全体像を把握する
+2. [API.md](API.md) を確認して API インターフェースを理解する
+3. [DEPLOYMENT.md](DEPLOYMENT.md) を確認してデプロイメントオプションを理解する
 
 ### 運用
 
@@ -69,12 +75,14 @@ herald/
 ├── docs/
 │   ├── enUS/
 │   │   ├── README.md       # ドキュメントインデックス（英語）
+│   │   ├── ARCHITECTURE.md # フルスタックアーキテクチャ（英語）
 │   │   ├── API.md          # API ドキュメント（英語）
 │   │   ├── DEPLOYMENT.md   # デプロイメントガイド（英語）
 │   │   ├── MONITORING.md   # モニタリングガイド（英語）
 │   │   └── TROUBLESHOOTING.md # トラブルシューティングガイド（英語）
 │   └── jaJP/
 │       ├── README.md       # ドキュメントインデックス（日本語、このファイル）
+│       ├── ARCHITECTURE.md # フルスタックアーキテクチャ（日本語）
 │       ├── API.md          # API ドキュメント（日本語）
 │       ├── DEPLOYMENT.md   # デプロイメントガイド（日本語）
 │       ├── MONITORING.md   # モニタリングガイド（日本語）

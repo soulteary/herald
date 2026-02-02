@@ -14,6 +14,11 @@
 
 ### 详细文档
 
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - 全栈架构说明
+  - Stargate / Warden / Herald / Redis / Provider
+  - 数据流与关键接口（challenge、verify、provider send）
+  - 安全边界（HMAC/mTLS、PII）
+
 - **[API.md](API.md)** - 完整的 API 端点文档
   - 认证方法
   - 健康检查端点
@@ -49,8 +54,9 @@
 
 ### 开发人员
 
-1. 查看 [API.md](API.md) 了解 API 接口
-2. 参考 [DEPLOYMENT.md](DEPLOYMENT.md) 了解部署选项
+1. 阅读 [ARCHITECTURE.md](ARCHITECTURE.md) 了解全栈架构
+2. 查看 [API.md](API.md) 了解 API 接口
+3. 参考 [DEPLOYMENT.md](DEPLOYMENT.md) 了解部署选项
 
 ### 运维人员
 
@@ -66,23 +72,32 @@
 herald/
 ├── README.md              # 项目主文档（英文）
 ├── README.zhCN.md         # 项目主文档（中文）
+├── README.deDE.md         # 项目主文档（德文）
+├── README.frFR.md         # 项目主文档（法文）
+├── README.itIT.md         # 项目主文档（意大利文）
+├── README.jaJP.md         # 项目主文档（日文）
+├── README.koKR.md         # 项目主文档（韩文）
 ├── docs/
-│   ├── enUS/
-│   │   ├── README.md       # 文档索引（英文）
-│   │   ├── API.md          # API 文档（英文）
-│   │   ├── DEPLOYMENT.md   # 部署指南（英文）
-│   │   ├── MONITORING.md   # 监控指南（英文）
-│   │   └── TROUBLESHOOTING.md # 故障排查指南（英文）
-│   └── zhCN/
-│       ├── README.md       # 文档索引（中文，本文件）
-│       ├── API.md          # API 文档（中文）
-│       ├── DEPLOYMENT.md   # 部署指南（中文）
-│       ├── MONITORING.md   # 监控指南（中文）
-│       └── TROUBLESHOOTING.md # 故障排查指南（中文）
+│   ├── enUS/              # English
+│   ├── zhCN/              # 中文（本文件）
+│   ├── deDE/              # Deutsch
+│   ├── frFR/              # Français
+│   ├── itIT/              # Italiano
+│   ├── jaJP/              # 日本語
+│   └── koKR/              # 한국어
+│       # 各语言目录均包含：
+│       # README.md、ARCHITECTURE.md、API.md、DEPLOYMENT.md、
+│       # MONITORING.md、SECURITY.md、CONTRIBUTING.md、TROUBLESHOOTING.md
 └── ...
 ```
 
 ## 🔍 按主题查找
+
+### 架构相关
+
+- 全栈概览：[ARCHITECTURE.md](ARCHITECTURE.md)
+- 数据流与关键接口：[ARCHITECTURE.md#数据流与关键接口](ARCHITECTURE.md#数据流与关键接口)
+- 安全边界：[ARCHITECTURE.md#安全边界](ARCHITECTURE.md#安全边界)
 
 ### API 相关
 

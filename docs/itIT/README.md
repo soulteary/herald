@@ -14,6 +14,11 @@ Benvenuti nella documentazione del servizio Herald OTP e codici di verifica.
 
 ### Documenti Dettagliati
 
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Architettura full-stack
+  - Stargate / Warden / Herald / Redis / Provider
+  - Flusso dati e interfacce chiave (challenge, verify, invio provider)
+  - Confini di sicurezza (HMAC/mTLS, PII)
+
 - **[API.md](API.md)** - Documentazione completa degli endpoint API
   - Metodi di autenticazione
   - Endpoint di controllo dello stato
@@ -49,8 +54,9 @@ Benvenuti nella documentazione del servizio Herald OTP e codici di verifica.
 
 ### Sviluppatori
 
-1. Controlla [API.md](API.md) per comprendere le interfacce API
-2. Esamina [DEPLOYMENT.md](DEPLOYMENT.md) per le opzioni di deployment
+1. Leggi [ARCHITECTURE.md](ARCHITECTURE.md) per la panoramica full-stack
+2. Controlla [API.md](API.md) per comprendere le interfacce API
+3. Esamina [DEPLOYMENT.md](DEPLOYMENT.md) per le opzioni di deployment
 
 ### Operazioni
 
@@ -69,12 +75,14 @@ herald/
 ├── docs/
 │   ├── enUS/
 │   │   ├── README.md       # Indice della documentazione (Inglese)
+│   │   ├── ARCHITECTURE.md # Architettura full-stack (Inglese)
 │   │   ├── API.md          # Documento API (Inglese)
 │   │   ├── DEPLOYMENT.md   # Guida al deployment (Inglese)
 │   │   ├── MONITORING.md   # Guida al monitoraggio (Inglese)
 │   │   └── TROUBLESHOOTING.md # Guida alla risoluzione dei problemi (Inglese)
 │   └── itIT/
 │       ├── README.md       # Indice della documentazione (Italiano, questo file)
+│       ├── ARCHITECTURE.md # Architettura full-stack (Italiano)
 │       ├── API.md          # Documento API (Italiano)
 │       ├── DEPLOYMENT.md   # Guida al deployment (Italiano)
 │       ├── MONITORING.md   # Guida al monitoraggio (Italiano)

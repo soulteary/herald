@@ -14,6 +14,11 @@ Welcome to the Herald OTP and Verification Code Service documentation.
 
 ### Detailed Documents
 
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Full-stack architecture
+  - Stargate / Warden / Herald / Redis / Provider
+  - Data flow and key interfaces (challenge, verify, provider send)
+  - Security boundaries (HMAC/mTLS, PII)
+
 - **[API.md](API.md)** - Complete API endpoint documentation
   - Authentication methods
   - Health check endpoints
@@ -49,8 +54,9 @@ Welcome to the Herald OTP and Verification Code Service documentation.
 
 ### Developers
 
-1. Check [API.md](API.md) to understand the API interfaces
-2. Review [DEPLOYMENT.md](DEPLOYMENT.md) for deployment options
+1. Read [ARCHITECTURE.md](ARCHITECTURE.md) for the full-stack picture
+2. Check [API.md](API.md) to understand the API interfaces
+3. Review [DEPLOYMENT.md](DEPLOYMENT.md) for deployment options
 
 ### Operations
 
@@ -66,23 +72,32 @@ Welcome to the Herald OTP and Verification Code Service documentation.
 herald/
 ├── README.md              # Main project document (English)
 ├── README.zhCN.md         # Main project document (Chinese)
+├── README.deDE.md         # Main project document (German)
+├── README.frFR.md         # Main project document (French)
+├── README.itIT.md         # Main project document (Italian)
+├── README.jaJP.md         # Main project document (Japanese)
+├── README.koKR.md         # Main project document (Korean)
 ├── docs/
-│   ├── enUS/
-│   │   ├── README.md       # Documentation index (English, this file)
-│   │   ├── API.md          # API document (English)
-│   │   ├── DEPLOYMENT.md   # Deployment guide (English)
-│   │   ├── MONITORING.md   # Monitoring guide (English)
-│   │   └── TROUBLESHOOTING.md # Troubleshooting guide (English)
-│   └── zhCN/
-│       ├── README.md       # Documentation index (Chinese)
-│       ├── API.md          # API document (Chinese)
-│       ├── DEPLOYMENT.md   # Deployment guide (Chinese)
-│       ├── MONITORING.md   # Monitoring guide (Chinese)
-│       └── TROUBLESHOOTING.md # Troubleshooting guide (Chinese)
+│   ├── enUS/              # English (this file)
+│   ├── zhCN/              # 中文
+│   ├── deDE/              # Deutsch
+│   ├── frFR/              # Français
+│   ├── itIT/              # Italiano
+│   ├── jaJP/              # 日本語
+│   └── koKR/              # 한국어
+│       # Each language folder contains:
+│       # README.md, ARCHITECTURE.md, API.md, DEPLOYMENT.md,
+│       # MONITORING.md, SECURITY.md, CONTRIBUTING.md, TROUBLESHOOTING.md
 └── ...
 ```
 
 ## 🔍 Find by Topic
+
+### Architecture
+
+- Full-stack overview: [ARCHITECTURE.md](ARCHITECTURE.md)
+- Data flow and interfaces: [ARCHITECTURE.md#data-flow-and-key-interfaces](ARCHITECTURE.md#data-flow-and-key-interfaces)
+- Security boundaries: [ARCHITECTURE.md#security-boundaries](ARCHITECTURE.md#security-boundaries)
 
 ### API Related
 
