@@ -27,7 +27,8 @@ Questa guida ti aiuta a diagnosticare e risolvere problemi comuni con il servizi
    ```
 
 2. **Verificare la Configurazione Provider**
-   - Controllare le impostazioni SMTP (per e-mail): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`
+   - Controllare le impostazioni SMTP (SMTP integrato): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`
+   - Per e-mail via herald-smtp: assicurarsi che `HERALD_SMTP_API_URL` sia impostato e che herald-smtp sia raggiungibile; opzionalmente `HERALD_SMTP_API_KEY`. Se le e-mail non vengono ricevute, controllare i log e la configurazione SMTP di herald-smtp.
    - Controllare le impostazioni del provider SMS: `SMS_PROVIDER`, `ALIYUN_ACCESS_KEY`, ecc.
    - Verificare che le credenziali del provider siano corrette
 

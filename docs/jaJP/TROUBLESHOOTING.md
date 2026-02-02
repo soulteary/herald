@@ -27,7 +27,8 @@
    ```
 
 2. **プロバイダー設定を確認**
-   - SMTP 設定を確認（電子メール用）：`SMTP_HOST`、`SMTP_PORT`、`SMTP_USER`、`SMTP_PASSWORD`
+   - SMTP 設定を確認（組み込み SMTP 使用時）：`SMTP_HOST`、`SMTP_PORT`、`SMTP_USER`、`SMTP_PASSWORD`
+   - herald-smtp 経由の電子メールの場合：`HERALD_SMTP_API_URL` が設定され herald-smtp に到達可能であることを確認；オプションで `HERALD_SMTP_API_KEY`。メールが届かない場合は herald-smtp のログと SMTP 設定を確認。
    - SMS プロバイダー設定を確認：`SMS_PROVIDER`、`ALIYUN_ACCESS_KEY` など
    - プロバイダーの認証情報が正しいことを確認
 

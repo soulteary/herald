@@ -85,7 +85,7 @@ HMAC-SHA256(timestamp:service:body, secret)
 }
 ```
 
-**通道：** `channel` 可为 `"sms"`、`"email"` 或 `"dingtalk"`。当为 `"dingtalk"` 时，Herald 将发送请求转发给 [herald-dingtalk](https://github.com/soulteary/herald-dingtalk)（需配置 `HERALD_DINGTALK_API_URL`）；`destination` 为钉钉 userid（或在 herald-dingtalk 启用手机号查询时为 11 位手机号）。Herald 不保存任何钉钉凭证。
+**通道：** `channel` 可为 `"sms"`、`"email"` 或 `"dingtalk"`。当为 `"email"` 且配置了 `HERALD_SMTP_API_URL` 时，Herald 将发送请求转发给 [herald-smtp](https://github.com/soulteary/herald-smtp)，`destination` 为邮箱地址。当为 `"dingtalk"` 时，Herald 将发送请求转发给 [herald-dingtalk](https://github.com/soulteary/herald-dingtalk)（需配置 `HERALD_DINGTALK_API_URL`）；`destination` 为钉钉 userid（或在 herald-dingtalk 启用手机号查询时为 11 位手机号）。Herald 不保存任何 SMTP 或钉钉凭证。
 
 **响应：**
 ```json

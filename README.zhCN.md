@@ -20,7 +20,7 @@ Herald 是一个生产就绪的独立 OTP 和验证码服务，可通过电子�
 - 🔒 **安全设计**：基于挑战的验证，使用 Argon2 哈希存储，多种认证方法（mTLS、HMAC、API Key）
 - 📊 **内置速率限制**：多维速率限制（按用户、按 IP、按目标），可配置阈值
 - 📝 **完整审计跟踪**：所有操作的完整审计日志记录，包含提供者跟踪
-- 🔌 **可插拔提供者**：可扩展的电子邮件、SMS 与 DingTalk 提供者架构（DingTalk 通过 [herald-dingtalk](https://github.com/soulteary/herald-dingtalk)）
+- 🔌 **可插拔提供者**：可扩展的电子邮件、SMS 与 DingTalk 提供者架构（邮件通过 [herald-smtp](https://github.com/soulteary/herald-smtp)，DingTalk 通过 [herald-dingtalk](https://github.com/soulteary/herald-dingtalk)）
 
 ## 快速开始
 
@@ -85,7 +85,7 @@ Herald 需要最少的配置即可开始使用：
 | `REDIS_ADDR` | Redis address | `localhost:6379` | Yes |
 | `API_KEY` | API key for authentication | - | Recommended |
 
-使用 DingTalk 通道时，请设置 `HERALD_DINGTALK_API_URL`（可选 `HERALD_DINGTALK_API_KEY`）；参见 [部署指南](docs/zhCN/DEPLOYMENT.md#dingtalk-通道herald-dingtalk)。
+使用 herald-smtp 发邮件时，请设置 `HERALD_SMTP_API_URL`（可选 `HERALD_SMTP_API_KEY`）；参见 [部署指南](docs/zhCN/DEPLOYMENT.md#email-通道herald-smtp)。使用 DingTalk 通道时，请设置 `HERALD_DINGTALK_API_URL`（可选 `HERALD_DINGTALK_API_KEY`）；参见 [部署指南](docs/zhCN/DEPLOYMENT.md#dingtalk-通道herald-dingtalk)。
 
 有关完整的配置选项，包括速率限制、挑战过期时间和提供者设置，请参阅 [部署指南](docs/zhCN/DEPLOYMENT.md#configuration)。
 

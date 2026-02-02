@@ -61,6 +61,16 @@ go build -o herald main.go
 | `ALIYUN_TEMPLATE_CODE` | 阿里云 SMS 模板代码 | `` | 用于阿里云 SMS |
 | `HERALD_DINGTALK_API_URL` | [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) 服务基础 URL（例如 `http://herald-dingtalk:8083`） | `` | 用于 DingTalk 通道 |
 | `HERALD_DINGTALK_API_KEY` | 可选 API 密钥；若 herald-dingtalk 配置了 `API_KEY` 则需与此一致 | `` | 否 |
+| `HERALD_SMTP_API_URL` | [herald-smtp](https://github.com/soulteary/herald-smtp) 服务基础 URL（例如 `http://herald-smtp:8084`）；设置后不再使用内置 SMTP | `` | 用于 email 通道（可选） |
+| `HERALD_SMTP_API_KEY` | 可选 API 密钥；若 herald-smtp 配置了 `API_KEY` 则需与此一致 | `` | 否 |
+
+### Email 通道（herald-smtp）
+
+当设置 `HERALD_SMTP_API_URL` 时，Herald 不再使用内置 SMTP，而是通过 HTTP 将邮件发送请求转发给 [herald-smtp](https://github.com/soulteary/herald-smtp)。所有 SMTP 凭证与发送逻辑均在 herald-smtp 中；此模式下 Herald 不保存任何 email 通道的 SMTP 凭证。
+
+- 将 `HERALD_SMTP_API_URL` 设置为 herald-smtp 服务的基础 URL（例如 `http://herald-smtp:8084`）。
+- 若 herald-smtp 配置了 `API_KEY`，请将 `HERALD_SMTP_API_KEY` 设为相同值，以便 Herald 调用 herald-smtp 时通过认证。
+- 设置 `HERALD_SMTP_API_URL` 后，Herald 会忽略 `SMTP_HOST` 等内置 SMTP 配置（email 通道不再使用它们）。
 
 ### DingTalk 通道（herald-dingtalk）
 

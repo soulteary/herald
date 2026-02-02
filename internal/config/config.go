@@ -62,6 +62,10 @@ var (
 	HeraldDingtalkAPIURL = env.Get("HERALD_DINGTALK_API_URL", "") // Base URL of herald-dingtalk service
 	HeraldDingtalkAPIKey = env.Get("HERALD_DINGTALK_API_KEY", "") // Optional API key for herald-dingtalk
 
+	// Email channel via herald-smtp: Herald calls herald-smtp via HTTP (no SMTP credentials in Herald when set)
+	HeraldSMTPAPIURL = env.Get("HERALD_SMTP_API_URL", "") // Base URL of herald-smtp service; when set, built-in SMTP is not used
+	HeraldSMTPAPIKey = env.Get("HERALD_SMTP_API_KEY", "") // Optional API key for herald-smtp
+
 	// Service authentication (HMAC)
 	HMACSecret   = env.Get("HMAC_SECRET", "")
 	HMACKeysJSON = env.Get("HERALD_HMAC_KEYS", "") // JSON format: {"key-id-1":"secret-1","key-id-2":"secret-2"}

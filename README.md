@@ -20,7 +20,7 @@ Herald is a production-ready, standalone OTP and verification code service that 
 - 🔒 **Secure by Design**: Challenge-based verification with Argon2 hash storage, multiple authentication methods (mTLS, HMAC, API Key)
 - 📊 **Built-in Rate Limiting**: Multi-dimensional rate limiting (per user, per IP, per destination) with configurable thresholds
 - 📝 **Complete Audit Trail**: Full audit logging for all operations with provider tracking
-- 🔌 **Pluggable Providers**: Extensible email, SMS, and DingTalk provider architecture (DingTalk via [herald-dingtalk](https://github.com/soulteary/herald-dingtalk))
+- 🔌 **Pluggable Providers**: Extensible email, SMS, and DingTalk provider architecture (email via [herald-smtp](https://github.com/soulteary/herald-smtp), DingTalk via [herald-dingtalk](https://github.com/soulteary/herald-dingtalk))
 
 ## Quick Start
 
@@ -85,7 +85,7 @@ Herald requires minimal configuration to get started:
 | `REDIS_ADDR` | Redis address | `localhost:6379` | Yes |
 | `API_KEY` | API key for authentication | - | Recommended |
 
-For DingTalk channel, set `HERALD_DINGTALK_API_URL` (and optionally `HERALD_DINGTALK_API_KEY`); see [Deployment Guide](docs/enUS/DEPLOYMENT.md#dingtalk-channel-herald-dingtalk).
+For email channel via herald-smtp, set `HERALD_SMTP_API_URL` (and optionally `HERALD_SMTP_API_KEY`); see [Deployment Guide](docs/enUS/DEPLOYMENT.md#email-channel-herald-smtp). For DingTalk channel, set `HERALD_DINGTALK_API_URL` (and optionally `HERALD_DINGTALK_API_KEY`); see [Deployment Guide](docs/enUS/DEPLOYMENT.md#dingtalk-channel-herald-dingtalk).
 
 For complete configuration options including rate limits, challenge expiry, and provider settings, see the [Deployment Guide](docs/enUS/DEPLOYMENT.md#configuration).
 

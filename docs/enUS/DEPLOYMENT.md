@@ -61,6 +61,16 @@ For consistency and future compatibility, consider using `HERALD_*` prefix when 
 | `ALIYUN_TEMPLATE_CODE` | Aliyun SMS template code | `` | For Aliyun SMS |
 | `HERALD_DINGTALK_API_URL` | Base URL of [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) (e.g. `http://herald-dingtalk:8083`) | `` | For DingTalk channel |
 | `HERALD_DINGTALK_API_KEY` | Optional API key; must match herald-dingtalk `API_KEY` when set | `` | No |
+| `HERALD_SMTP_API_URL` | Base URL of [herald-smtp](https://github.com/soulteary/herald-smtp) (e.g. `http://herald-smtp:8084`); when set, built-in SMTP is not used | `` | For email channel (optional) |
+| `HERALD_SMTP_API_KEY` | Optional API key; must match herald-smtp `API_KEY` when set | `` | No |
+
+### Email channel (herald-smtp)
+
+When `HERALD_SMTP_API_URL` is set, Herald does not use built-in SMTP. It forwards email sends to [herald-smtp](https://github.com/soulteary/herald-smtp) over HTTP. All SMTP credentials and sending logic live in herald-smtp; Herald does not store any SMTP credentials for the email channel in this mode.
+
+- Set `HERALD_SMTP_API_URL` to the base URL of your herald-smtp service (e.g. `http://herald-smtp:8084`).
+- If herald-smtp is configured with `API_KEY`, set `HERALD_SMTP_API_KEY` to the same value so Herald can authenticate when calling herald-smtp.
+- When `HERALD_SMTP_API_URL` is set, Herald ignores `SMTP_HOST` and related built-in SMTP settings (they are not used for the email channel).
 
 ### DingTalk channel (herald-dingtalk)
 

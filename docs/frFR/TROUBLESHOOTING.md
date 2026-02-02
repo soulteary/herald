@@ -27,7 +27,8 @@ Ce guide vous aide à diagnostiquer et résoudre les problèmes courants avec le
    ```
 
 2. **Vérifier la Configuration du Fournisseur**
-   - Vérifier les paramètres SMTP (pour e-mail) : `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`
+   - Vérifier les paramètres SMTP (SMTP intégré) : `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`
+   - Pour e-mail via herald-smtp : s'assurer que `HERALD_SMTP_API_URL` est défini et que herald-smtp est accessible ; optionnellement `HERALD_SMTP_API_KEY`. Si les e-mails ne sont pas reçus, vérifier les logs et la configuration SMTP de herald-smtp.
    - Vérifier les paramètres du fournisseur SMS : `SMS_PROVIDER`, `ALIYUN_ACCESS_KEY`, etc.
    - Vérifier que les identifiants du fournisseur sont corrects
 
