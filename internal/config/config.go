@@ -58,6 +58,10 @@ var (
 	SMSAPIBaseURL = env.Get("SMS_API_BASE_URL", "") // HTTP API base URL for SMS provider
 	SMSAPIKey     = env.Get("SMS_API_KEY", "")      // HTTP API key for SMS provider
 
+	// DingTalk channel: Herald calls herald-dingtalk via HTTP (no DingTalk credentials in Herald)
+	HeraldDingtalkAPIURL = env.Get("HERALD_DINGTALK_API_URL", "") // Base URL of herald-dingtalk service
+	HeraldDingtalkAPIKey = env.Get("HERALD_DINGTALK_API_KEY", "") // Optional API key for herald-dingtalk
+
 	// Service authentication (HMAC)
 	HMACSecret   = env.Get("HMAC_SECRET", "")
 	HMACKeysJSON = env.Get("HERALD_HMAC_KEYS", "") // JSON format: {"key-id-1":"secret-1","key-id-2":"secret-2"}
