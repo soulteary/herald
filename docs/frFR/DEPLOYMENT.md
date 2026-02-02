@@ -51,6 +51,12 @@ go build -o herald main.go
 | `ALIYUN_SECRET_KEY` | Clé secrète Aliyun | `` | Pour Aliyun SMS |
 | `ALIYUN_SIGN_NAME` | Nom de signature SMS Aliyun | `` | Pour Aliyun SMS |
 | `ALIYUN_TEMPLATE_CODE` | Code de modèle SMS Aliyun | `` | Pour Aliyun SMS |
+| `HERALD_DINGTALK_API_URL` | URL de base de [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) (ex. `http://herald-dingtalk:8083`) | `` | Pour le canal DingTalk |
+| `HERALD_DINGTALK_API_KEY` | Clé API optionnelle ; doit correspondre à `API_KEY` de herald-dingtalk si défini | `` | Non |
+
+### Canal DingTalk (herald-dingtalk)
+
+Lorsque `channel` est `dingtalk`, Herald n'envoie pas les messages lui-même ; il transmet l'envoi à [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) via HTTP. Toutes les identifiants et la logique DingTalk sont dans herald-dingtalk ; Herald ne stocke aucun identifiant DingTalk. Définissez `HERALD_DINGTALK_API_URL` sur l'URL de base de votre service herald-dingtalk. Si herald-dingtalk est configuré avec `API_KEY`, définissez `HERALD_DINGTALK_API_KEY` sur la même valeur.
 
 ## Intégration avec d'autres services (Optionnel)
 

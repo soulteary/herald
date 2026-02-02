@@ -19,7 +19,7 @@ GET http://localhost:8082/metrics
 作成された OTP チャレンジの総数を追跡するカウンター。
 
 **ラベル：**
-- `channel`: チャネルタイプ（`sms` または `email`）
+- `channel`: チャネルタイプ（`sms`、`email` または `dingtalk`）
 - `purpose`: チャレンジの目的（例：`login`、`reset`、`bind`）
 - `result`: 操作の結果（`success` または `failed`）
 
@@ -36,7 +36,7 @@ herald_otp_challenges_total{channel="sms",purpose="login",result="failed"} 5
 プロバイダー経由で送信された OTP の総数を追跡するカウンター。
 
 **ラベル：**
-- `channel`: チャネルタイプ（`sms` または `email`）
+- `channel`: チャネルタイプ（`sms`、`email` または `dingtalk`）
 - `provider`: プロバイダー名（例：`smtp`、`aliyun`、`placeholder`）
 - `result`: 送信操作の結果（`success` または `failed`）
 

@@ -15,7 +15,7 @@
 ## 收不到验证码
 
 ### 症状
-- 用户报告未收到通过 SMS 或电子邮件发送的验证码
+- 用户报告未收到通过 SMS、电子邮件或 DingTalk 发送的验证码
 - 挑战创建成功但未发送验证码
 
 ### 诊断步骤
@@ -29,6 +29,7 @@
 2. **验证提供者配置**
    - 检查 SMTP 设置（用于电子邮件）：`SMTP_HOST`、`SMTP_PORT`、`SMTP_USER`、`SMTP_PASSWORD`
    - 检查 SMS 提供者设置：`SMS_PROVIDER`、`ALIYUN_ACCESS_KEY` 等
+   - DingTalk 通道：确认已设置 `HERALD_DINGTALK_API_URL` 且 herald-dingtalk 可访问；若 herald-dingtalk 启用 API Key 认证，需设置 `HERALD_DINGTALK_API_KEY`
    - 验证提供者凭据是否正确
 
 3. **检查 Prometheus 指标**

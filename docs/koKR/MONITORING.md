@@ -19,7 +19,7 @@ GET http://localhost:8082/metrics
 생성된 OTP 챌린지의 총 수를 추적하는 카운터.
 
 **레이블:**
-- `channel`: 채널 유형 (`sms` 또는 `email`)
+- `channel`: 채널 유형 (`sms`, `email` 또는 `dingtalk`)
 - `purpose`: 챌린지 목적 (예: `login`, `reset`, `bind`)
 - `result`: 작업 결과 (`success` 또는 `failed`)
 
@@ -36,7 +36,7 @@ herald_otp_challenges_total{channel="sms",purpose="login",result="failed"} 5
 프로바이더를 통해 전송된 OTP의 총 수를 추적하는 카운터.
 
 **레이블:**
-- `channel`: 채널 유형 (`sms` 또는 `email`)
+- `channel`: 채널 유형 (`sms`, `email` 또는 `dingtalk`)
 - `provider`: 프로바이더 이름 (예: `smtp`, `aliyun`, `placeholder`)
 - `result`: 전송 작업 결과 (`success` 또는 `failed`)
 

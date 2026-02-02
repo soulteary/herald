@@ -95,7 +95,7 @@ Tutte le risposte di errore seguono questo formato :
 Codici di errore possibili :
 - `invalid_request` : Parsing del corpo della richiesta fallito
 - `user_id_required` : Campo richiesto `user_id` mancante
-- `invalid_channel` : Tipo di canale non valido (deve essere "sms" o "email")
+- `invalid_channel` : Tipo di canale non valido (deve essere "sms", "email" o "dingtalk")
 - `destination_required` : Campo richiesto `destination` mancante
 - `rate_limit_exceeded` : Limite di velocità superato
 - `resend_cooldown` : Periodo di cooldown per il reinvio non scaduto
@@ -208,7 +208,7 @@ Questa sezione elenca tutti i possibili codici di errore restituiti dall'API.
 ### Errori di Validazione della Richiesta
 - `invalid_request` : Parsing del corpo della richiesta fallito o JSON non valido
 - `user_id_required` : Campo richiesto `user_id` mancante
-- `invalid_channel` : Tipo di canale non valido (deve essere "sms" o "email")
+- `invalid_channel` : Tipo di canale non valido (deve essere "sms", "email" o "dingtalk")
 - `destination_required` : Campo richiesto `destination` mancante
 - `challenge_id_required` : Campo richiesto `challenge_id` mancante
 - `code_required` : Campo richiesto `code` mancante

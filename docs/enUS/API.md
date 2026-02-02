@@ -1,6 +1,6 @@
 # Herald API Documentation
 
-Herald is a verification code and OTP service that handles sending verification codes via SMS and email, with built-in rate limiting and security controls.
+Herald is a verification code and OTP service that handles sending verification codes via SMS, email, and DingTalk (DingTalk via [herald-dingtalk](https://github.com/soulteary/herald-dingtalk)), with built-in rate limiting and security controls.
 
 ## Base URL
 
@@ -85,6 +85,8 @@ Create a new verification challenge and send verification code.
 }
 ```
 
+**Channel:** `channel` must be `"sms"`, `"email"`, or `"dingtalk"`. When `channel` is `"dingtalk"`, Herald forwards the send to [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) (configure `HERALD_DINGTALK_API_URL`); `destination` is the DingTalk userid (or 11-digit mobile when herald-dingtalk is in mobile lookup mode). Herald does not store any DingTalk credentials.
+
 **Response:**
 ```json
 {
@@ -108,7 +110,7 @@ All error responses follow this format:
 Possible error codes:
 - `invalid_request`: Request body parsing failed
 - `user_id_required`: Missing required field `user_id`
-- `invalid_channel`: Invalid channel type (must be "sms" or "email")
+- `invalid_channel`: Invalid channel type (must be "sms", "email", or "dingtalk")
 - `invalid_purpose`: Invalid purpose value (must be one of the allowed purposes)
 - `destination_required`: Missing required field `destination`
 - `rate_limit_exceeded`: Rate limit exceeded
@@ -223,7 +225,7 @@ This section lists all possible error codes returned by the API.
 ### Request Validation Errors
 - `invalid_request`: Request body parsing failed or invalid JSON
 - `user_id_required`: Missing required field `user_id`
-- `invalid_channel`: Invalid channel type (must be "sms" or "email")
+- `invalid_channel`: Invalid channel type (must be "sms", "email", or "dingtalk")
 - `invalid_purpose`: Invalid purpose value (must be one of the allowed purposes)
 - `destination_required`: Missing required field `destination`
 - `challenge_id_required`: Missing required field `challenge_id`

@@ -95,7 +95,7 @@ Alle Fehlerantworten folgen diesem Format :
 Mögliche Fehlercodes :
 - `invalid_request` : Anfragekörper-Parsing fehlgeschlagen
 - `user_id_required` : Erforderliches Feld `user_id` fehlt
-- `invalid_channel` : Ungültiger Kanaltyp (muss "sms" oder "email" sein)
+- `invalid_channel` : Ungültiger Kanaltyp (muss "sms", "email" oder "dingtalk" sein)
 - `destination_required` : Erforderliches Feld `destination` fehlt
 - `rate_limit_exceeded` : Rate-Limit überschritten
 - `resend_cooldown` : Wartezeit für erneutes Senden noch nicht abgelaufen
@@ -208,7 +208,7 @@ Dieser Abschnitt listet alle möglichen Fehlercodes auf, die von der API zurück
 ### Anfragevalidierungsfehler
 - `invalid_request` : Anfragekörper-Parsing fehlgeschlagen oder ungültiges JSON
 - `user_id_required` : Erforderliches Feld `user_id` fehlt
-- `invalid_channel` : Ungültiger Kanaltyp (muss "sms" oder "email" sein)
+- `invalid_channel` : Ungültiger Kanaltyp (muss "sms", "email" oder "dingtalk" sein)
 - `destination_required` : Erforderliches Feld `destination` fehlt
 - `challenge_id_required` : Erforderliches Feld `challenge_id` fehlt
 - `code_required` : Erforderliches Feld `code` fehlt

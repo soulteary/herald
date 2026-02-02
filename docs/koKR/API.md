@@ -95,7 +95,7 @@ HMAC-SHA256(timestamp:service:body, secret)
 가능한 오류 코드:
 - `invalid_request`: 요청 본문 구문 분석 실패
 - `user_id_required`: 필수 필드 `user_id` 누락
-- `invalid_channel`: 잘못된 채널 유형("sms" 또는 "email"이어야 함)
+- `invalid_channel`: 잘못된 채널 유형("sms", "email" 또는 "dingtalk"이어야 함)
 - `destination_required`: 필수 필드 `destination` 누락
 - `rate_limit_exceeded`: 속도 제한 초과
 - `resend_cooldown`: 재전송 대기 시간이 만료되지 않음
@@ -208,7 +208,7 @@ Herald는 다차원 속도 제한을 구현합니다:
 ### 요청 유효성 검사 오류
 - `invalid_request`: 요청 본문 구문 분석 실패 또는 잘못된 JSON
 - `user_id_required`: 필수 필드 `user_id` 누락
-- `invalid_channel`: 잘못된 채널 유형("sms" 또는 "email"이어야 함)
+- `invalid_channel`: 잘못된 채널 유형("sms", "email" 또는 "dingtalk"이어야 함)
 - `destination_required`: 필수 필드 `destination` 누락
 - `challenge_id_required`: 필수 필드 `challenge_id` 누락
 - `code_required`: 필수 필드 `code` 누락

@@ -15,7 +15,7 @@ This guide helps you diagnose and resolve common issues with Herald OTP and veri
 ## Verification Code Not Received
 
 ### Symptoms
-- User reports not receiving verification code via SMS or email
+- User reports not receiving verification code via SMS, email, or DingTalk
 - Challenge creation succeeds but no code is delivered
 
 ### Diagnostic Steps
@@ -29,6 +29,7 @@ This guide helps you diagnose and resolve common issues with Herald OTP and veri
 2. **Verify Provider Configuration**
    - Check SMTP settings (for email): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`
    - Check SMS provider settings: `SMS_PROVIDER`, `ALIYUN_ACCESS_KEY`, etc.
+   - For DingTalk: ensure `HERALD_DINGTALK_API_URL` is set and herald-dingtalk is reachable; optionally `HERALD_DINGTALK_API_KEY` if herald-dingtalk uses API key auth
    - Verify provider credentials are correct
 
 3. **Check Prometheus Metrics**

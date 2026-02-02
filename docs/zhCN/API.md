@@ -1,6 +1,6 @@
 # Herald API 文档
 
-Herald 是一个验证码和 OTP 服务，处理通过 SMS 和电子邮件发送验证码，具有内置的速率限制和安全控制。
+Herald 是一个验证码和 OTP 服务，处理通过 SMS、电子邮件和 DingTalk（DingTalk 通过 [herald-dingtalk](https://github.com/soulteary/herald-dingtalk)）发送验证码，具有内置的速率限制和安全控制。
 
 ## 基础 URL
 
@@ -85,6 +85,8 @@ HMAC-SHA256(timestamp:service:body, secret)
 }
 ```
 
+**通道：** `channel` 可为 `"sms"`、`"email"` 或 `"dingtalk"`。当为 `"dingtalk"` 时，Herald 将发送请求转发给 [herald-dingtalk](https://github.com/soulteary/herald-dingtalk)（需配置 `HERALD_DINGTALK_API_URL`）；`destination` 为钉钉 userid（或在 herald-dingtalk 启用手机号查询时为 11 位手机号）。Herald 不保存任何钉钉凭证。
+
 **响应：**
 ```json
 {
@@ -108,7 +110,7 @@ HMAC-SHA256(timestamp:service:body, secret)
 可能的错误代码：
 - `invalid_request`：请求体解析失败
 - `user_id_required`：缺少必需字段 `user_id`
-- `invalid_channel`：无效的通道类型（必须是 "sms" 或 "email"）
+- `invalid_channel`：无效的通道类型（必须是 "sms"、"email" 或 "dingtalk"）
 - `invalid_purpose`：无效的 purpose 值（必须是允许的 purpose 之一）
 - `destination_required`：缺少必需字段 `destination`
 - `rate_limit_exceeded`：超过速率限制
@@ -223,7 +225,7 @@ Herald 实现多维速率限制：
 ### 请求验证错误
 - `invalid_request`：请求体解析失败或无效的 JSON
 - `user_id_required`：缺少必需字段 `user_id`
-- `invalid_channel`：无效的通道类型（必须是 "sms" 或 "email"）
+- `invalid_channel`：无效的通道类型（必须是 "sms"、"email" 或 "dingtalk"）
 - `invalid_purpose`：无效的 purpose 值（必须是允许的 purpose 之一）
 - `destination_required`：缺少必需字段 `destination`
 - `challenge_id_required`：缺少必需字段 `challenge_id`

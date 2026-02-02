@@ -95,7 +95,7 @@ HMAC-SHA256(timestamp:service:body, secret)
 可能なエラーコード：
 - `invalid_request`：リクエストボディの解析に失敗
 - `user_id_required`：必須フィールド `user_id` が欠落
-- `invalid_channel`：無効なチャネルタイプ（"sms" または "email" である必要があります）
+- `invalid_channel`：無効なチャネルタイプ（"sms"、"email" または "dingtalk" である必要があります）
 - `destination_required`：必須フィールド `destination` が欠落
 - `rate_limit_exceeded`：レート制限を超過
 - `resend_cooldown`：再送信のクールダウン期間が終了していない
@@ -208,7 +208,7 @@ Herald は多次元レート制限を実装しています：
 ### リクエスト検証エラー
 - `invalid_request`：リクエストボディの解析に失敗または無効な JSON
 - `user_id_required`：必須フィールド `user_id` が欠落
-- `invalid_channel`：無効なチャネルタイプ（"sms" または "email" である必要があります）
+- `invalid_channel`：無効なチャネルタイプ（"sms"、"email" または "dingtalk" である必要があります）
 - `destination_required`：必須フィールド `destination` が欠落
 - `challenge_id_required`：必須フィールド `challenge_id` が欠落
 - `code_required`：必須フィールド `code` が欠落

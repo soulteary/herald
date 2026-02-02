@@ -59,6 +59,15 @@ For consistency and future compatibility, consider using `HERALD_*` prefix when 
 | `ALIYUN_SECRET_KEY` | Aliyun secret key | `` | For Aliyun SMS |
 | `ALIYUN_SIGN_NAME` | Aliyun SMS sign name | `` | For Aliyun SMS |
 | `ALIYUN_TEMPLATE_CODE` | Aliyun SMS template code | `` | For Aliyun SMS |
+| `HERALD_DINGTALK_API_URL` | Base URL of [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) (e.g. `http://herald-dingtalk:8083`) | `` | For DingTalk channel |
+| `HERALD_DINGTALK_API_KEY` | Optional API key; must match herald-dingtalk `API_KEY` when set | `` | No |
+
+### DingTalk channel (herald-dingtalk)
+
+When `channel` is `dingtalk`, Herald does not send messages itself. It forwards the send to [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) over HTTP. All DingTalk credentials and business logic live in herald-dingtalk; Herald does not store any DingTalk credentials.
+
+- Set `HERALD_DINGTALK_API_URL` to the base URL of your herald-dingtalk service (e.g. `http://herald-dingtalk:8083`).
+- If herald-dingtalk is configured with `API_KEY`, set `HERALD_DINGTALK_API_KEY` to the same value so Herald can authenticate when calling herald-dingtalk.
 
 ### Redis Configuration
 

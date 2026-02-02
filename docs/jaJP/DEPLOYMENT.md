@@ -51,6 +51,12 @@ go build -o herald main.go
 | `ALIYUN_SECRET_KEY` | 阿里云シークレットキー | `` | 阿里云 SMS 用 |
 | `ALIYUN_SIGN_NAME` | 阿里云 SMS 署名名 | `` | 阿里云 SMS 用 |
 | `ALIYUN_TEMPLATE_CODE` | 阿里云 SMS テンプレートコード | `` | 阿里云 SMS 用 |
+| `HERALD_DINGTALK_API_URL` | [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) のベース URL（例：`http://herald-dingtalk:8083`） | `` | DingTalk チャネル用 |
+| `HERALD_DINGTALK_API_KEY` | オプションの API キー；herald-dingtalk の `API_KEY` と一致させる必要あり（設定時） | `` | なし |
+
+### DingTalk チャネル（herald-dingtalk）
+
+`channel` が `dingtalk` の場合、Herald は自身でメッセージを送信せず、[herald-dingtalk](https://github.com/soulteary/herald-dingtalk) に HTTP で転送します。DingTalk の認証情報とビジネスロジックはすべて herald-dingtalk にあり、Herald は DingTalk 認証情報を保存しません。`HERALD_DINGTALK_API_URL` を herald-dingtalk サービスのベース URL に設定してください。herald-dingtalk で `API_KEY` を設定している場合は、`HERALD_DINGTALK_API_KEY` を同じ値に設定してください。
 
 ## 他のサービスとの統合（オプション）
 

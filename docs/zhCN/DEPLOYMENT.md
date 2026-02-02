@@ -59,6 +59,15 @@ go build -o herald main.go
 | `ALIYUN_SECRET_KEY` | 阿里云密钥 | `` | 用于阿里云 SMS |
 | `ALIYUN_SIGN_NAME` | 阿里云 SMS 签名名称 | `` | 用于阿里云 SMS |
 | `ALIYUN_TEMPLATE_CODE` | 阿里云 SMS 模板代码 | `` | 用于阿里云 SMS |
+| `HERALD_DINGTALK_API_URL` | [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) 服务基础 URL（例如 `http://herald-dingtalk:8083`） | `` | 用于 DingTalk 通道 |
+| `HERALD_DINGTALK_API_KEY` | 可选 API 密钥；若 herald-dingtalk 配置了 `API_KEY` 则需与此一致 | `` | 否 |
+
+### DingTalk 通道（herald-dingtalk）
+
+当 `channel` 为 `dingtalk` 时，Herald 不直接发送消息，而是通过 HTTP 将发送请求转发给 [herald-dingtalk](https://github.com/soulteary/herald-dingtalk)。所有钉钉凭证与业务逻辑均在 herald-dingtalk 中；Herald 不保存任何钉钉凭证。
+
+- 将 `HERALD_DINGTALK_API_URL` 设置为 herald-dingtalk 服务的基础 URL（例如 `http://herald-dingtalk:8083`）。
+- 若 herald-dingtalk 配置了 `API_KEY`，请将 `HERALD_DINGTALK_API_KEY` 设为相同值，以便 Herald 调用 herald-dingtalk 时通过认证。
 
 ### Redis 配置
 

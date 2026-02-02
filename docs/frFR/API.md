@@ -95,7 +95,7 @@ Toutes les réponses d'erreur suivent ce format :
 Codes d'erreur possibles :
 - `invalid_request` : Échec de l'analyse du corps de la requête
 - `user_id_required` : Champ requis `user_id` manquant
-- `invalid_channel` : Type de canal invalide (doit être "sms" ou "email")
+- `invalid_channel` : Type de canal invalide (doit être "sms", "email" ou "dingtalk")
 - `destination_required` : Champ requis `destination` manquant
 - `rate_limit_exceeded` : Limite de débit dépassée
 - `resend_cooldown` : Période de réenvoi en attente non expirée
@@ -208,7 +208,7 @@ Cette section liste tous les codes d'erreur possibles retournés par l'API.
 ### Erreurs de Validation de Requête
 - `invalid_request` : Échec de l'analyse du corps de la requête ou JSON invalide
 - `user_id_required` : Champ requis `user_id` manquant
-- `invalid_channel` : Type de canal invalide (doit être "sms" ou "email")
+- `invalid_channel` : Type de canal invalide (doit être "sms", "email" ou "dingtalk")
 - `destination_required` : Champ requis `destination` manquant
 - `challenge_id_required` : Champ requis `challenge_id` manquant
 - `code_required` : Champ requis `code` manquant

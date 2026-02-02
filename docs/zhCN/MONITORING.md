@@ -19,7 +19,7 @@ GET http://localhost:8082/metrics
 计数器，跟踪创建的 OTP 挑战总数。
 
 **标签：**
-- `channel`: 通道类型（`sms` 或 `email`）
+- `channel`: 通道类型（`sms`、`email` 或 `dingtalk`）
 - `purpose`: 挑战目的（例如：`login`、`reset`、`bind`）
 - `result`: 操作结果（`success` 或 `failed`）
 
@@ -36,7 +36,7 @@ herald_otp_challenges_total{channel="sms",purpose="login",result="failed"} 5
 计数器，跟踪通过提供者发送的 OTP 总数。
 
 **标签：**
-- `channel`: 通道类型（`sms` 或 `email`）
+- `channel`: 通道类型（`sms`、`email` 或 `dingtalk`）
 - `provider`: 提供者名称（例如：`smtp`、`aliyun`、`placeholder`）
 - `result`: 发送操作结果（`success` 或 `failed`）
 

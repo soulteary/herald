@@ -195,7 +195,8 @@ func (m *Manager) renderBuiltIn(locale, channel, purpose string, data TemplateDa
 	case "email":
 		_, body := m.renderEmailBuiltIn(locale, purpose, data)
 		return body, nil
-	case "sms":
+	case "sms", "dingtalk":
+		// DingTalk uses same body style as SMS (plain text); herald-dingtalk receives body or params.code
 		return m.renderSMSBuiltIn(locale, purpose, data), nil
 	default:
 		return "", fmt.Errorf("unsupported channel: %s", channel)

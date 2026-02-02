@@ -19,7 +19,7 @@ GET http://localhost:8082/metrics
 Contatore che traccia il numero totale di challenge OTP create.
 
 **Labels:**
-- `channel`: Tipo di canale (`sms` o `email`)
+- `channel`: Tipo di canale (`sms`, `email` o `dingtalk`)
 - `purpose`: Scopo della challenge (ad es. `login`, `reset`, `bind`)
 - `result`: Risultato dell'operazione (`success` o `failed`)
 
@@ -36,7 +36,7 @@ herald_otp_challenges_total{channel="sms",purpose="login",result="failed"} 5
 Contatore che traccia il numero totale di invii OTP tramite provider.
 
 **Labels:**
-- `channel`: Tipo di canale (`sms` o `email`)
+- `channel`: Tipo di canale (`sms`, `email` o `dingtalk`)
 - `provider`: Nome del provider (ad es. `smtp`, `aliyun`, `placeholder`)
 - `result`: Risultato dell'operazione di invio (`success` o `failed`)
 

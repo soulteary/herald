@@ -51,6 +51,12 @@ go build -o herald main.go
 | `ALIYUN_SECRET_KEY` | Aliyun 비밀 키 | `` | Aliyun SMS용 |
 | `ALIYUN_SIGN_NAME` | Aliyun SMS 서명 이름 | `` | Aliyun SMS용 |
 | `ALIYUN_TEMPLATE_CODE` | Aliyun SMS 템플릿 코드 | `` | Aliyun SMS용 |
+| `HERALD_DINGTALK_API_URL` | [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) 기본 URL (예: `http://herald-dingtalk:8083`) | `` | DingTalk 채널용 |
+| `HERALD_DINGTALK_API_KEY` | 선택적 API 키; herald-dingtalk의 `API_KEY`와 일치해야 함 (설정 시) | `` | 아니오 |
+
+### DingTalk 채널 (herald-dingtalk)
+
+`channel`이 `dingtalk`일 때 Herald는 직접 메시지를 보내지 않고 [herald-dingtalk](https://github.com/soulteary/herald-dingtalk)로 HTTP를 통해 전달합니다. 모든 DingTalk 자격 증명과 비즈니스 로직은 herald-dingtalk에 있으며 Herald는 DingTalk 자격 증명을 저장하지 않습니다. `HERALD_DINGTALK_API_URL`을 herald-dingtalk 서비스의 기본 URL로 설정하세요. herald-dingtalk에서 `API_KEY`를 설정한 경우 `HERALD_DINGTALK_API_KEY`를 동일한 값으로 설정하세요.
 
 ## 다른 서비스와의 통합 (선택사항)
 
