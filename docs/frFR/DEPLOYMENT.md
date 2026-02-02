@@ -53,6 +53,12 @@ go build -o herald main.go
 | `ALIYUN_TEMPLATE_CODE` | Code de modèle SMS Aliyun | `` | Pour Aliyun SMS |
 | `HERALD_DINGTALK_API_URL` | URL de base de [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) (ex. `http://herald-dingtalk:8083`) | `` | Pour le canal DingTalk |
 | `HERALD_DINGTALK_API_KEY` | Clé API optionnelle ; doit correspondre à `API_KEY` de herald-dingtalk si défini | `` | Non |
+| `HERALD_SMTP_API_URL` | URL de base de [herald-smtp](https://github.com/soulteary/herald-smtp) (ex. `http://herald-smtp:8084`) ; si défini, le SMTP intégré n'est pas utilisé | `` | Pour le canal e-mail (optionnel) |
+| `HERALD_SMTP_API_KEY` | Clé API optionnelle ; doit correspondre à `API_KEY` de herald-smtp si défini | `` | Non |
+
+### Canal e-mail (herald-smtp)
+
+Lorsque `HERALD_SMTP_API_URL` est défini, Herald n'utilise pas le SMTP intégré. Il transmet l'envoi d'e-mails à [herald-smtp](https://github.com/soulteary/herald-smtp) via HTTP. Toutes les identifiants et la logique SMTP sont dans herald-smtp ; Herald ne stocke aucune identifiant SMTP pour le canal e-mail dans ce mode. Définissez `HERALD_SMTP_API_URL` sur l'URL de base de votre service herald-smtp. Si herald-smtp est configuré avec `API_KEY`, définissez `HERALD_SMTP_API_KEY` sur la même valeur. Lorsque `HERALD_SMTP_API_URL` est défini, Herald ignore `SMTP_HOST` et les paramètres SMTP intégrés associés.
 
 ### Canal DingTalk (herald-dingtalk)
 

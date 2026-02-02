@@ -4,7 +4,7 @@ Ce document décrit l'architecture full-stack du flux d'authentification impliqu
 
 ## Aperçu
 
-Herald est le service OTP et codes de vérification dans la pile Stargate + Warden + Herald. Stargate (forwardAuth) orchestre la connexion ; Warden fournit la liste blanche des utilisateurs et les informations de contact ; Herald crée les défis, envoie les codes via les fournisseurs et vérifie les codes. Herald ne détient pas les identifiants SMS/e-mail/DingTalk des fournisseurs externes — ceux-ci résident dans les services fournisseurs (ex. [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) pour DingTalk).
+Herald est le service OTP et codes de vérification dans la pile Stargate + Warden + Herald. Stargate (forwardAuth) orchestre la connexion ; Warden fournit la liste blanche des utilisateurs et les informations de contact ; Herald crée les défis, envoie les codes via les fournisseurs et vérifie les codes. Herald ne détient pas les identifiants SMS/e-mail/DingTalk des fournisseurs externes — ceux-ci résident dans les services fournisseurs (ex. [herald-smtp](https://github.com/soulteary/herald-smtp) pour l'e-mail lorsque `HERALD_SMTP_API_URL` est défini, [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) pour DingTalk).
 
 ## Architecture full-stack
 
@@ -31,7 +31,8 @@ flowchart LR
 
   subgraph providers [Fournisseurs]
     SMS[API SMS]
-    Email[SMTP E-mail]
+    Email[SMTP E-mail ou herald-smtp]
+    HeraldSMTP[herald-smtp]
     HeraldDingtalk[herald-dingtalk]
   end
 
@@ -43,7 +44,9 @@ flowchart LR
   Herald --> Redis
   Herald --> SMS
   Herald --> Email
+  Herald --> HeraldSMTP
   Herald --> HeraldDingtalk
+  HeraldSMTP -.->|SMTP| User
   HeraldDingtalk -.->|API DingTalk| User
 ```
 
@@ -53,7 +56,7 @@ flowchart LR
 
 1. **Utilisateur** accède à une ressource protégée → **Traefik** forwardAuth → **Stargate** (pas de session) → redirection vers la connexion.
 2. L'utilisateur saisit l'identifiant (e-mail/téléphone/nom d'utilisateur). **Stargate** appelle **Warden** pour résoudre l'utilisateur et obtenir `user_id` + destination (e-mail/téléphone/userid).
-3. **Stargate** appelle **Herald** `POST /v1/otp/challenges` (user_id, channel, destination, purpose). Herald crée un défi dans **Redis**, envoie le code via **SMS**, **E-mail** ou **herald-dingtalk** (envoi fournisseur).
+3. **Stargate** appelle **Herald** `POST /v1/otp/challenges` (user_id, channel, destination, purpose). Herald crée un défi dans **Redis**, envoie le code via **SMS**, **E-mail** (SMTP intégré ou [herald-smtp](https://github.com/soulteary/herald-smtp) si `HERALD_SMTP_API_URL` est défini) ou **herald-dingtalk** (envoi fournisseur).
 4. Herald retourne `challenge_id`, `expires_in`, `next_resend_in` à Stargate.
 5. L'utilisateur soumet le code. **Stargate** appelle **Herald** `POST /v1/otp/verifications` (challenge_id, code).
 6. Herald vérifie contre Redis, retourne `ok`, `user_id`, `amr`, `issued_at`. Stargate crée la session (cookie/JWT).
@@ -66,7 +69,7 @@ flowchart LR
 | **Créer un challenge** | Stargate → Herald | `POST /v1/otp/challenges` — créer un challenge OTP et envoyer le code |
 | **Verify** | Stargate → Herald | `POST /v1/otp/verifications` — vérifier le code et obtenir user_id/amr |
 | **Révoquer un challenge** | Stargate → Herald | `POST /v1/otp/challenges/{id}/revoke` — révocation optionnelle |
-| **Envoi fournisseur** | Herald → Fournisseur | `POST /v1/send` (HTTP) — Herald appelle l'adaptateur SMS/E-mail/DingTalk ; pour DingTalk, Herald appelle herald-dingtalk |
+| **Envoi fournisseur** | Herald → Fournisseur | `POST /v1/send` (HTTP) — Herald appelle l'adaptateur SMS/E-mail/DingTalk ; e-mail via herald-smtp si `HERALD_SMTP_API_URL` défini ; DingTalk via herald-dingtalk |
 | **Recherche utilisateur** | Stargate → Warden | API Warden — résoudre l'identifiant en user_id et destination |
 
 ### Herald ↔ Redis
@@ -78,7 +81,7 @@ flowchart LR
 ## Périmètres de sécurité
 
 - **Stargate ↔ Herald** : Authentifié par **mTLS**, **HMAC** (X-Signature, X-Timestamp, X-Service) ou **API Key** (X-API-Key). Herald rejette les requêtes non authentifiées ou invalides.
-- **Herald ↔ Fournisseur (ex. herald-dingtalk)** : API Key optionnelle (`HERALD_DINGTALK_API_KEY`). Les identifiants DingTalk n'existent que dans herald-dingtalk ; Herald ne les stocke jamais.
+- **Herald ↔ Fournisseur (ex. herald-smtp, herald-dingtalk)** : API Key optionnelle (`HERALD_SMTP_API_KEY`, `HERALD_DINGTALK_API_KEY`). Les identifiants SMTP et DingTalk n'existent que dans herald-smtp et herald-dingtalk respectivement ; Herald ne les stocke jamais.
 - **PII** : Les codes de vérification ne sont stockés dans Redis que sous forme de hash (ex. Argon2). La destination (e-mail/téléphone) est utilisée pour l'envoi et peut apparaître dans les logs d'audit de manière masquée ; ne pas logger les codes en clair.
 
 ## Documentation associée

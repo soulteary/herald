@@ -1,6 +1,6 @@
 # Herald API Documentation
 
-Herald is a verification code and OTP service that handles sending verification codes via SMS, email, and DingTalk (DingTalk via [herald-dingtalk](https://github.com/soulteary/herald-dingtalk)), with built-in rate limiting and security controls.
+Herald is a verification code and OTP service that handles sending verification codes via SMS, email, and DingTalk (email via built-in SMTP or [herald-smtp](https://github.com/soulteary/herald-smtp) when `HERALD_SMTP_API_URL` is set, DingTalk via [herald-dingtalk](https://github.com/soulteary/herald-dingtalk)), with built-in rate limiting and security controls.
 
 ## Base URL
 
@@ -85,7 +85,7 @@ Create a new verification challenge and send verification code.
 }
 ```
 
-**Channel:** `channel` must be `"sms"`, `"email"`, or `"dingtalk"`. When `channel` is `"dingtalk"`, Herald forwards the send to [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) (configure `HERALD_DINGTALK_API_URL`); `destination` is the DingTalk userid (or 11-digit mobile when herald-dingtalk is in mobile lookup mode). Herald does not store any DingTalk credentials.
+**Channel:** `channel` must be `"sms"`, `"email"`, or `"dingtalk"`. When `channel` is `"email"` and `HERALD_SMTP_API_URL` is set, Herald forwards the send to [herald-smtp](https://github.com/soulteary/herald-smtp); `destination` is the email address. When `channel` is `"dingtalk"`, Herald forwards the send to [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) (configure `HERALD_DINGTALK_API_URL`); `destination` is the DingTalk userid (or 11-digit mobile when herald-dingtalk is in mobile lookup mode). Herald does not store any SMTP or DingTalk credentials.
 
 **Response:**
 ```json

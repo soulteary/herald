@@ -27,7 +27,8 @@ This guide helps you diagnose and resolve common issues with Herald OTP and veri
    ```
 
 2. **Verify Provider Configuration**
-   - Check SMTP settings (for email): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`
+   - Check SMTP settings (for email when using built-in SMTP): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`
+   - For email via herald-smtp: ensure `HERALD_SMTP_API_URL` is set and herald-smtp is reachable; optionally `HERALD_SMTP_API_KEY` if herald-smtp uses API key auth. If emails are not received, check herald-smtp logs and its SMTP configuration (see [herald-smtp Troubleshooting](https://github.com/soulteary/herald-smtp/blob/main/docs/enUS/TROUBLESHOOTING.md)).
    - Check SMS provider settings: `SMS_PROVIDER`, `ALIYUN_ACCESS_KEY`, etc.
    - For DingTalk: ensure `HERALD_DINGTALK_API_URL` is set and herald-dingtalk is reachable; optionally `HERALD_DINGTALK_API_KEY` if herald-dingtalk uses API key auth
    - Verify provider credentials are correct

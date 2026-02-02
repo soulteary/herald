@@ -66,8 +66,25 @@ func NewHandlers(redisClient *redis.Client, sessionManager *sessionkit.KVManager
 	// Initialize provider registry (using provider-kit)
 	registry := provider.NewRegistry()
 
-	// Register SMTP provider if configured
-	if config.SMTPHost != "" {
+	// Register email channel: herald-smtp HTTP provider takes precedence over built-in SMTP
+	if config.HeraldSMTPAPIURL != "" {
+		httpConfig := &provider.HTTPConfig{
+			BaseURL:      config.HeraldSMTPAPIURL,
+			SendEndpoint: "/v1/send",
+			APIKey:       config.HeraldSMTPAPIKey,
+			ChannelType:  provider.ChannelEmail,
+			ProviderName: "smtp",
+		}
+		httpProvider, err := provider.NewHTTPProvider(httpConfig)
+		if err != nil {
+			log.Warn().Err(err).Msg("Failed to create herald-smtp HTTP provider")
+		} else if err := registry.Register(httpProvider); err != nil {
+			log.Warn().Err(err).Msg("Failed to register herald-smtp HTTP provider")
+		} else {
+			log.Info().Msg("Email HTTP provider registered (herald-smtp)")
+		}
+	} else if config.SMTPHost != "" {
+		// Built-in SMTP provider when herald-smtp URL is not set
 		smtpConfig := &provider.SMTPConfig{
 			Host:        config.SMTPHost,
 			Port:        config.SMTPPort,

@@ -27,7 +27,8 @@
    ```
 
 2. **프로바이더 구성 확인**
-   - SMTP 설정 확인 (이메일용): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`
+   - SMTP 설정 확인 (내장 SMTP 사용 시): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`
+   - herald-smtp를 통한 이메일: `HERALD_SMTP_API_URL` 설정 및 herald-smtp 연결 가능 여부 확인; 선택적으로 `HERALD_SMTP_API_KEY`. 이메일 미수신 시 herald-smtp 로그 및 SMTP 구성 확인.
    - SMS 프로바이더 설정 확인: `SMS_PROVIDER`, `ALIYUN_ACCESS_KEY` 등
    - 프로바이더 자격 증명이 올바른지 확인
 

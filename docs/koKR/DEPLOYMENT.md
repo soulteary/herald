@@ -53,6 +53,12 @@ go build -o herald main.go
 | `ALIYUN_TEMPLATE_CODE` | Aliyun SMS 템플릿 코드 | `` | Aliyun SMS용 |
 | `HERALD_DINGTALK_API_URL` | [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) 기본 URL (예: `http://herald-dingtalk:8083`) | `` | DingTalk 채널용 |
 | `HERALD_DINGTALK_API_KEY` | 선택적 API 키; herald-dingtalk의 `API_KEY`와 일치해야 함 (설정 시) | `` | 아니오 |
+| `HERALD_SMTP_API_URL` | [herald-smtp](https://github.com/soulteary/herald-smtp) 기본 URL (예: `http://herald-smtp:8084`); 설정 시 내장 SMTP 미사용 | `` | 이메일 채널용 (선택) |
+| `HERALD_SMTP_API_KEY` | 선택적 API 키; herald-smtp의 `API_KEY`와 일치해야 함 (설정 시) | `` | 아니오 |
+
+### 이메일 채널 (herald-smtp)
+
+`HERALD_SMTP_API_URL`을 설정하면 Herald는 내장 SMTP를 사용하지 않습니다. 이메일 전송은 HTTP로 [herald-smtp](https://github.com/soulteary/herald-smtp)에 전달됩니다. 모든 SMTP 자격 증명과 로직은 herald-smtp에 있으며, 이 모드에서 Herald는 이메일 채널용 SMTP 자격 증명을 저장하지 않습니다. `HERALD_SMTP_API_URL`을 herald-smtp 서비스의 기본 URL로 설정하세요. herald-smtp에서 `API_KEY`를 설정한 경우 `HERALD_SMTP_API_KEY`를 동일한 값으로 설정하세요. `HERALD_SMTP_API_URL` 설정 시 Herald는 `SMTP_HOST` 및 관련 내장 SMTP 설정을 무시합니다.
 
 ### DingTalk 채널 (herald-dingtalk)
 

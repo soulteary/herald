@@ -27,7 +27,8 @@ Dieser Leitfaden hilft Ihnen, häufige Probleme mit dem Herald OTP- und Verifizi
    ```
 
 2. **Provider-Konfiguration verifizieren**
-   - SMTP-Einstellungen prüfen (für E-Mail): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`
+   - SMTP-Einstellungen prüfen (bei eingebautem SMTP): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`
+   - Bei E-Mail über herald-smtp: `HERALD_SMTP_API_URL` gesetzt und herald-smtp erreichbar; optional `HERALD_SMTP_API_KEY`. Bei nicht empfangenen E-Mails herald-smtp-Logs und SMTP-Konfiguration prüfen.
    - SMS-Provider-Einstellungen prüfen: `SMS_PROVIDER`, `ALIYUN_ACCESS_KEY`, etc.
    - Verifizieren, dass Provider-Anmeldedaten korrekt sind
 
