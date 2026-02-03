@@ -80,10 +80,10 @@ func (m *Manager) loadBuiltInTranslations() {
 		"purpose.bind":            "绑定",
 		"purpose.stepup":          "二次验证",
 		"email.subject":           "验证码",
-		"email.body":              "您的验证码是：{code}\n\n此验证码将在 {minutes} 分钟后过期。",
-		"email.body_with_purpose": "您的{purpose}验证码是：{code}\n\n此验证码将在 {minutes} 分钟后过期。",
-		"sms.body":                "您的验证码是：{code}，{minutes}分钟内有效。",
-		"sms.body_with_purpose":   "您的{purpose}验证码是：{code}，{minutes}分钟内有效。",
+		"email.body":              "您的验证码是： {code} \n\n此验证码将在 {minutes} 分钟后过期。",
+		"email.body_with_purpose": "您的{purpose}验证码是： {code} \n\n此验证码将在 {minutes} 分钟后过期。",
+		"sms.body":                "您的验证码是： {code} ，{minutes}分钟内有效。",
+		"sms.body_with_purpose":   "您的{purpose}验证码是： {code} ，{minutes}分钟内有效。",
 	})
 }
 
