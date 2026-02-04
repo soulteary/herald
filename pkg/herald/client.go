@@ -212,6 +212,10 @@ type VerifyChallengeResponse struct {
 	NextResendIn      *int     `json:"next_resend_in,omitempty"`     // Seconds until next resend is allowed
 }
 
+// IdempotencyKeyContextKey is the context key for passing Idempotency-Key to CreateChallenge.
+// Use context.WithValue(ctx, herald.IdempotencyKeyContextKey, "your-key") so the client sends the header.
+var IdempotencyKeyContextKey = struct{ name string }{name: "idempotency_key"}
+
 // CreateChallenge creates a new challenge and sends verification code
 func (c *Client) CreateChallenge(ctx context.Context, req *CreateChallengeRequest) (*CreateChallengeResponse, error) {
 	url := fmt.Sprintf("%s/v1/otp/challenges", c.baseURL)
@@ -227,6 +231,12 @@ func (c *Client) CreateChallenge(ctx context.Context, req *CreateChallengeReques
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
+
+	if v := ctx.Value(IdempotencyKeyContextKey); v != nil {
+		if s, ok := v.(string); ok && s != "" {
+			httpReq.Header.Set("Idempotency-Key", s)
+		}
+	}
 
 	// Inject trace context into headers
 	c.httpClient.InjectTraceContext(ctx, httpReq)
