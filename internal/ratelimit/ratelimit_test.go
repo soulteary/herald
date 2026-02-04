@@ -299,3 +299,37 @@ func TestManager_CheckResendCooldown_WithinCooldown(t *testing.T) {
 		t.Error("CheckResendCooldown() resetTime should not be zero")
 	}
 }
+
+func TestManager_CheckRateLimit_RedisError(t *testing.T) {
+	redisClient := testRedisClient(t)
+	_ = redisClient.Close()
+
+	manager := NewManager(redisClient)
+	ctx := context.Background()
+
+	allowed, remaining, resetTime, err := manager.CheckRateLimit(ctx, "key", 10, time.Hour)
+	if err == nil {
+		t.Error("CheckRateLimit() with closed client should return error")
+	}
+	if allowed {
+		t.Error("CheckRateLimit() should not allow when Redis fails")
+	}
+	_ = remaining
+	_ = resetTime
+}
+
+func TestManager_CheckResendCooldown_RedisError(t *testing.T) {
+	redisClient := testRedisClient(t)
+	_ = redisClient.Close()
+
+	manager := NewManager(redisClient)
+	ctx := context.Background()
+
+	allowed, _, err := manager.CheckResendCooldown(ctx, "user:dest", 60*time.Second)
+	if err == nil {
+		t.Error("CheckResendCooldown() with closed client should return error")
+	}
+	if allowed {
+		t.Error("CheckResendCooldown() should not allow when Redis fails")
+	}
+}

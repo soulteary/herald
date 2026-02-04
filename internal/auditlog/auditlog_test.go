@@ -6,7 +6,11 @@ import (
 	"testing"
 
 	audit "github.com/soulteary/audit-kit"
+	logger "github.com/soulteary/logger-kit"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/soulteary/herald/internal/config"
+	"github.com/soulteary/herald/internal/testutil"
 )
 
 func TestAuditLogFunctions(t *testing.T) {
@@ -102,4 +106,42 @@ func TestStop_WhenNil(t *testing.T) {
 	auditLogger = nil
 	err := Stop()
 	assert.NoError(t, err)
+}
+
+func TestInit_WithRedisClient(t *testing.T) {
+	auditLogger = nil
+	auditLoggerInit = sync.Once{}
+
+	// Use real Redis from testutil so Init picks Redis storage path
+	redisClient, err := testutil.NewTestRedisClient()
+	if err != nil {
+		t.Skipf("Redis not available: %v", err)
+	}
+	defer func() { _ = redisClient.Close() }()
+
+	SetLogger(logger.New(logger.Config{Level: logger.ErrorLevel, Format: logger.FormatJSON}))
+	Init(redisClient)
+	l := GetLogger()
+	assert.NotNil(t, l)
+}
+
+func TestInit_StorageErrorFallback(t *testing.T) {
+	auditLogger = nil
+	auditLoggerInit = sync.Once{}
+
+	origStorageType := config.AuditStorageType
+	origDBURL := config.AuditDatabaseURL
+	defer func() {
+		config.AuditStorageType = origStorageType
+		config.AuditDatabaseURL = origDBURL
+	}()
+
+	// Set storage type to database with invalid URL so NewStorageFromType fails → noop fallback
+	config.AuditStorageType = "database"
+	config.AuditDatabaseURL = ""
+
+	SetLogger(logger.New(logger.Config{Level: logger.ErrorLevel, Format: logger.FormatJSON}))
+	Init(nil)
+	l := GetLogger()
+	assert.NotNil(t, l)
 }

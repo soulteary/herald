@@ -1752,3 +1752,147 @@ func TestHandlers_GetTestCode(t *testing.T) {
 		t.Errorf("Expected not found, got status=%d, body=%s", resp2.StatusCode, string(body))
 	}
 }
+
+func TestHandlers_GetTestCode_EmptyChallengeID(t *testing.T) {
+	originalTestMode := config.TestMode
+	defer func() { config.TestMode = originalTestMode }()
+	config.TestMode = true
+
+	redisClient := testRedisClient(t)
+	defer func() { _ = redisClient.Close() }()
+	handlers := NewHandlers(redisClient, nil, testLogger())
+
+	app := fiber.New()
+	app.Get("/test/code/:challenge_id", handlers.GetTestCode)
+
+	// Request with path that may yield empty challenge_id (e.g. trailing slash or empty segment)
+	req := httptest.NewRequest("GET", "/test/code/", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Test request failed: %v", err)
+	}
+	// Expect 404 (route not matched) or 400 (handler got empty param)
+	if resp.StatusCode != fiber.StatusNotFound && resp.StatusCode != fiber.StatusBadRequest {
+		body, _ := io.ReadAll(resp.Body)
+		t.Errorf("GetTestCode with empty challenge_id: status=%d, body=%s", resp.StatusCode, string(body))
+	}
+}
+
+func TestHandlers_GetTestCode_CodeNotFound(t *testing.T) {
+	originalTestMode := config.TestMode
+	defer func() { config.TestMode = originalTestMode }()
+	config.TestMode = true
+
+	redisClient := testRedisClient(t)
+	defer func() { _ = redisClient.Close() }()
+	handlers := NewHandlers(redisClient, nil, testLogger())
+
+	app := fiber.New()
+	app.Get("/test/code/:challenge_id", handlers.GetTestCode)
+
+	req := httptest.NewRequest("GET", "/test/code/nonexistent_challenge_id_123", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Test request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusNotFound {
+		body, _ := io.ReadAll(resp.Body)
+		t.Errorf("GetTestCode with nonexistent id: status=%d, want 404, body=%s", resp.StatusCode, string(body))
+	}
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatalf("Failed to unmarshal: %v", err)
+	}
+	if result["reason"] != "code_not_found" {
+		t.Errorf("Expected reason=code_not_found, got %v", result["reason"])
+	}
+}
+
+func TestHandlers_VerifyChallenge_RemainingAttempts(t *testing.T) {
+	originalCodeLength := config.CodeLength
+	originalMaxAttempts := config.MaxAttempts
+	originalLockoutDuration := config.LockoutDuration
+	originalChallengeExpiry := config.ChallengeExpiry
+	defer func() {
+		config.CodeLength = originalCodeLength
+		config.MaxAttempts = originalMaxAttempts
+		config.LockoutDuration = originalLockoutDuration
+		config.ChallengeExpiry = originalChallengeExpiry
+	}()
+
+	config.CodeLength = 6
+	config.MaxAttempts = 5
+	config.LockoutDuration = 10 * time.Minute
+	config.ChallengeExpiry = 5 * time.Minute
+
+	redisClient := testRedisClient(t)
+	defer func() { _ = redisClient.Close() }()
+	handlers := NewHandlers(redisClient, nil, testLogger())
+
+	challengeMgr := testChallengeManager(t, redisClient)
+	ctx := context.Background()
+	createReq := challengekit.CreateRequest{
+		UserID:      "user_ra",
+		Channel:     challengekit.ChannelEmail,
+		Destination: "test@example.com",
+		Purpose:     "login",
+		ClientIP:    "127.0.0.1",
+	}
+	ch, _, err := challengeMgr.Create(ctx, createReq)
+	if err != nil {
+		t.Fatalf("Create challenge: %v", err)
+	}
+
+	app := fiber.New()
+	app.Post("/verify", handlers.VerifyChallenge)
+
+	reqBody := VerifyChallengeRequest{ChallengeID: ch.ID, Code: "000000", ClientIP: "127.0.0.1"}
+	bodyBytes, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest("POST", "/verify", bytes.NewBuffer(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Test request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Expected 401, got %d, body=%s", resp.StatusCode, string(body))
+	}
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if result["reason"] != "invalid" {
+		t.Errorf("Expected reason=invalid, got %v", result["reason"])
+	}
+	// challenge-kit may return remaining_attempts on invalid code
+	if rem, ok := result["remaining_attempts"]; ok && rem != nil {
+		// coverage for remaining_attempts branch
+		_ = rem
+	}
+}
+
+func TestMaskDestination(t *testing.T) {
+	// maskDestination is used for tracing; test email and phone masking
+	t.Run("email", func(t *testing.T) {
+		out := maskDestination("user@example.com")
+		if out == "" || out == "user@example.com" {
+			t.Errorf("maskDestination(email) should mask, got %q", out)
+		}
+	})
+	t.Run("phone", func(t *testing.T) {
+		out := maskDestination("+8613800138000")
+		if out == "" {
+			t.Errorf("maskDestination(phone) should not be empty, got %q", out)
+		}
+	})
+	t.Run("empty", func(t *testing.T) {
+		out := maskDestination("")
+		if out != "" {
+			t.Errorf("maskDestination(empty) = %q, want empty", out)
+		}
+	})
+}

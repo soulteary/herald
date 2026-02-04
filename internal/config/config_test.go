@@ -3,6 +3,7 @@ package config
 import (
 	"sync"
 	"testing"
+	"time"
 
 	logger "github.com/soulteary/logger-kit"
 )
@@ -184,4 +185,58 @@ func TestGetPort(t *testing.T) {
 			t.Errorf("GetPort() = %q, want :8082", got)
 		}
 	})
+}
+
+func TestInitialize_InvalidRedisAddr(t *testing.T) {
+	origAddr := RedisAddr
+	defer func() { RedisAddr = origAddr }()
+
+	RedisAddr = "not-valid-host-port"
+	log := logger.New(logger.Config{Level: logger.ErrorLevel, Format: logger.FormatJSON})
+	err := Initialize(log)
+	if err != nil {
+		t.Fatalf("Initialize() error = %v", err)
+	}
+	if RedisAddr != "localhost:6379" {
+		t.Errorf("Initialize() with invalid REDIS_ADDR should reset to localhost:6379, got %q", RedisAddr)
+	}
+}
+
+func TestInitialize_TLSCACertAlias(t *testing.T) {
+	origCA, origClientCA := TLSCACertFile, TLSClientCAFile
+	defer func() {
+		TLSCACertFile = origCA
+		TLSClientCAFile = origClientCA
+	}()
+
+	TLSCACertFile = ""
+	TLSClientCAFile = "/path/to/ca.pem"
+	log := logger.New(logger.Config{Level: logger.ErrorLevel, Format: logger.FormatJSON})
+	err := Initialize(log)
+	if err != nil {
+		t.Fatalf("Initialize() error = %v", err)
+	}
+	if TLSCACertFile != "/path/to/ca.pem" {
+		t.Errorf("Initialize() should set TLSCACertFile from TLSClientCAFile alias, got %q", TLSCACertFile)
+	}
+}
+
+func TestInitialize_IdempotencyKeyTTLDefault(t *testing.T) {
+	origTTL := IdempotencyKeyTTL
+	origExpiry := ChallengeExpiry
+	defer func() {
+		IdempotencyKeyTTL = origTTL
+		ChallengeExpiry = origExpiry
+	}()
+
+	IdempotencyKeyTTL = 0
+	ChallengeExpiry = 10 * time.Minute
+	log := logger.New(logger.Config{Level: logger.ErrorLevel, Format: logger.FormatJSON})
+	err := Initialize(log)
+	if err != nil {
+		t.Fatalf("Initialize() error = %v", err)
+	}
+	if IdempotencyKeyTTL != 10*time.Minute {
+		t.Errorf("Initialize() should set IdempotencyKeyTTL to ChallengeExpiry when 0, got %v", IdempotencyKeyTTL)
+	}
 }

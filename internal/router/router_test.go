@@ -121,3 +121,49 @@ func TestOTPRoute_RequiresAuthWhenConfigured(t *testing.T) {
 		t.Errorf("POST /v1/otp/challenges without auth status = %d, want 401, body=%s", resp.StatusCode, string(body))
 	}
 }
+
+func TestRouter_OTLPEnabled(t *testing.T) {
+	originalOTLP := config.OTLPEnabled
+	defer func() { config.OTLPEnabled = originalOTLP }()
+	config.OTLPEnabled = true
+
+	redisClient, _ := testutil.NewTestRedisClient()
+	defer func() { _ = redisClient.Close() }()
+
+	rw := NewRouterWithClientAndHandlers(redisClient, testLogger())
+	if rw == nil || rw.App == nil {
+		t.Fatal("NewRouterWithClientAndHandlers returned nil")
+	}
+	// OTLP enabled branch is covered by router init; healthz still works
+	req := httptest.NewRequest("GET", "/healthz", nil)
+	resp, err := rw.App.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Errorf("GET /healthz status = %d, body=%s", resp.StatusCode, string(body))
+	}
+}
+
+func TestRouter_TestModeRoute(t *testing.T) {
+	originalTestMode := config.TestMode
+	defer func() { config.TestMode = originalTestMode }()
+	config.TestMode = true
+
+	redisClient, _ := testutil.NewTestRedisClient()
+	defer func() { _ = redisClient.Close() }()
+
+	rw := NewRouterWithClientAndHandlers(redisClient, testLogger())
+	// GET /v1/test/code/:challenge_id is registered when TestMode is true
+	req := httptest.NewRequest("GET", "/v1/test/code/some-id", nil)
+	resp, err := rw.App.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test: %v", err)
+	}
+	// 404 because we're not in test mode response or code not found
+	if resp.StatusCode != fiber.StatusOK && resp.StatusCode != fiber.StatusNotFound {
+		body, _ := io.ReadAll(resp.Body)
+		t.Errorf("GET /v1/test/code/:id status = %d, body=%s", resp.StatusCode, string(body))
+	}
+}

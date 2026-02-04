@@ -105,6 +105,20 @@ func TestManager_Render_BuiltIn(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name:    "dingtalk channel uses SMS built-in",
+			locale:  "en",
+			channel: "dingtalk",
+			purpose: "login",
+			data: TemplateData{
+				Code:      "123456",
+				ExpiresIn: 300,
+				Purpose:   "login",
+				Locale:    "en",
+			},
+			wantErr:  false,
+			contains: "123456",
+		},
 	}
 
 	for _, tt := range tests {
@@ -447,6 +461,58 @@ func TestManager_GetBundle_Direct(t *testing.T) {
 	bundle := manager.GetBundle()
 	if bundle == nil {
 		t.Error("GetBundle() returned nil")
+	}
+}
+
+func TestManager_RenderEmail_ExpiresInZeroMinutes(t *testing.T) {
+	manager := NewManager("")
+	data := TemplateData{
+		Code:      "123456",
+		ExpiresIn: 0, // triggers minutes <= 0 → default 5 in built-in
+		Purpose:   "login",
+		Locale:    "en",
+	}
+	subject, body, err := manager.RenderEmail("en", "login", data)
+	if err != nil {
+		t.Errorf("RenderEmail() error = %v", err)
+	}
+	if subject == "" || body == "" {
+		t.Error("RenderEmail() with ExpiresIn 0 should return non-empty subject and body")
+	}
+	if !contains(body, "123456") {
+		t.Errorf("RenderEmail() body should contain code, got %s", body)
+	}
+}
+
+func TestManager_RenderSMS_ExpiresInZeroMinutes(t *testing.T) {
+	manager := NewManager("")
+	data := TemplateData{
+		Code:      "654321",
+		ExpiresIn: 0,
+		Purpose:   "login",
+		Locale:    "zh-CN",
+	}
+	body, err := manager.RenderSMS("zh-CN", "login", data)
+	if err != nil {
+		t.Errorf("RenderSMS() error = %v", err)
+	}
+	if body == "" {
+		t.Error("RenderSMS() with ExpiresIn 0 should return non-empty body")
+	}
+	if !contains(body, "654321") {
+		t.Errorf("RenderSMS() body should contain code, got %s", body)
+	}
+}
+
+func TestManager_parseLanguage_InvalidLocale(t *testing.T) {
+	manager := NewManager("")
+	// parseLanguage is used internally; test via Render with unsupported locale (falls back to en)
+	result, err := manager.Render("xx-YY", "sms", "login", TemplateData{Code: "111", ExpiresIn: 300, Purpose: "login", Locale: "xx-YY"})
+	if err != nil {
+		t.Errorf("Render() error = %v", err)
+	}
+	if result == "" {
+		t.Error("Render() with invalid locale should fallback to built-in and return non-empty")
 	}
 }
 
