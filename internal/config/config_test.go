@@ -3,6 +3,8 @@ package config
 import (
 	"sync"
 	"testing"
+
+	logger "github.com/soulteary/logger-kit"
 )
 
 func TestParseHMACKeys(t *testing.T) {
@@ -112,4 +114,74 @@ func TestHasHMACKeys(t *testing.T) {
 	if HasHMACKeys() {
 		t.Error("Expected HasHMACKeys() to return false when no keys are configured")
 	}
+}
+
+func TestParseHMACKeys_InvalidJSON(t *testing.T) {
+	originalHMACKeysJSON := HMACKeysJSON
+	defer func() {
+		HMACKeysJSON = originalHMACKeysJSON
+		hmacKeysMap = nil
+		hmacKeysMapOnce = sync.Once{}
+		hmacDefaultKeyID = ""
+	}()
+
+	log := logger.New(logger.Config{Level: logger.ErrorLevel, Format: logger.FormatJSON})
+	_ = Initialize(log)
+
+	HMACKeysJSON = `{invalid-json`
+	hmacKeysMap = nil
+	hmacKeysMapOnce = sync.Once{}
+	err := parseHMACKeys()
+	if err == nil {
+		t.Error("parseHMACKeys() with invalid JSON should return error")
+	}
+}
+
+func TestParseHMACKeys_EmptyKeys(t *testing.T) {
+	originalHMACKeysJSON := HMACKeysJSON
+	defer func() {
+		HMACKeysJSON = originalHMACKeysJSON
+		hmacKeysMap = nil
+		hmacKeysMapOnce = sync.Once{}
+		hmacDefaultKeyID = ""
+	}()
+
+	_ = Initialize(logger.New(logger.Config{Level: logger.ErrorLevel, Format: logger.FormatJSON}))
+
+	HMACKeysJSON = `{}`
+	hmacKeysMap = nil
+	hmacKeysMapOnce = sync.Once{}
+	err := parseHMACKeys()
+	if err == nil {
+		t.Error("parseHMACKeys() with empty keys should return error")
+	}
+}
+
+func TestInitialize(t *testing.T) {
+	log := logger.New(logger.Config{Level: logger.ErrorLevel, Format: logger.FormatJSON})
+	err := Initialize(log)
+	if err != nil {
+		t.Errorf("Initialize() error = %v", err)
+	}
+}
+
+func TestGetPort(t *testing.T) {
+	originalPort := Port
+	defer func() { Port = originalPort }()
+
+	t.Run("with_colon_prefix", func(t *testing.T) {
+		Port = ":8082"
+		got := GetPort()
+		if got != ":8082" {
+			t.Errorf("GetPort() = %q, want :8082", got)
+		}
+	})
+
+	t.Run("without_colon_prefix", func(t *testing.T) {
+		Port = "8082"
+		got := GetPort()
+		if got != ":8082" {
+			t.Errorf("GetPort() = %q, want :8082", got)
+		}
+	})
 }

@@ -216,3 +216,18 @@ func TestMetricsRegistration(t *testing.T) {
 		t.Fatalf("Failed to gather metrics: %v", err)
 	}
 }
+
+func TestRecordRedisSuccess(t *testing.T) {
+	Redis.OperationDuration.Reset()
+
+	duration := 10 * time.Millisecond
+	RecordRedisSuccess("set", duration)
+
+	Redis.OperationDuration.WithLabelValues("set").Observe(0.01)
+}
+
+func TestRecordRedisFailure(t *testing.T) {
+	duration := 5 * time.Millisecond
+	RecordRedisFailure("get", duration)
+	RecordRedisFailure("set", duration)
+}

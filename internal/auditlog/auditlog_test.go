@@ -83,3 +83,23 @@ func TestQuery(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Empty(t, records) // NoopStorage returns empty
 }
+
+func TestSetLogger(t *testing.T) {
+	// SetLogger is used by other packages; ensure it doesn't panic
+	SetLogger(nil)
+}
+
+func TestInit_WithNilRedis(t *testing.T) {
+	auditLogger = nil
+	auditLoggerInit = sync.Once{}
+
+	Init(nil)
+	l := GetLogger()
+	assert.NotNil(t, l)
+}
+
+func TestStop_WhenNil(t *testing.T) {
+	auditLogger = nil
+	err := Stop()
+	assert.NoError(t, err)
+}

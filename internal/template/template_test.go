@@ -423,6 +423,33 @@ func TestGetPurposeName(t *testing.T) {
 	}
 }
 
+func TestManager_GetPurposeName_Direct(t *testing.T) {
+	manager := NewManager("")
+	if manager == nil {
+		t.Fatal("NewManager() returned nil")
+	}
+	// Direct call to GetPurposeName
+	got := manager.GetPurposeName("en", "login")
+	if got != "login" {
+		t.Errorf("GetPurposeName(en, login) = %q, want login", got)
+	}
+	got = manager.GetPurposeName("zh-CN", "reset")
+	if got != "重置密码" {
+		t.Errorf("GetPurposeName(zh-CN, reset) = %q, want 重置密码", got)
+	}
+}
+
+func TestManager_GetBundle_Direct(t *testing.T) {
+	manager := NewManager("")
+	if manager == nil {
+		t.Fatal("NewManager() returned nil")
+	}
+	bundle := manager.GetBundle()
+	if bundle == nil {
+		t.Error("GetBundle() returned nil")
+	}
+}
+
 // Helper function to check if string contains substring
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || containsHelper(s, substr))

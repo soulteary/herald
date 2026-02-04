@@ -120,6 +120,19 @@ func TestNewHandlers(t *testing.T) {
 	}
 }
 
+func TestHandlers_StopAuditWriter(t *testing.T) {
+	redisClient := testRedisClient(t)
+	defer func() { _ = redisClient.Close() }()
+
+	h := NewHandlers(redisClient, nil, testLogger())
+	if h == nil {
+		t.Fatal("NewHandlers() returned nil")
+	}
+	// StopAuditWriter calls auditlog.Stop(); auditlog uses sync.Once so may share
+	// a logger from another test. We only assert the call runs without panic.
+	_ = h.StopAuditWriter()
+}
+
 // Note: Health check is now handled by health-kit in router.go
 // Tests for health check endpoint are in router_test.go
 

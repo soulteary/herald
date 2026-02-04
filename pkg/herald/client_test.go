@@ -289,3 +289,66 @@ func TestVerifyChallenge_DecodeError(t *testing.T) {
 	})
 	assert.NotNil(t, err)
 }
+
+func TestOptions_TLSFluentSetters(t *testing.T) {
+	opts := DefaultOptions().
+		WithTLSCACert("/path/to/ca.pem").
+		WithTLSClientCert("/path/to/cert.pem", "/path/to/key.pem").
+		WithTLSServerName("herald.example.com").
+		WithInsecureSkipVerify(true)
+
+	assert.Equal(t, "/path/to/ca.pem", opts.TLSCACertFile)
+	assert.Equal(t, "/path/to/cert.pem", opts.TLSClientCert)
+	assert.Equal(t, "/path/to/key.pem", opts.TLSClientKey)
+	assert.Equal(t, "herald.example.com", opts.TLSServerName)
+	assert.True(t, opts.InsecureSkipVerify)
+}
+
+func TestHeraldError_Error(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      *HeraldError
+		contains []string
+	}{
+		{
+			name:     "status and message",
+			err:      &HeraldError{StatusCode: 400, Message: "bad request"},
+			contains: []string{"400", "bad request"},
+		},
+		{
+			name:     "status and reason",
+			err:      &HeraldError{StatusCode: 401, Reason: "unauthorized"},
+			contains: []string{"401", "unauthorized"},
+		},
+		{
+			name:     "status only",
+			err:      &HeraldError{StatusCode: 500},
+			contains: []string{"500"},
+		},
+		{
+			name:     "connection error with message",
+			err:      &HeraldError{StatusCode: 0, Message: "connection refused"},
+			contains: []string{"connection refused"},
+		},
+		{
+			name:     "connection error with reason",
+			err:      &HeraldError{StatusCode: 0, Reason: "timeout"},
+			contains: []string{"timeout"},
+		},
+		{
+			name:     "connection error only",
+			err:      &HeraldError{StatusCode: 0},
+			contains: []string{"Herald API error"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.err.Error()
+			for _, sub := range tt.contains {
+				if !strings.Contains(got, sub) {
+					t.Errorf("Error() = %q, want to contain %q", got, sub)
+				}
+			}
+		})
+	}
+}
