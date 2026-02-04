@@ -125,7 +125,7 @@ jobs:
       - name: Set up Go environment (temporarily use 1.24 to match golangci-lint)
         uses: actions/setup-go@v6
         with:
-          go-version: '1.24'
+          go-version: ${{ env.GO_VERSION }}
 
       - name: Temporarily modify go.mod to match golangci-lint's Go version
         run: |
