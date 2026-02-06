@@ -59,6 +59,15 @@
 - **提供者速率限制**：检查提供者是否有被超过的速率限制
 - **无效目标**：验证电子邮件地址和电话号码是否有效
 
+### 本地/测试：直接展示验证码
+
+在本地或集成测试中若不想依赖真实短信/邮件送达：
+
+- 将 **Herald** 的 `HERALD_TEST_MODE=true`。创建 challenge 的响应会包含 `debug_code`，并开放 `GET /v1/test/code/:challenge_id` 用于查询验证码。
+- 将 **Stargate** 的 `DEBUG=true`。`/_send_verify_code` 的响应会包含验证码，登录页会直接展示（如「验证码（调试）：123456」）。
+
+详见 [API.md](API.md)（创建挑战、获取测试验证码）与 [DEPLOYMENT.md](DEPLOYMENT.md)（测试模式与调试）。**生产环境请勿开启测试模式或 DEBUG。**
+
 ## 验证码错误
 
 ### 症状

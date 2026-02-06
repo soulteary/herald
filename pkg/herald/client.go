@@ -192,6 +192,8 @@ type CreateChallengeResponse struct {
 	ChallengeID  string `json:"challenge_id"`
 	ExpiresIn    int    `json:"expires_in"`
 	NextResendIn int    `json:"next_resend_in"`
+	// DebugCode is set by Herald only when HERALD_TEST_MODE=true (for debugging)
+	DebugCode string `json:"debug_code,omitempty"`
 }
 
 // VerifyChallengeRequest represents the request to verify a challenge

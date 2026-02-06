@@ -262,6 +262,144 @@ func TestHandlers_CreateChallenge_Success(t *testing.T) {
 	}
 }
 
+func TestHandlers_CreateChallenge_TestMode_ReturnsDebugCode(t *testing.T) {
+	originalTestMode := config.TestMode
+	originalRateLimitPerUser := config.RateLimitPerUser
+	originalRateLimitPerIP := config.RateLimitPerIP
+	originalRateLimitPerDestination := config.RateLimitPerDestination
+	originalResendCooldown := config.ResendCooldown
+	originalChallengeExpiry := config.ChallengeExpiry
+	defer func() {
+		config.TestMode = originalTestMode
+		config.RateLimitPerUser = originalRateLimitPerUser
+		config.RateLimitPerIP = originalRateLimitPerIP
+		config.RateLimitPerDestination = originalRateLimitPerDestination
+		config.ResendCooldown = originalResendCooldown
+		config.ChallengeExpiry = originalChallengeExpiry
+	}()
+
+	config.TestMode = true
+	config.RateLimitPerUser = 100
+	config.RateLimitPerIP = 100
+	config.RateLimitPerDestination = 100
+	config.ResendCooldown = 1 * time.Second
+	config.ChallengeExpiry = 5 * time.Minute
+
+	redisClient := testRedisClient(t)
+	defer func() { _ = redisClient.Close() }()
+
+	handlers := NewHandlers(redisClient, nil, testLogger())
+	app := fiber.New()
+	app.Post("/challenge", handlers.CreateChallenge)
+
+	reqBody := CreateChallengeRequest{
+		UserID:      "user-debug",
+		Channel:     "email",
+		Destination: "debug@example.com",
+		Purpose:     "login",
+		Locale:      "en",
+		ClientIP:    "127.0.0.1",
+	}
+	bodyBytes, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest("POST", "/challenge", bytes.NewBuffer(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Test request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("CreateChallenge() status = %d, want %d, body: %s", resp.StatusCode, fiber.StatusOK, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("Failed to read response body: %v", err)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
+	if result["challenge_id"] == nil {
+		t.Error("CreateChallenge() response missing challenge_id")
+	}
+	debugCode, ok := result["debug_code"].(string)
+	if !ok || debugCode == "" {
+		t.Errorf("CreateChallenge() with TestMode=true should return debug_code, got %v", result["debug_code"])
+	}
+	if len(debugCode) != int(config.CodeLength) {
+		t.Errorf("CreateChallenge() debug_code length = %d, want %d", len(debugCode), config.CodeLength)
+	}
+}
+
+func TestHandlers_CreateChallenge_TestModeFalse_NoDebugCode(t *testing.T) {
+	originalTestMode := config.TestMode
+	originalRateLimitPerUser := config.RateLimitPerUser
+	originalRateLimitPerIP := config.RateLimitPerIP
+	originalRateLimitPerDestination := config.RateLimitPerDestination
+	originalResendCooldown := config.ResendCooldown
+	originalChallengeExpiry := config.ChallengeExpiry
+	defer func() {
+		config.TestMode = originalTestMode
+		config.RateLimitPerUser = originalRateLimitPerUser
+		config.RateLimitPerIP = originalRateLimitPerIP
+		config.RateLimitPerDestination = originalRateLimitPerDestination
+		config.ResendCooldown = originalResendCooldown
+		config.ChallengeExpiry = originalChallengeExpiry
+	}()
+
+	config.TestMode = false
+	config.RateLimitPerUser = 100
+	config.RateLimitPerIP = 100
+	config.RateLimitPerDestination = 100
+	config.ResendCooldown = 1 * time.Second
+	config.ChallengeExpiry = 5 * time.Minute
+
+	redisClient := testRedisClient(t)
+	defer func() { _ = redisClient.Close() }()
+
+	handlers := NewHandlers(redisClient, nil, testLogger())
+	app := fiber.New()
+	app.Post("/challenge", handlers.CreateChallenge)
+
+	reqBody := CreateChallengeRequest{
+		UserID:      "user-prod",
+		Channel:     "email",
+		Destination: "prod@example.com",
+		Purpose:     "login",
+		Locale:      "en",
+		ClientIP:    "127.0.0.1",
+	}
+	bodyBytes, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest("POST", "/challenge", bytes.NewBuffer(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Test request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("CreateChallenge() status = %d, want %d, body: %s", resp.StatusCode, fiber.StatusOK, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("Failed to read response body: %v", err)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
+	if result["challenge_id"] == nil {
+		t.Error("CreateChallenge() response missing challenge_id")
+	}
+	if _, has := result["debug_code"]; has {
+		t.Error("CreateChallenge() with TestMode=false must not return debug_code")
+	}
+}
+
 func TestHandlers_CreateChallenge_InvalidRequest(t *testing.T) {
 	redisClient := testRedisClient(t)
 	defer func() {

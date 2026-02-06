@@ -59,6 +59,15 @@ This guide helps you diagnose and resolve common issues with Herald OTP and veri
 - **Provider Rate Limits**: Check if provider has rate limits that are being exceeded
 - **Invalid Destinations**: Verify email addresses and phone numbers are valid
 
+### Local/Testing: Display verification code without provider
+
+For local or integration testing when you do not want to rely on real SMS/email delivery:
+
+1. Set **Herald** `HERALD_TEST_MODE=true`. Herald will then return the verification code in the create-challenge response (`debug_code`) and expose `GET /v1/test/code/:challenge_id`.
+2. Set **Stargate** `DEBUG=true`. Stargate will include the verification code in the `/_send_verify_code` response and display it on the login page (e.g. "Verification code (debug): 123456").
+
+See [API.md](API.md) (Create Challenge response, Get Test Code) and [DEPLOYMENT.md](DEPLOYMENT.md) (Test mode and debugging). **Never enable test mode or DEBUG in production.**
+
 ## Verification Code Errors
 
 ### Symptoms

@@ -494,6 +494,9 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 		"expires_in":     int(config.ChallengeExpiry.Seconds()),
 		"next_resend_in": int(config.ResendCooldown.Seconds()),
 	}
+	if config.TestMode {
+		response["debug_code"] = code
+	}
 
 	// Store idempotency record if idempotency key is provided
 	if idempotencyKey != "" {

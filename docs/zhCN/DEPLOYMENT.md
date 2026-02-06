@@ -63,6 +63,16 @@ go build -o herald main.go
 | `HERALD_DINGTALK_API_KEY` | 可选 API 密钥；若 herald-dingtalk 配置了 `API_KEY` 则需与此一致 | `` | 否 |
 | `HERALD_SMTP_API_URL` | [herald-smtp](https://github.com/soulteary/herald-smtp) 服务基础 URL（例如 `http://herald-smtp:8084`）；设置后不再使用内置 SMTP | `` | 用于 email 通道（可选） |
 | `HERALD_SMTP_API_KEY` | 可选 API 密钥；若 herald-smtp 配置了 `API_KEY` 则需与此一致 | `` | 否 |
+| `HERALD_TEST_MODE` | 为 `true` 时，将验证码写入 Redis 供 `GET /v1/test/code/:id` 查询，创建 challenge 响应中可选返回 `debug_code`。**仅用于本地/测试，生产环境请勿开启。** | `false` | 否 |
+
+### 测试模式与调试
+
+当 `HERALD_TEST_MODE=true` 时：
+
+- 创建 challenge 的响应中会包含 `debug_code` 字段（明文验证码），便于调用方（如 Stargate 在 `DEBUG=true` 时）在登录页直接展示。
+- 会开放接口 `GET /v1/test/code/:challenge_id`，用于根据 challenge_id 查询验证码（供集成测试或 Stargate 在创建响应未带 `debug_code` 时回退使用）。
+
+**安全：** 生产环境必须设置 `HERALD_TEST_MODE=false`。测试模式会暴露验证码，不得在生产环境使用。
 
 ### Email 通道（herald-smtp）
 
