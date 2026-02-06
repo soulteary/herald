@@ -96,6 +96,8 @@ Create a new verification challenge and send verification code.
 }
 ```
 
+When `HERALD_TEST_MODE=true`, the response also includes `debug_code` (the plain verification code) so callers (e.g. Stargate in debug mode) can display it for local/testing. **Do not enable test mode in production.**
+
 **Error Responses:**
 
 All error responses follow this format:
@@ -125,6 +127,23 @@ HTTP Status Codes:
 - `403 Forbidden`: User locked
 - `429 Too Many Requests`: Rate limit exceeded
 - `500 Internal Server Error`: Internal server error
+
+### Get Test Code (Test Mode Only)
+
+**GET /v1/test/code/:challenge_id**
+
+Returns the verification code for a challenge. **Only available when `HERALD_TEST_MODE=true`.** Used by integration tests or by Stargate in debug mode when the create-challenge response did not include `debug_code` (e.g. when using an older Herald client). Do not enable test mode in production.
+
+**Response (200 OK):**
+```json
+{
+  "ok": true,
+  "challenge_id": "ch_7f9b...",
+  "code": "123456"
+}
+```
+
+**Error:** `404 Not Found` when test mode is off, or when the challenge does not exist or the code is not stored.
 
 ### Verify Challenge
 

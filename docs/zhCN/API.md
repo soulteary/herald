@@ -96,6 +96,8 @@ HMAC-SHA256(timestamp:service:body, secret)
 }
 ```
 
+当 `HERALD_TEST_MODE=true` 时，响应中还会包含 `debug_code`（明文验证码），便于调用方（如 Stargate 调试模式）在本地/测试时直接展示。**生产环境请勿开启测试模式。**
+
 **错误响应：**
 
 所有错误响应都遵循以下格式：
@@ -125,6 +127,23 @@ HTTP 状态代码：
 - `403 Forbidden`：用户被锁定
 - `429 Too Many Requests`：超过速率限制
 - `500 Internal Server Error`：内部服务器错误
+
+### 获取测试验证码（仅测试模式）
+
+**GET /v1/test/code/:challenge_id**
+
+返回指定 challenge 的验证码。**仅当 `HERALD_TEST_MODE=true` 时可用。** 用于集成测试或 Stargate 调试模式下在创建 challenge 响应未包含 `debug_code` 时作为回退获取验证码。生产环境请勿开启测试模式。
+
+**响应（200 OK）：**
+```json
+{
+  "ok": true,
+  "challenge_id": "ch_7f9b...",
+  "code": "123456"
+}
+```
+
+**错误：** 测试模式关闭或 challenge 不存在/未存储验证码时返回 `404 Not Found`。
 
 ### 验证挑战
 

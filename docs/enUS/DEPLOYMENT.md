@@ -63,6 +63,16 @@ For consistency and future compatibility, consider using `HERALD_*` prefix when 
 | `HERALD_DINGTALK_API_KEY` | Optional API key; must match herald-dingtalk `API_KEY` when set | `` | No |
 | `HERALD_SMTP_API_URL` | Base URL of [herald-smtp](https://github.com/soulteary/herald-smtp) (e.g. `http://herald-smtp:8084`); when set, built-in SMTP is not used | `` | For email channel (optional) |
 | `HERALD_SMTP_API_KEY` | Optional API key; must match herald-smtp `API_KEY` when set | `` | No |
+| `HERALD_TEST_MODE` | When `true`, store verification code in Redis for `GET /v1/test/code/:id` and optionally return `debug_code` in create-challenge response. **Only for local/testing; never enable in production.** | `false` | No |
+
+### Test mode and debugging
+
+When `HERALD_TEST_MODE=true`:
+
+- The create-challenge response may include a `debug_code` field (plain verification code) so callers (e.g. Stargate with `DEBUG=true`) can display it on the login page.
+- The endpoint `GET /v1/test/code/:challenge_id` is enabled and returns the verification code for the given challenge (for integration tests or as a fallback when the client does not receive `debug_code` in the create response).
+
+**Security:** Always set `HERALD_TEST_MODE=false` in production. Test mode exposes verification codes and must not be used in production environments.
 
 ### Email channel (herald-smtp)
 
