@@ -7,7 +7,7 @@ on:
     branches: [ main, master, develop ]
 
 env:
-  GO_VERSION: '1.25'
+  GO_VERSION: '1.25.7'
   DOCKER_BUILDKIT: 1
 
 jobs:
@@ -67,7 +67,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ['1.25']
+        go-version: ['1.25.7']
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -222,7 +222,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ['1.25']
+        go-version: ['1.25.7']
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - name: Checkout code

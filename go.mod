@@ -1,6 +1,6 @@
 module github.com/soulteary/herald
 
-go 1.25.4
+go 1.25.7
 
 require (
 	github.com/gofiber/fiber/v2 v2.52.11
@@ -10,18 +10,18 @@ require (
 	github.com/soulteary/audit-kit v1.1.0
 	github.com/soulteary/challenge-kit v1.1.0
 	github.com/soulteary/cli-kit v1.3.1
-	github.com/soulteary/health-kit v1.0.0
+	github.com/soulteary/health-kit v1.1.0
 	github.com/soulteary/http-kit v1.0.0
 	github.com/soulteary/i18n-kit v1.0.0
-	github.com/soulteary/logger-kit v1.2.0
+	github.com/soulteary/logger-kit v1.3.0
 	github.com/soulteary/metrics-kit v1.1.0
 	github.com/soulteary/middleware-kit v1.1.0
 	github.com/soulteary/provider-kit v1.2.0
-	github.com/soulteary/redis-kit v1.0.1
+	github.com/soulteary/redis-kit v1.1.0
 	github.com/soulteary/secure-kit v1.2.0
-	github.com/soulteary/session-kit v1.1.2
+	github.com/soulteary/session-kit v1.2.0
 	github.com/soulteary/tracing-kit v1.0.1
-	github.com/soulteary/version-kit v1.0.1
+	github.com/soulteary/version-kit v1.1.0
 	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/otel v1.40.0
 	go.opentelemetry.io/otel/trace v1.40.0
