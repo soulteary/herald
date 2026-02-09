@@ -82,7 +82,7 @@ Herald를 시작하려면 최소한의 구성이 필요합니다:
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
 | `PORT` | Server port | `:8082` | No |
-| `REDIS_ADDR` | Redis address | `localhost:6379` | Yes |
+| `REDIS_ADDR` | Redis address | `localhost:6379` | No |
 | `API_KEY` | API key for authentication | - | Recommended |
 
 속도 제한, 챌린지 만료 시간 및 프로바이더 설정을 포함한 전체 구성 옵션에 대해서는 [배포 가이드](docs/koKR/DEPLOYMENT.md#configuration)를 참조하세요.

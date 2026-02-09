@@ -31,39 +31,131 @@ For consistency and future compatibility, consider using `HERALD_*` prefix when 
 
 ### Environment Variables
 
+The following match the implementation in `internal/config/config.go`.
+
+#### Server and Redis
+
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
-| `PORT` | Server port (can be with or without leading colon, e.g., `8082` or `:8082`) | `:8082` | No |
+| `PORT` | Server listen port (with or without leading colon, e.g. `8082` or `:8082`) | `:8082` | No |
 | `REDIS_ADDR` | Redis address | `localhost:6379` | No |
-| `REDIS_PASSWORD` | Redis password | `` | No |
-| `REDIS_DB` | Redis database | `0` | No |
-| `API_KEY` | API key for authentication | `` | Recommended |
-| `HMAC_SECRET` | HMAC secret for secure auth | `` | Optional |
+| `REDIS_PASSWORD` | Redis password | (empty) | No |
+| `REDIS_DB` | Redis database index | `0` | No |
 | `LOG_LEVEL` | Log level | `info` | No |
-| `CHALLENGE_EXPIRY` | Challenge expiration | `5m` | No |
-| `MAX_ATTEMPTS` | Max verification attempts | `5` | No |
-| `RESEND_COOLDOWN` | Resend cooldown | `60s` | No |
-| `CODE_LENGTH` | Verification code length | `6` | No |
-| `RATE_LIMIT_PER_USER` | Rate limit per user/hour | `10` | No |
-| `RATE_LIMIT_PER_IP` | Rate limit per IP/minute | `5` | No |
-| `RATE_LIMIT_PER_DESTINATION` | Rate limit per destination/hour | `10` | No |
-| `LOCKOUT_DURATION` | User lockout duration after max attempts | `10m` | No |
-| `SERVICE_NAME` | Service identifier for HMAC auth | `herald` | No |
-| `SMTP_HOST` | SMTP server host | `` | For email |
-| `SMTP_PORT` | SMTP server port | `587` | For email |
-| `SMTP_USER` | SMTP username | `` | For email |
-| `SMTP_PASSWORD` | SMTP password | `` | For email |
-| `SMTP_FROM` | SMTP from address | `` | For email |
-| `SMS_PROVIDER` | SMS provider | `` | For SMS |
-| `ALIYUN_ACCESS_KEY` | Aliyun access key | `` | For Aliyun SMS |
-| `ALIYUN_SECRET_KEY` | Aliyun secret key | `` | For Aliyun SMS |
-| `ALIYUN_SIGN_NAME` | Aliyun SMS sign name | `` | For Aliyun SMS |
-| `ALIYUN_TEMPLATE_CODE` | Aliyun SMS template code | `` | For Aliyun SMS |
-| `HERALD_DINGTALK_API_URL` | Base URL of [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) (e.g. `http://herald-dingtalk:8083`) | `` | For DingTalk channel |
-| `HERALD_DINGTALK_API_KEY` | Optional API key; must match herald-dingtalk `API_KEY` when set | `` | No |
-| `HERALD_SMTP_API_URL` | Base URL of [herald-smtp](https://github.com/soulteary/herald-smtp) (e.g. `http://herald-smtp:8084`); when set, built-in SMTP is not used | `` | For email channel (optional) |
-| `HERALD_SMTP_API_KEY` | Optional API key; must match herald-smtp `API_KEY` when set | `` | No |
-| `HERALD_TEST_MODE` | When `true`, store verification code in Redis for `GET /v1/test/code/:id` and optionally return `debug_code` in create-challenge response. **Only for local/testing; never enable in production.** | `false` | No |
+| `SERVICE_NAME` | Service identifier (HMAC, logging, health) | `herald` | No |
+
+#### Service-to-service authentication
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `API_KEY` | Simple API key auth (via header) | (empty) | One recommended |
+| `HMAC_SECRET` | Single HMAC secret for request signing | (empty) | One recommended |
+| `HERALD_HMAC_KEYS` | Multiple HMAC keys, JSON: `{"key-id-1":"secret-1","key-id-2":"secret-2"}`; supports key rotation | (empty) | One recommended |
+
+If none are set, the service logs a warning and allows unauthenticated requests (dev/test only).
+
+#### OTP / Challenge
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `CHALLENGE_EXPIRY` | Challenge expiry (e.g. `5m`, `300s`) | `5m` | No |
+| `MAX_ATTEMPTS` | Max verify failures per challenge before lockout | `5` | No |
+| `LOCKOUT_DURATION` | Lockout duration (e.g. `10m`) | `10m` | No |
+| `RESEND_COOLDOWN` | Resend cooldown for same challenge | `60s` | No |
+| `CODE_LENGTH` | Verification code length (digits) | `6` | No |
+| `IDEMPOTENCY_KEY_TTL` | Idempotency key cache TTL; `0` = use `CHALLENGE_EXPIRY` | `0` | No |
+| `ALLOWED_PURPOSES` | Allowed purposes, comma-separated (e.g. `login,reset,bind,stepup`) | `login` | No |
+
+#### Rate limiting
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `RATE_LIMIT_PER_USER` | Challenges per user_id per hour | `10` | No |
+| `RATE_LIMIT_PER_IP` | Challenges per IP per minute | `5` | No |
+| `RATE_LIMIT_PER_DESTINATION` | Challenges per destination (email/phone) per hour | `10` | No |
+
+#### Email channel
+
+**Built-in SMTP** (used when `HERALD_SMTP_API_URL` is not set):
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `SMTP_HOST` | SMTP server host | (empty) | When using built-in |
+| `SMTP_PORT` | SMTP port | `587` | No |
+| `SMTP_USER` | SMTP username | (empty) | No |
+| `SMTP_PASSWORD` | SMTP password | (empty) | No |
+| `SMTP_FROM` | From address | (empty) | Recommended |
+| `PROVIDER_FAILURE_POLICY` | On send failure: `soft` (still create challenge) or `strict` (do not create) | `soft` | No |
+
+**herald-smtp plugin** (when set, built-in SMTP is not used):
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `HERALD_SMTP_API_URL` | [herald-smtp](https://github.com/soulteary/herald-smtp) base URL (e.g. `http://herald-smtp:8084`) | (empty) | When using plugin |
+| `HERALD_SMTP_API_KEY` | Must match herald-smtp `API_KEY` if set | (empty) | No |
+
+#### SMS channel (HTTP API mode)
+
+The implementation calls an external SMS HTTP API; Aliyun/etc. credentials are held by that gateway, not Herald.
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `SMS_PROVIDER` | Provider name (e.g. `aliyun`, `tencent`, `http`) for logging | (empty) | When using SMS |
+| `SMS_API_BASE_URL` | SMS HTTP API base URL | (empty) | When using SMS |
+| `SMS_API_KEY` | SMS API auth key if required by gateway | (empty) | As needed |
+
+#### DingTalk channel (herald-dingtalk plugin)
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `HERALD_DINGTALK_API_URL` | [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) base URL (e.g. `http://herald-dingtalk:8083`) | (empty) | When using DingTalk |
+| `HERALD_DINGTALK_API_KEY` | Must match herald-dingtalk `API_KEY` if set | (empty) | No |
+
+#### TLS / mTLS
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `TLS_CERT_FILE` | Server certificate path | (empty) | When TLS enabled |
+| `TLS_KEY_FILE` | Server private key path | (empty) | When TLS enabled |
+| `TLS_CA_CERT_FILE` | Client CA cert for mTLS verification | (empty) | Optional |
+| `TLS_CLIENT_CA_FILE` | Alias for `TLS_CA_CERT_FILE` | (empty) | Optional |
+
+#### Session storage (optional)
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `HERALD_SESSION_STORAGE_ENABLED` | Enable Redis session storage | `false` | No |
+| `HERALD_SESSION_DEFAULT_TTL` | Default session TTL (e.g. `1h`) | `1h` | No |
+| `HERALD_SESSION_KEY_PREFIX` | Redis session key prefix | `session:` | No |
+
+#### Audit logging
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `AUDIT_ENABLED` | Enable audit | `true` | No |
+| `AUDIT_MASK_DESTINATION` | Mask destination in audit | `false` | No |
+| `AUDIT_TTL` | Audit record TTL in Redis (e.g. `168h` = 7 days) | `168h` | No |
+| `AUDIT_STORAGE_TYPE` | Persistent storage: `database`, `file`, `loki`, or comma-separated | (empty) | No |
+| `AUDIT_DATABASE_URL` | DB URL when `AUDIT_STORAGE_TYPE` includes database | (empty) | No |
+| `AUDIT_TABLE_NAME` | Audit table name | `audit_logs` | No |
+| `AUDIT_FILE_PATH` | Audit file path when using file | (empty) | No |
+| `AUDIT_LOKI_URL` | Loki URL when using loki | (empty) | No |
+| `AUDIT_WRITER_QUEUE_SIZE` | Audit writer queue size | `1000` | No |
+| `AUDIT_WRITER_WORKERS` | Audit writer workers | `2` | No |
+
+#### Templates and observability
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `TEMPLATE_DIR` | Optional path to email/SMS template directory | (empty) | No |
+| `OTLP_ENABLED` | Enable OpenTelemetry | `false` | No |
+| `OTLP_ENDPOINT` | OTLP endpoint (e.g. `http://localhost:4318`) | (empty) | When OTLP enabled |
+
+#### Test and debug
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `HERALD_TEST_MODE` | When `true`, store code in Redis for `GET /v1/test/code/:id` and optional `debug_code` in create response; **must be false in production** | `false` | No |
 
 ### Test mode and debugging
 

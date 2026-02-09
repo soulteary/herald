@@ -23,6 +23,8 @@ go build -o herald main.go
 
 ### 환경 변수
 
+**코드와 일치하는 전체 목록:** [English](enUS/DEPLOYMENT.md#environment-variables) | [中文](zhCN/DEPLOYMENT.md#环境变量)
+
 | 변수 | 설명 | 기본값 | 필수 |
 |------|------|-------|------|
 | `PORT` | 서버 포트(선행 콜론 포함 또는 제외, 예: `8082` 또는 `:8082`) | `:8082` | 아니오 |
@@ -31,6 +33,7 @@ go build -o herald main.go
 | `REDIS_DB` | Redis 데이터베이스 | `0` | 아니오 |
 | `API_KEY` | 인증용 API 키 | `` | 권장 |
 | `HMAC_SECRET` | 보안 인증용 HMAC 비밀 키 | `` | 선택 사항 |
+| `HERALD_HMAC_KEYS` | 다중 HMAC 키 (JSON) | `` | 선택 사항 |
 | `LOG_LEVEL` | 로그 수준 | `info` | 아니오 |
 | `CHALLENGE_EXPIRY` | 챌린지 만료 시간 | `5m` | 아니오 |
 | `MAX_ATTEMPTS` | 최대 인증 시도 횟수 | `5` | 아니오 |
@@ -41,20 +44,19 @@ go build -o herald main.go
 | `RATE_LIMIT_PER_DESTINATION` | 대상당/시간 속도 제한 | `10` | 아니오 |
 | `LOCKOUT_DURATION` | 최대 시도 횟수 후 사용자 잠금 기간 | `10m` | 아니오 |
 | `SERVICE_NAME` | HMAC 인증용 서비스 식별자 | `herald` | 아니오 |
-| `SMTP_HOST` | SMTP 서버 호스트 | `` | 이메일용 |
+| `SMTP_HOST` | SMTP 서버 호스트 | `` | 이메일용(내장) |
 | `SMTP_PORT` | SMTP 서버 포트 | `587` | 이메일용 |
 | `SMTP_USER` | SMTP 사용자 이름 | `` | 이메일용 |
 | `SMTP_PASSWORD` | SMTP 비밀번호 | `` | 이메일용 |
 | `SMTP_FROM` | SMTP 발신자 주소 | `` | 이메일용 |
-| `SMS_PROVIDER` | SMS 제공자 | `` | SMS용 |
-| `ALIYUN_ACCESS_KEY` | Aliyun 액세스 키 | `` | Aliyun SMS용 |
-| `ALIYUN_SECRET_KEY` | Aliyun 비밀 키 | `` | Aliyun SMS용 |
-| `ALIYUN_SIGN_NAME` | Aliyun SMS 서명 이름 | `` | Aliyun SMS용 |
-| `ALIYUN_TEMPLATE_CODE` | Aliyun SMS 템플릿 코드 | `` | Aliyun SMS용 |
+| `SMS_PROVIDER` | SMS 제공자(로그 등) | `` | SMS용 |
+| `SMS_API_BASE_URL` | SMS HTTP API 기본 URL | `` | SMS(HTTP API)용 |
+| `SMS_API_KEY` | SMS API 키 | `` | SMS용(선택) |
 | `HERALD_DINGTALK_API_URL` | [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) 기본 URL (예: `http://herald-dingtalk:8083`) | `` | DingTalk 채널용 |
 | `HERALD_DINGTALK_API_KEY` | 선택적 API 키; herald-dingtalk의 `API_KEY`와 일치해야 함 (설정 시) | `` | 아니오 |
 | `HERALD_SMTP_API_URL` | [herald-smtp](https://github.com/soulteary/herald-smtp) 기본 URL (예: `http://herald-smtp:8084`); 설정 시 내장 SMTP 미사용 | `` | 이메일 채널용 (선택) |
 | `HERALD_SMTP_API_KEY` | 선택적 API 키; herald-smtp의 `API_KEY`와 일치해야 함 (설정 시) | `` | 아니오 |
+| `HERALD_TEST_MODE` | `true`일 때 Redis/응답에 디버그 코드. **테스트 전용; 프로덕션에서는 반드시 `false`.** | `false` | 아니오 |
 
 ### 이메일 채널 (herald-smtp)
 

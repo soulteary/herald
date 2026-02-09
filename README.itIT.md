@@ -82,7 +82,7 @@ Herald richiede una configurazione minima per iniziare:
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
 | `PORT` | Server port | `:8082` | No |
-| `REDIS_ADDR` | Redis address | `localhost:6379` | Yes |
+| `REDIS_ADDR` | Redis address | `localhost:6379` | No |
 | `API_KEY` | API key for authentication | - | Recommended |
 
 Per le opzioni di configurazione complete, inclusi limiti di velocità, scadenza delle sfide e impostazioni del provider, vedere la [Guida alla Distribuzione](docs/itIT/DEPLOYMENT.md#configuration).

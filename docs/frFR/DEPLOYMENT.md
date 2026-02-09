@@ -23,6 +23,8 @@ go build -o herald main.go
 
 ### Variables d'Environnement
 
+**Liste complète (alignée avec le code) :** [Anglais](enUS/DEPLOYMENT.md#environment-variables) | [中文](zhCN/DEPLOYMENT.md#环境变量)
+
 | Variable | Description | Par Défaut | Requis |
 |----------|-------------|------------|--------|
 | `PORT` | Port du serveur (peut être avec ou sans deux-points, par exemple `8082` ou `:8082`) | `:8082` | Non |
@@ -31,6 +33,7 @@ go build -o herald main.go
 | `REDIS_DB` | Base de données Redis | `0` | Non |
 | `API_KEY` | Clé API pour l'authentification | `` | Recommandé |
 | `HMAC_SECRET` | Secret HMAC pour l'authentification sécurisée | `` | Optionnel |
+| `HERALD_HMAC_KEYS` | Clés HMAC multiples (JSON) | `` | Optionnel |
 | `LOG_LEVEL` | Niveau de journalisation | `info` | Non |
 | `CHALLENGE_EXPIRY` | Expiration du défi | `5m` | Non |
 | `MAX_ATTEMPTS` | Nombre maximum de tentatives de vérification | `5` | Non |
@@ -41,20 +44,19 @@ go build -o herald main.go
 | `RATE_LIMIT_PER_DESTINATION` | Limite de débit par destination/heure | `10` | Non |
 | `LOCKOUT_DURATION` | Durée de verrouillage de l'utilisateur après le nombre maximum de tentatives | `10m` | Non |
 | `SERVICE_NAME` | Identifiant de service pour l'authentification HMAC | `herald` | Non |
-| `SMTP_HOST` | Hôte du serveur SMTP | `` | Pour l'e-mail |
+| `SMTP_HOST` | Hôte du serveur SMTP | `` | Pour l'e-mail (intégré) |
 | `SMTP_PORT` | Port du serveur SMTP | `587` | Pour l'e-mail |
 | `SMTP_USER` | Nom d'utilisateur SMTP | `` | Pour l'e-mail |
 | `SMTP_PASSWORD` | Mot de passe SMTP | `` | Pour l'e-mail |
 | `SMTP_FROM` | Adresse d'expéditeur SMTP | `` | Pour l'e-mail |
-| `SMS_PROVIDER` | Fournisseur SMS | `` | Pour SMS |
-| `ALIYUN_ACCESS_KEY` | Clé d'accès Aliyun | `` | Pour Aliyun SMS |
-| `ALIYUN_SECRET_KEY` | Clé secrète Aliyun | `` | Pour Aliyun SMS |
-| `ALIYUN_SIGN_NAME` | Nom de signature SMS Aliyun | `` | Pour Aliyun SMS |
-| `ALIYUN_TEMPLATE_CODE` | Code de modèle SMS Aliyun | `` | Pour Aliyun SMS |
+| `SMS_PROVIDER` | Fournisseur SMS (ex. nom pour les logs) | `` | Pour SMS |
+| `SMS_API_BASE_URL` | URL de base de l'API HTTP SMS | `` | Pour SMS (API HTTP) |
+| `SMS_API_KEY` | Clé API SMS | `` | Pour SMS (optionnel) |
 | `HERALD_DINGTALK_API_URL` | URL de base de [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) (ex. `http://herald-dingtalk:8083`) | `` | Pour le canal DingTalk |
 | `HERALD_DINGTALK_API_KEY` | Clé API optionnelle ; doit correspondre à `API_KEY` de herald-dingtalk si défini | `` | Non |
 | `HERALD_SMTP_API_URL` | URL de base de [herald-smtp](https://github.com/soulteary/herald-smtp) (ex. `http://herald-smtp:8084`) ; si défini, le SMTP intégré n'est pas utilisé | `` | Pour le canal e-mail (optionnel) |
 | `HERALD_SMTP_API_KEY` | Clé API optionnelle ; doit correspondre à `API_KEY` de herald-smtp si défini | `` | Non |
+| `HERALD_TEST_MODE` | Si `true` : code debug dans Redis/réponse. **Uniquement pour les tests ; en production toujours `false`.** | `false` | Non |
 
 ### Canal e-mail (herald-smtp)
 

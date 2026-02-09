@@ -82,7 +82,7 @@ Herald 需要最少的配置即可开始使用：
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
 | `PORT` | Server port | `:8082` | No |
-| `REDIS_ADDR` | Redis address | `localhost:6379` | Yes |
+| `REDIS_ADDR` | Redis address | `localhost:6379` | No |
 | `API_KEY` | API key for authentication | - | Recommended |
 
 使用 herald-smtp 发邮件时，请设置 `HERALD_SMTP_API_URL`（可选 `HERALD_SMTP_API_KEY`）；参见 [部署指南](docs/zhCN/DEPLOYMENT.md#email-通道herald-smtp)。使用 DingTalk 通道时，请设置 `HERALD_DINGTALK_API_URL`（可选 `HERALD_DINGTALK_API_KEY`）；参见 [部署指南](docs/zhCN/DEPLOYMENT.md#dingtalk-通道herald-dingtalk)。

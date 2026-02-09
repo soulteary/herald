@@ -31,39 +31,131 @@ go build -o herald main.go
 
 ### 环境变量
 
+以下与代码实现一致（参见 `internal/config/config.go`）。
+
+#### 服务与 Redis
+
 | 变量 | 描述 | 默认值 | 必需 |
 |------|------|--------|------|
-| `PORT` | 服务器端口（可以带或不带前导冒号，例如 `8082` 或 `:8082`） | `:8082` | 否 |
+| `PORT` | 服务器监听端口（可带或不带前导冒号，如 `8082` 或 `:8082`） | `:8082` | 否 |
 | `REDIS_ADDR` | Redis 地址 | `localhost:6379` | 否 |
-| `REDIS_PASSWORD` | Redis 密码 | `` | 否 |
-| `REDIS_DB` | Redis 数据库 | `0` | 否 |
-| `API_KEY` | 用于身份验证的 API 密钥 | `` | 推荐 |
-| `HMAC_SECRET` | 用于安全认证的 HMAC 密钥 | `` | 可选 |
+| `REDIS_PASSWORD` | Redis 密码 | （空） | 否 |
+| `REDIS_DB` | Redis 数据库索引 | `0` | 否 |
 | `LOG_LEVEL` | 日志级别 | `info` | 否 |
-| `CHALLENGE_EXPIRY` | 挑战过期时间 | `5m` | 否 |
-| `MAX_ATTEMPTS` | 最大验证尝试次数 | `5` | 否 |
-| `RESEND_COOLDOWN` | 重发冷却时间 | `60s` | 否 |
-| `CODE_LENGTH` | 验证码长度 | `6` | 否 |
-| `RATE_LIMIT_PER_USER` | 每个用户/小时的速率限制 | `10` | 否 |
-| `RATE_LIMIT_PER_IP` | 每个 IP/分钟的速率限制 | `5` | 否 |
-| `RATE_LIMIT_PER_DESTINATION` | 每个目标/小时的速率限制 | `10` | 否 |
-| `LOCKOUT_DURATION` | 达到最大尝试次数后的用户锁定持续时间 | `10m` | 否 |
-| `SERVICE_NAME` | HMAC 认证的服务标识符 | `herald` | 否 |
-| `SMTP_HOST` | SMTP 服务器主机 | `` | 用于电子邮件 |
-| `SMTP_PORT` | SMTP 服务器端口 | `587` | 用于电子邮件 |
-| `SMTP_USER` | SMTP 用户名 | `` | 用于电子邮件 |
-| `SMTP_PASSWORD` | SMTP 密码 | `` | 用于电子邮件 |
-| `SMTP_FROM` | SMTP 发件人地址 | `` | 用于电子邮件 |
-| `SMS_PROVIDER` | SMS 提供商 | `` | 用于 SMS |
-| `ALIYUN_ACCESS_KEY` | 阿里云访问密钥 | `` | 用于阿里云 SMS |
-| `ALIYUN_SECRET_KEY` | 阿里云密钥 | `` | 用于阿里云 SMS |
-| `ALIYUN_SIGN_NAME` | 阿里云 SMS 签名名称 | `` | 用于阿里云 SMS |
-| `ALIYUN_TEMPLATE_CODE` | 阿里云 SMS 模板代码 | `` | 用于阿里云 SMS |
-| `HERALD_DINGTALK_API_URL` | [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) 服务基础 URL（例如 `http://herald-dingtalk:8083`） | `` | 用于 DingTalk 通道 |
-| `HERALD_DINGTALK_API_KEY` | 可选 API 密钥；若 herald-dingtalk 配置了 `API_KEY` 则需与此一致 | `` | 否 |
-| `HERALD_SMTP_API_URL` | [herald-smtp](https://github.com/soulteary/herald-smtp) 服务基础 URL（例如 `http://herald-smtp:8084`）；设置后不再使用内置 SMTP | `` | 用于 email 通道（可选） |
-| `HERALD_SMTP_API_KEY` | 可选 API 密钥；若 herald-smtp 配置了 `API_KEY` 则需与此一致 | `` | 否 |
-| `HERALD_TEST_MODE` | 为 `true` 时，将验证码写入 Redis 供 `GET /v1/test/code/:id` 查询，创建 challenge 响应中可选返回 `debug_code`。**仅用于本地/测试，生产环境请勿开启。** | `false` | 否 |
+| `SERVICE_NAME` | 服务标识（用于 HMAC/日志/健康检查） | `herald` | 否 |
+
+#### 服务间认证
+
+| 变量 | 描述 | 默认值 | 必需 |
+|------|------|--------|------|
+| `API_KEY` | 简单 API Key 认证（请求头携带） | （空） | 推荐其一 |
+| `HMAC_SECRET` | 单密钥 HMAC 签名认证 | （空） | 推荐其一 |
+| `HERALD_HMAC_KEYS` | 多密钥 HMAC，JSON 格式：`{"key-id-1":"secret-1","key-id-2":"secret-2"}`，支持密钥轮换 | （空） | 推荐其一 |
+
+未设置任一认证时，服务会记录警告并允许未认证请求（仅适合开发/测试）。
+
+#### OTP/Challenge
+
+| 变量 | 描述 | 默认值 | 必需 |
+|------|------|--------|------|
+| `CHALLENGE_EXPIRY` | Challenge 过期时间（如 `5m`、`300s`） | `5m` | 否 |
+| `MAX_ATTEMPTS` | 单 challenge 最大验证失败次数，超过后锁定 | `5` | 否 |
+| `LOCKOUT_DURATION` | 锁定持续时间（如 `10m`） | `10m` | 否 |
+| `RESEND_COOLDOWN` | 同一 challenge 重发冷却时间 | `60s` | 否 |
+| `CODE_LENGTH` | 验证码位数 | `6` | 否 |
+| `IDEMPOTENCY_KEY_TTL` | 幂等键缓存 TTL；`0` 表示使用 `CHALLENGE_EXPIRY` | `0` | 否 |
+| `ALLOWED_PURPOSES` | 允许的 purpose，逗号分隔，如 `login,reset,bind,stepup` | `login` | 否 |
+
+#### 限流
+
+| 变量 | 描述 | 默认值 | 必需 |
+|------|------|--------|------|
+| `RATE_LIMIT_PER_USER` | 每 user_id 每小时可创建 challenge 数 | `10` | 否 |
+| `RATE_LIMIT_PER_IP` | 每 IP 每分钟可创建 challenge 数 | `5` | 否 |
+| `RATE_LIMIT_PER_DESTINATION` | 每 destination（邮箱/手机）每小时可创建数 | `10` | 否 |
+
+#### 邮件通道
+
+**内置 SMTP**（当未设置 `HERALD_SMTP_API_URL` 时使用）：
+
+| 变量 | 描述 | 默认值 | 必需 |
+|------|------|--------|------|
+| `SMTP_HOST` | SMTP 服务器主机 | （空） | 使用内置时 |
+| `SMTP_PORT` | SMTP 端口 | `587` | 否 |
+| `SMTP_USER` | SMTP 用户名 | （空） | 否 |
+| `SMTP_PASSWORD` | SMTP 密码 | （空） | 否 |
+| `SMTP_FROM` | 发件人地址 | （空） | 建议 |
+| `PROVIDER_FAILURE_POLICY` | 发送失败策略：`soft`（仍创建 challenge）或 `strict`（失败则不创建） | `soft` | 否 |
+
+**herald-smtp 插件**（设置后不再使用内置 SMTP）：
+
+| 变量 | 描述 | 默认值 | 必需 |
+|------|------|--------|------|
+| `HERALD_SMTP_API_URL` | [herald-smtp](https://github.com/soulteary/herald-smtp) 服务 Base URL（如 `http://herald-smtp:8084`） | （空） | 使用插件时 |
+| `HERALD_SMTP_API_KEY` | 若 herald-smtp 启用 `API_KEY`，需与此一致 | （空） | 否 |
+
+#### 短信通道（HTTP API 模式）
+
+当前实现通过 HTTP 调用外部 SMS API，不直接使用阿里云等密钥；密钥由外部 SMS 服务或网关保管。
+
+| 变量 | 描述 | 默认值 | 必需 |
+|------|------|--------|------|
+| `SMS_PROVIDER` | 提供商名称（如 `aliyun`、`tencent`、`http`），用于标识与日志 | （空） | 使用 SMS 时 |
+| `SMS_API_BASE_URL` | SMS HTTP API 的 Base URL | （空） | 使用 SMS 时 |
+| `SMS_API_KEY` | SMS API 认证密钥（若需要） | （空） | 视网关要求 |
+
+#### DingTalk 通道（herald-dingtalk 插件）
+
+| 变量 | 描述 | 默认值 | 必需 |
+|------|------|--------|------|
+| `HERALD_DINGTALK_API_URL` | [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) 服务 Base URL（如 `http://herald-dingtalk:8083`） | （空） | 使用 DingTalk 时 |
+| `HERALD_DINGTALK_API_KEY` | 若 herald-dingtalk 启用 `API_KEY`，需与此一致 | （空） | 否 |
+
+#### TLS / mTLS
+
+| 变量 | 描述 | 默认值 | 必需 |
+|------|------|--------|------|
+| `TLS_CERT_FILE` | 服务端证书文件路径 | （空） | 启用 TLS 时 |
+| `TLS_KEY_FILE` | 服务端私钥文件路径 | （空） | 启用 TLS 时 |
+| `TLS_CA_CERT_FILE` | 客户端 CA 证书（mTLS 校验用） | （空） | 可选 |
+| `TLS_CLIENT_CA_FILE` | 与 `TLS_CA_CERT_FILE` 同义 | （空） | 可选 |
+
+#### 会话存储（可选）
+
+| 变量 | 描述 | 默认值 | 必需 |
+|------|------|--------|------|
+| `HERALD_SESSION_STORAGE_ENABLED` | 是否启用 Redis 会话存储 | `false` | 否 |
+| `HERALD_SESSION_DEFAULT_TTL` | 会话默认 TTL（如 `1h`） | `1h` | 否 |
+| `HERALD_SESSION_KEY_PREFIX` | Redis 会话键前缀 | `session:` | 否 |
+
+#### 审计日志
+
+| 变量 | 描述 | 默认值 | 必需 |
+|------|------|--------|------|
+| `AUDIT_ENABLED` | 是否启用审计 | `true` | 否 |
+| `AUDIT_MASK_DESTINATION` | 是否对 destination 脱敏 | `false` | 否 |
+| `AUDIT_TTL` | 审计记录在 Redis 中的 TTL（如 `168h` 即 7 天） | `168h` | 否 |
+| `AUDIT_STORAGE_TYPE` | 持久化类型：`database`、`file`、`loki` 或逗号分隔多类型 | （空） | 否 |
+| `AUDIT_DATABASE_URL` | 数据库连接串（当 `AUDIT_STORAGE_TYPE` 含 database） | （空） | 否 |
+| `AUDIT_TABLE_NAME` | 审计表名 | `audit_logs` | 否 |
+| `AUDIT_FILE_PATH` | 审计文件路径（当含 file） | （空） | 否 |
+| `AUDIT_LOKI_URL` | Loki 地址（当含 loki） | （空） | 否 |
+| `AUDIT_WRITER_QUEUE_SIZE` | 审计写入队列大小 | `1000` | 否 |
+| `AUDIT_WRITER_WORKERS` | 审计写入 worker 数 | `2` | 否 |
+
+#### 模板与可观测性
+
+| 变量 | 描述 | 默认值 | 必需 |
+|------|------|--------|------|
+| `TEMPLATE_DIR` | 邮件/短信模板目录（可选） | （空） | 否 |
+| `OTLP_ENABLED` | 是否启用 OpenTelemetry | `false` | 否 |
+| `OTLP_ENDPOINT` | OTLP 端点（如 `http://localhost:4318`） | （空） | 启用 OTLP 时 |
+
+#### 测试与调试
+
+| 变量 | 描述 | 默认值 | 必需 |
+|------|------|--------|------|
+| `HERALD_TEST_MODE` | 为 `true` 时写入 Redis 可查码、创建 challenge 响应可含 `debug_code`；**生产必须为 false** | `false` | 否 |
 
 ### 测试模式与调试
 

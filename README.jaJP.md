@@ -82,7 +82,7 @@ Herald を開始するには最小限の設定が必要です：
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
 | `PORT` | Server port | `:8082` | No |
-| `REDIS_ADDR` | Redis address | `localhost:6379` | Yes |
+| `REDIS_ADDR` | Redis address | `localhost:6379` | No |
 | `API_KEY` | API key for authentication | - | Recommended |
 
 レート制限、チャレンジの有効期限、プロバイダー設定を含む完全な設定オプションについては、[デプロイメントガイド](docs/jaJP/DEPLOYMENT.md#configuration) を参照してください。

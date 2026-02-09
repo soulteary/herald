@@ -82,7 +82,7 @@ Herald requires minimal configuration to get started:
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
 | `PORT` | Server port | `:8082` | No |
-| `REDIS_ADDR` | Redis address | `localhost:6379` | Yes |
+| `REDIS_ADDR` | Redis address | `localhost:6379` | No |
 | `API_KEY` | API key for authentication | - | Recommended |
 
 For email channel via herald-smtp, set `HERALD_SMTP_API_URL` (and optionally `HERALD_SMTP_API_KEY`); see [Deployment Guide](docs/enUS/DEPLOYMENT.md#email-channel-herald-smtp). For DingTalk channel, set `HERALD_DINGTALK_API_URL` (and optionally `HERALD_DINGTALK_API_KEY`); see [Deployment Guide](docs/enUS/DEPLOYMENT.md#dingtalk-channel-herald-dingtalk).

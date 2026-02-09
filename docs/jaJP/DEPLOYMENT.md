@@ -23,6 +23,8 @@ go build -o herald main.go
 
 ### 環境変数
 
+**コードベースと一致した完全な一覧：** [English](enUS/DEPLOYMENT.md#environment-variables) | [中文](zhCN/DEPLOYMENT.md#环境变量)
+
 | 変数 | 説明 | デフォルト | 必須 |
 |------|------|-----------|------|
 | `PORT` | サーバーポート（先頭のコロンありまたはなし、例：`8082` または `:8082`） | `:8082` | いいえ |
@@ -31,6 +33,7 @@ go build -o herald main.go
 | `REDIS_DB` | Redis データベース | `0` | いいえ |
 | `API_KEY` | 認証用の API キー | `` | 推奨 |
 | `HMAC_SECRET` | セキュア認証用の HMAC シークレット | `` | オプション |
+| `HERALD_HMAC_KEYS` | 複数 HMAC キー（JSON） | `` | オプション |
 | `LOG_LEVEL` | ログレベル | `info` | いいえ |
 | `CHALLENGE_EXPIRY` | チャレンジの有効期限 | `5m` | いいえ |
 | `MAX_ATTEMPTS` | 最大検証試行回数 | `5` | いいえ |
@@ -41,20 +44,19 @@ go build -o herald main.go
 | `RATE_LIMIT_PER_DESTINATION` | 宛先あたり/時間のレート制限 | `10` | いいえ |
 | `LOCKOUT_DURATION` | 最大試行回数後のユーザーロックアウト期間 | `10m` | いいえ |
 | `SERVICE_NAME` | HMAC 認証用のサービス識別子 | `herald` | いいえ |
-| `SMTP_HOST` | SMTP サーバーホスト | `` | 電子メール用 |
+| `SMTP_HOST` | SMTP サーバーホスト | `` | 電子メール用（組み込み） |
 | `SMTP_PORT` | SMTP サーバーポート | `587` | 電子メール用 |
 | `SMTP_USER` | SMTP ユーザー名 | `` | 電子メール用 |
 | `SMTP_PASSWORD` | SMTP パスワード | `` | 電子メール用 |
 | `SMTP_FROM` | SMTP 送信元アドレス | `` | 電子メール用 |
-| `SMS_PROVIDER` | SMS プロバイダー | `` | SMS 用 |
-| `ALIYUN_ACCESS_KEY` | 阿里云アクセスキー | `` | 阿里云 SMS 用 |
-| `ALIYUN_SECRET_KEY` | 阿里云シークレットキー | `` | 阿里云 SMS 用 |
-| `ALIYUN_SIGN_NAME` | 阿里云 SMS 署名名 | `` | 阿里云 SMS 用 |
-| `ALIYUN_TEMPLATE_CODE` | 阿里云 SMS テンプレートコード | `` | 阿里云 SMS 用 |
+| `SMS_PROVIDER` | SMS プロバイダー（ログ用など） | `` | SMS 用 |
+| `SMS_API_BASE_URL` | SMS HTTP API ベース URL | `` | SMS（HTTP API）用 |
+| `SMS_API_KEY` | SMS API キー | `` | SMS 用（オプション） |
 | `HERALD_DINGTALK_API_URL` | [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) のベース URL（例：`http://herald-dingtalk:8083`） | `` | DingTalk チャネル用 |
 | `HERALD_DINGTALK_API_KEY` | オプションの API キー；herald-dingtalk の `API_KEY` と一致させる必要あり（設定時） | `` | なし |
 | `HERALD_SMTP_API_URL` | [herald-smtp](https://github.com/soulteary/herald-smtp) のベース URL（例：`http://herald-smtp:8084`）；設定時は組み込み SMTP は使用されない | `` | 電子メールチャネル用（オプション） |
 | `HERALD_SMTP_API_KEY` | オプションの API キー；herald-smtp の `API_KEY` と一致させる必要あり（設定時） | `` | なし |
+| `HERALD_TEST_MODE` | `true` の場合：Redis/レスポンスに debug 用コード。**テスト専用；本番では必ず `false`。** | `false` | いいえ |
 
 ### 電子メールチャネル（herald-smtp）
 
