@@ -29,6 +29,17 @@ go build -o herald main.go
 
 为保持一致性并确保未来兼容性，建议尽可能使用 `HERALD_*` 前缀。服务支持两种命名约定。
 
+### `REDIS_ADDR` 与 `HERALD_REDIS_*` 约定
+
+当前 Herald 进程实际读取的是：
+
+- `REDIS_ADDR`
+- `REDIS_PASSWORD`
+- `REDIS_DB`
+
+在 `stargate-suite` 或 compose 模板中，可能会看到 `HERALD_REDIS_ADDR` 等变量名。这类变量通常是上层编排层的统一命名，最终会映射为 Herald 实际识别的 `REDIS_*`。  
+部署时请以 Herald 本仓库 `internal/config/config.go` 的 `REDIS_*` 为准。
+
 ### 环境变量
 
 以下与代码实现一致（参见 `internal/config/config.go`）。
@@ -180,6 +191,16 @@ go build -o herald main.go
 
 - 将 `HERALD_DINGTALK_API_URL` 设置为 herald-dingtalk 服务的基础 URL（例如 `http://herald-dingtalk:8083`）。
 - 若 herald-dingtalk 配置了 `API_KEY`，请将 `HERALD_DINGTALK_API_KEY` 设为相同值，以便 Herald 调用 herald-dingtalk 时通过认证。
+
+### 插件启用条件速查
+
+| 能力 | 启用条件 | 备注 |
+|------|----------|------|
+| 内置 SMTP | 未设置 `HERALD_SMTP_API_URL` | 使用 `SMTP_*` 直连 SMTP 服务 |
+| herald-smtp | `HERALD_SMTP_API_URL` 非空 | 设置后会覆盖内置 SMTP 通道 |
+| SMS HTTP API | `SMS_PROVIDER` 非空，且建议同时设置 `SMS_API_BASE_URL` | `SMS_API_KEY` 视网关要求 |
+| herald-dingtalk | `HERALD_DINGTALK_API_URL` 非空 | 可选 `HERALD_DINGTALK_API_KEY` |
+| OTLP | `OTLP_ENABLED=true` 且建议配置 `OTLP_ENDPOINT` | 推荐在生产明确设置 endpoint |
 
 ### Redis 配置
 
