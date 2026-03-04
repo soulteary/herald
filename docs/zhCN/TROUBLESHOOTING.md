@@ -29,7 +29,7 @@
 2. **验证提供者配置**
    - 检查 SMTP 设置（使用内置 SMTP 发邮件时）：`SMTP_HOST`、`SMTP_PORT`、`SMTP_USER`、`SMTP_PASSWORD`
    - 使用 herald-smtp 发邮件时：确认已设置 `HERALD_SMTP_API_URL` 且 herald-smtp 可访问；若 herald-smtp 启用 API Key 认证，需设置 `HERALD_SMTP_API_KEY`。若收不到邮件，请查看 herald-smtp 日志及其 SMTP 配置（参见 [herald-smtp 故障排查](https://github.com/soulteary/herald-smtp/blob/main/docs/zhCN/TROUBLESHOOTING.md)）。
-   - 检查 SMS 提供者设置：`SMS_PROVIDER`、`ALIYUN_ACCESS_KEY` 等
+   - 检查短信通道配置：`SMS_PROVIDER`、`SMS_API_BASE_URL`、`SMS_API_KEY`（Herald 使用 HTTP API 模式，凭证由短信网关保管，不在 Herald 中）
    - DingTalk 通道：确认已设置 `HERALD_DINGTALK_API_URL` 且 herald-dingtalk 可访问；若 herald-dingtalk 启用 API Key 认证，需设置 `HERALD_DINGTALK_API_KEY`
    - 验证提供者凭据是否正确
 

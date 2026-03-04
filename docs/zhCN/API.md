@@ -1,6 +1,6 @@
 # Herald API 文档
 
-Herald 是一个验证码和 OTP 服务，处理通过 SMS、电子邮件和 DingTalk（DingTalk 通过 [herald-dingtalk](https://github.com/soulteary/herald-dingtalk)）发送验证码，具有内置的速率限制和安全控制。
+Herald 是一个验证码和 OTP 服务，处理通过 SMS、电子邮件和 DingTalk 发送验证码（邮件可通过内置 SMTP 或设置 `HERALD_SMTP_API_URL` 时通过 [herald-smtp](https://github.com/soulteary/herald-smtp)，DingTalk 通过 [herald-dingtalk](https://github.com/soulteary/herald-dingtalk)），具有内置的速率限制和安全控制。
 
 ## 基础 URL
 
@@ -227,6 +227,93 @@ HTTP 状态代码：
 HTTP 状态代码：
 - `400 Bad Request`：无效的请求
 - `500 Internal Server Error`：内部服务器错误
+
+### TOTP 代理（可选）
+
+当 `HERALD_TOTP_ENABLED=true` 且设置了 `HERALD_TOTP_BASE_URL` 时，Herald 会将 TOTP（Authenticator）请求代理到 [herald-totp](https://github.com/soulteary/herald-totp)。所有 TOTP 路由与 OTP 路由使用相同认证（mTLS、HMAC 或 API Key）。
+
+#### 获取 TOTP 状态
+
+**GET /v1/totp/status**
+
+查询主体是否已绑定 TOTP。
+
+**查询参数：**
+- `subject`（必填）：用户标识（如 user_id）
+
+**响应（成功）：** 由 herald-totp 代理返回（如 `{"enrolled": true}` 或 `{"enrolled": false}`）。
+
+**错误响应：**
+- `400 Bad Request`：缺少 `subject`（`invalid_request`，`subject required`）
+- `503 Service Unavailable`：未配置 TOTP（`totp_not_configured`）
+- `502 Bad Gateway`：代理到 herald-totp 失败（`proxy_failed`）
+
+#### 验证 TOTP
+
+**POST /v1/totp/verify**
+
+验证 TOTP 码。
+
+**请求：**
+```json
+{
+  "subject": "u_123",
+  "code": "123456"
+}
+```
+
+**响应：** 由 herald-totp 代理返回（成功如 `{"ok": true}`，失败如 `{"ok": false, "reason": "..."}`）。代理错误时 Herald 返回 `502` 及 `proxy_failed`。
+
+#### 开始 TOTP 绑定
+
+**POST /v1/totp/enroll/start**
+
+开始 TOTP 绑定；返回用于 Authenticator 应用的 secret/QR。
+
+**请求：**
+```json
+{
+  "subject": "u_123"
+}
+```
+
+**响应：** 由 herald-totp 代理返回（如 `enroll_id`、QR/secret）。代理错误时 Herald 返回 `502` 及 `proxy_failed`。
+
+#### 确认 TOTP 绑定
+
+**POST /v1/totp/enroll/confirm**
+
+使用应用中的验证码确认 TOTP 绑定。
+
+**请求：**
+```json
+{
+  "enroll_id": "enroll_xxx",
+  "code": "123456"
+}
+```
+
+**响应：** 由 herald-totp 代理返回。失败时 Herald 可能返回 `400` 及 `invalid` 或代理错误。
+
+#### 撤销 TOTP
+
+**POST /v1/totp/revoke**
+
+撤销主体的 TOTP。
+
+**请求：**
+```json
+{
+  "subject": "u_123"
+}
+```
+
+**响应：** 由 herald-totp 代理返回。代理错误时 Herald 返回 `502` 及 `proxy_failed`。
+
+**TOTP 错误码（Herald 代理返回）：**
+- `totp_not_configured`：未启用 TOTP 或未设置 herald-totp URL
+- `proxy_failed`：请求 herald-totp 失败
+- `invalid_request`：缺少或无效的请求体/参数
 
 ## 速率限制
 

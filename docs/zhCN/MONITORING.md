@@ -293,12 +293,7 @@ groups:
 
 ## OpenTelemetry 支持
 
-**注意**：用于分布式追踪的 OpenTelemetry 支持已计划但尚未实现。这包括：
-- `traceparent` / `tracestate` 请求头传播
-- 核心 span：`otp.challenge.create`、`otp.provider.send`、`otp.verify`
-- Span 标签：`channel`、`purpose`、`provider`、`result`、`reason`
-
-请参阅项目路线图了解实施时间表。
+当设置 `OTLP_ENABLED=true` 且配置 `OTLP_ENDPOINT` 时，Herald 会启用 OpenTelemetry 追踪中间件。追踪上下文通过 `traceparent` 与 `tracestate` 请求头传播。核心 span 包括 challenge 创建、provider 发送与验码；span 标签包括 `channel`、`purpose`、`provider`、`result`、`reason`。配置方式见 [DEPLOYMENT.md](DEPLOYMENT.md) 中的 `OTLP_ENDPOINT`（如 OTLP HTTP 使用 `http://localhost:4318`）。
 
 ## 最佳实践
 

@@ -111,6 +111,17 @@ The implementation calls an external SMS HTTP API; Aliyun/etc. credentials are h
 | `HERALD_DINGTALK_API_URL` | [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) base URL (e.g. `http://herald-dingtalk:8083`) | (empty) | When using DingTalk |
 | `HERALD_DINGTALK_API_KEY` | Must match herald-dingtalk `API_KEY` if set | (empty) | No |
 
+#### TOTP (herald-totp proxy)
+
+When enabled, Herald proxies TOTP (Authenticator) requests to [herald-totp](https://github.com/soulteary/herald-totp). TOTP routes are available under `/v1/totp/*` (status, verify, enroll/start, enroll/confirm, revoke).
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `HERALD_TOTP_ENABLED` | Enable TOTP proxy | `false` | No |
+| `HERALD_TOTP_BASE_URL` | herald-totp service base URL (e.g. `http://herald-totp:8085`) | (empty) | When TOTP enabled |
+| `HERALD_TOTP_API_KEY` | API key for Herald to call herald-totp (if herald-totp requires it) | (empty) | No |
+| `HERALD_TOTP_HMAC_SECRET` | HMAC secret for Herald to call herald-totp (if herald-totp uses HMAC) | (empty) | No |
+
 #### TLS / mTLS
 
 | Variable | Description | Default | Required |
@@ -180,6 +191,14 @@ When `channel` is `dingtalk`, Herald does not send messages itself. It forwards 
 
 - Set `HERALD_DINGTALK_API_URL` to the base URL of your herald-dingtalk service (e.g. `http://herald-dingtalk:8083`).
 - If herald-dingtalk is configured with `API_KEY`, set `HERALD_DINGTALK_API_KEY` to the same value so Herald can authenticate when calling herald-dingtalk.
+
+### TOTP (herald-totp)
+
+When `HERALD_TOTP_ENABLED=true` and `HERALD_TOTP_BASE_URL` is set, Herald proxies TOTP (Authenticator) operations to [herald-totp](https://github.com/soulteary/herald-totp). Stargate (or other callers) can use a single Herald base URL for both OTP (SMS/email/DingTalk) and TOTP flows.
+
+- Set `HERALD_TOTP_BASE_URL` to the base URL of your herald-totp service (e.g. `http://herald-totp:8085`).
+- If herald-totp requires API key or HMAC auth, set `HERALD_TOTP_API_KEY` or `HERALD_TOTP_HMAC_SECRET` accordingly.
+- See [API.md](API.md#totp-proxy-optional) for TOTP endpoints (status, verify, enroll/start, enroll/confirm, revoke).
 
 ### Redis Configuration
 

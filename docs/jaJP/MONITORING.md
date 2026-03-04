@@ -293,12 +293,7 @@ groups:
 
 ## OpenTelemetry サポート
 
-**注意**：分散トレーシングのための OpenTelemetry サポートは計画されていますが、まだ実装されていません。これには以下が含まれます：
-- `traceparent` / `tracestate` ヘッダー伝播
-- コアスパン：`otp.challenge.create`、`otp.provider.send`、`otp.verify`
-- スパンタグ：`channel`、`purpose`、`provider`、`result`、`reason`
-
-実装タイムラインについては、プロジェクトのロードマップを参照してください。
+`OTLP_ENABLED=true` かつ `OTLP_ENDPOINT` を設定すると、Herald は OpenTelemetry トレーシングミドルウェアを有効にします。トレースコンテキストは `traceparent` と `tracestate` ヘッダーで伝播します。コアスパンには challenge 作成、provider 送信、検証が含まれます。スパンタグは `channel`、`purpose`、`provider`、`result`、`reason` です。設定は [DEPLOYMENT.md](DEPLOYMENT.md) の `OTLP_ENDPOINT`（OTLP HTTP の例：`http://localhost:4318`）を参照してください。
 
 ## ベストプラクティス
 

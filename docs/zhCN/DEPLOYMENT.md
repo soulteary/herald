@@ -122,6 +122,17 @@ go build -o herald main.go
 | `HERALD_DINGTALK_API_URL` | [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) 服务 Base URL（如 `http://herald-dingtalk:8083`） | （空） | 使用 DingTalk 时 |
 | `HERALD_DINGTALK_API_KEY` | 若 herald-dingtalk 启用 `API_KEY`，需与此一致 | （空） | 否 |
 
+#### TOTP（herald-totp 代理）
+
+启用后，Herald 将 TOTP（Authenticator）请求代理到 [herald-totp](https://github.com/soulteary/herald-totp)。TOTP 路由位于 `/v1/totp/*`（status、verify、enroll/start、enroll/confirm、revoke）。
+
+| 变量 | 描述 | 默认值 | 必需 |
+|------|------|--------|------|
+| `HERALD_TOTP_ENABLED` | 是否启用 TOTP 代理 | `false` | 否 |
+| `HERALD_TOTP_BASE_URL` | herald-totp 服务 Base URL（如 `http://herald-totp:8085`） | （空） | 启用 TOTP 时 |
+| `HERALD_TOTP_API_KEY` | Herald 调用 herald-totp 时使用的 API Key（若 herald-totp 需要） | （空） | 否 |
+| `HERALD_TOTP_HMAC_SECRET` | Herald 调用 herald-totp 时使用的 HMAC 密钥（若 herald-totp 使用 HMAC） | （空） | 否 |
+
 #### TLS / mTLS
 
 | 变量 | 描述 | 默认值 | 必需 |
@@ -192,6 +203,14 @@ go build -o herald main.go
 - 将 `HERALD_DINGTALK_API_URL` 设置为 herald-dingtalk 服务的基础 URL（例如 `http://herald-dingtalk:8083`）。
 - 若 herald-dingtalk 配置了 `API_KEY`，请将 `HERALD_DINGTALK_API_KEY` 设为相同值，以便 Herald 调用 herald-dingtalk 时通过认证。
 
+### TOTP（herald-totp）
+
+当 `HERALD_TOTP_ENABLED=true` 且设置了 `HERALD_TOTP_BASE_URL` 时，Herald 会将 TOTP（Authenticator）请求代理到 [herald-totp](https://github.com/soulteary/herald-totp)。Stargate 等调用方可使用同一 Herald 地址同时完成 OTP（短信/邮件/钉钉）与 TOTP 流程。
+
+- 将 `HERALD_TOTP_BASE_URL` 设置为 herald-totp 服务的基础 URL（例如 `http://herald-totp:8085`）。
+- 若 herald-totp 需要 API Key 或 HMAC 认证，请相应设置 `HERALD_TOTP_API_KEY` 或 `HERALD_TOTP_HMAC_SECRET`。
+- TOTP 端点（status、verify、enroll/start、enroll/confirm、revoke）见 [API.md](API.md#totp-代理可选)。
+
 ### 插件启用条件速查
 
 | 能力 | 启用条件 | 备注 |
@@ -200,6 +219,7 @@ go build -o herald main.go
 | herald-smtp | `HERALD_SMTP_API_URL` 非空 | 设置后会覆盖内置 SMTP 通道 |
 | SMS HTTP API | `SMS_PROVIDER` 非空，且建议同时设置 `SMS_API_BASE_URL` | `SMS_API_KEY` 视网关要求 |
 | herald-dingtalk | `HERALD_DINGTALK_API_URL` 非空 | 可选 `HERALD_DINGTALK_API_KEY` |
+| herald-totp 代理 | `HERALD_TOTP_ENABLED=true` 且 `HERALD_TOTP_BASE_URL` 非空 | 可选 `HERALD_TOTP_API_KEY` / `HERALD_TOTP_HMAC_SECRET` |
 | OTLP | `OTLP_ENABLED=true` 且建议配置 `OTLP_ENDPOINT` | 推荐在生产明确设置 endpoint |
 
 ### Redis 配置

@@ -13,10 +13,11 @@ import (
 	secure "github.com/soulteary/secure-kit"
 	"go.opentelemetry.io/otel/attribute"
 
+	challengekit "github.com/soulteary/challenge-kit"
+	"github.com/soulteary/herald-totp/pkg/heraldtotp"
 	provider "github.com/soulteary/provider-kit"
 	"github.com/soulteary/tracing-kit"
 
-	challengekit "github.com/soulteary/challenge-kit"
 	"github.com/soulteary/herald/internal/auditlog"
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/metrics"
@@ -35,6 +36,7 @@ type Handlers struct {
 	testCodeCache    rediskitcache.Cache   // For test mode code storage
 	idempotencyCache rediskitcache.Cache   // For idempotency key storage
 	sessionManager   *sessionkit.KVManager // Optional: nil if session storage is disabled
+	totpClient       *heraldtotp.Client    // Optional: nil when TOTP is not enabled
 	log              *logger.Logger
 }
 
@@ -147,6 +149,24 @@ func NewHandlers(redisClient *redis.Client, sessionManager *sessionkit.KVManager
 	// Create idempotency cache
 	idempotencyCache := rediskitcache.NewCache(redisClient, "otp:idem:")
 
+	// TOTP client: when Herald proxies TOTP to herald-totp
+	var totpClient *heraldtotp.Client
+	if config.TOTPEnabled && config.TOTPBaseURL != "" {
+		opts := heraldtotp.DefaultOptions().
+			WithBaseURL(strings.TrimSuffix(config.TOTPBaseURL, "/")).
+			WithAPIKey(config.TOTPAPIKey).
+			WithTimeout(10 * time.Second)
+		if config.TOTPHMACSecret != "" {
+			opts = opts.WithHMACSecret(config.TOTPHMACSecret)
+		}
+		if c, err := heraldtotp.NewClient(opts); err != nil {
+			log.Warn().Err(err).Msg("Failed to create herald-totp client, TOTP proxy will be disabled")
+		} else {
+			totpClient = c
+			log.Info().Msg("TOTP proxy enabled (herald-totp)")
+		}
+	}
+
 	return &Handlers{
 		challengeManager: challengeMgr,
 		rateLimitManager: rateLimitMgr,
@@ -156,6 +176,7 @@ func NewHandlers(redisClient *redis.Client, sessionManager *sessionkit.KVManager
 		testCodeCache:    testCodeCache,
 		idempotencyCache: idempotencyCache,
 		sessionManager:   sessionManager,
+		totpClient:       totpClient,
 		log:              log,
 	}
 }

@@ -22,6 +22,7 @@ flowchart LR
     Stargate[Stargate]
     Warden[Warden]
     Herald[Herald]
+    HeraldTOTP[herald-totp]
   end
 
   subgraph storage [Storage]
@@ -46,6 +47,7 @@ flowchart LR
   Herald --> Email
   Herald --> HeraldSMTP
   Herald --> HeraldDingtalk
+  Herald -.->|TOTP proxy (optional)| HeraldTOTP
   HeraldSMTP -.->|SMTP| User
   HeraldDingtalk -.->|DingTalk API| User
 ```
@@ -69,6 +71,7 @@ flowchart LR
 | **Challenge create** | Stargate → Herald | `POST /v1/otp/challenges` — create OTP challenge and send code |
 | **Verify** | Stargate → Herald | `POST /v1/otp/verifications` — verify code and get user_id/amr |
 | **Revoke challenge** | Stargate → Herald | `POST /v1/otp/challenges/{id}/revoke` — optional revoke |
+| **TOTP (optional)** | Stargate → Herald | `GET /v1/totp/status`, `POST /v1/totp/verify`, `POST /v1/totp/enroll/start`, `POST /v1/totp/enroll/confirm`, `POST /v1/totp/revoke` — Herald proxies to herald-totp when `HERALD_TOTP_ENABLED` and `HERALD_TOTP_BASE_URL` are set |
 | **Provider send** | Herald → Provider | `POST /v1/send` (HTTP) — Herald calls SMS/Email/DingTalk adapter; for email when `HERALD_SMTP_API_URL` is set, Herald calls herald-smtp; for DingTalk, Herald calls herald-dingtalk |
 | **User lookup** | Stargate → Warden | Warden API — resolve identifier to user_id and destination |
 

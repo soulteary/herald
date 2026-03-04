@@ -56,6 +56,10 @@ go build -o herald main.go
 | `HERALD_DINGTALK_API_KEY` | Chiave API opzionale; deve corrispondere a `API_KEY` di herald-dingtalk se impostata | `` | No |
 | `HERALD_SMTP_API_URL` | URL base di [herald-smtp](https://github.com/soulteary/herald-smtp) (es. `http://herald-smtp:8084`); se impostata, SMTP integrato non usato | `` | Per canale e-mail (opzionale) |
 | `HERALD_SMTP_API_KEY` | Chiave API opzionale; deve corrispondere a `API_KEY` di herald-smtp se impostata | `` | No |
+| `HERALD_TOTP_ENABLED` | Abilita proxy TOTP | `false` | No |
+| `HERALD_TOTP_BASE_URL` | URL base di [herald-totp](https://github.com/soulteary/herald-totp) (es. `http://herald-totp:8085`) | `` | Se TOTP abilitato |
+| `HERALD_TOTP_API_KEY` | Chiave API per Herald→herald-totp (opzionale) | `` | No |
+| `HERALD_TOTP_HMAC_SECRET` | Secret HMAC per Herald→herald-totp (opzionale) | `` | No |
 | `HERALD_TEST_MODE` | Se `true`: codice debug in Redis/risposta. **Solo per test; in produzione sempre `false`.** | `false` | No |
 
 ### Canale e-mail (herald-smtp)
@@ -65,6 +69,10 @@ Quando `HERALD_SMTP_API_URL` è impostata, Herald non utilizza l'SMTP integrato.
 ### Canale DingTalk (herald-dingtalk)
 
 Quando `channel` è `dingtalk`, Herald non invia i messaggi direttamente ma inoltra l'invio a [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) via HTTP. Tutte le credenziali e la logica DingTalk risiedono in herald-dingtalk; Herald non memorizza alcuna credenziale DingTalk. Impostare `HERALD_DINGTALK_API_URL` sull'URL base del servizio herald-dingtalk. Se herald-dingtalk è configurato con `API_KEY`, impostare `HERALD_DINGTALK_API_KEY` sullo stesso valore.
+
+### TOTP (herald-totp)
+
+Quando `HERALD_TOTP_ENABLED=true` e `HERALD_TOTP_BASE_URL` sono impostati, Herald inoltra le richieste TOTP (Authenticator) a [herald-totp](https://github.com/soulteary/herald-totp). Endpoint sotto `/v1/totp/*` (status, verify, enroll/start, enroll/confirm, revoke). Vedi [API (enUS)](enUS/API.md#totp-proxy-optional).
 
 ## Integrazione con altri servizi (Opzionale)
 

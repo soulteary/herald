@@ -228,6 +228,93 @@ HTTP Status Codes:
 - `400 Bad Request`: Invalid request
 - `500 Internal Server Error`: Internal server error
 
+### TOTP Proxy (Optional)
+
+When `HERALD_TOTP_ENABLED=true` and `HERALD_TOTP_BASE_URL` is set, Herald proxies TOTP (Authenticator) operations to [herald-totp](https://github.com/soulteary/herald-totp). All TOTP routes require the same authentication as OTP routes (mTLS, HMAC, or API Key).
+
+#### Get TOTP Status
+
+**GET /v1/totp/status**
+
+Query whether the subject has TOTP enrolled.
+
+**Query:**
+- `subject` (required): User identifier (e.g. user_id)
+
+**Response (Success):** Proxied from herald-totp (e.g. `{"enrolled": true}` or `{"enrolled": false}`).
+
+**Error Responses:**
+- `400 Bad Request`: Missing `subject` (`invalid_request`, `subject required`)
+- `503 Service Unavailable`: TOTP not configured (`totp_not_configured`)
+- `502 Bad Gateway`: Proxy to herald-totp failed (`proxy_failed`)
+
+#### Verify TOTP
+
+**POST /v1/totp/verify**
+
+Verify a TOTP code.
+
+**Request:**
+```json
+{
+  "subject": "u_123",
+  "code": "123456"
+}
+```
+
+**Response:** Proxied from herald-totp (e.g. `{"ok": true}` on success, or `{"ok": false, "reason": "..."}` on failure). On proxy error, Herald returns `502` with `proxy_failed`.
+
+#### Start TOTP Enrollment
+
+**POST /v1/totp/enroll/start**
+
+Start TOTP enrollment; returns secret/QR for the authenticator app.
+
+**Request:**
+```json
+{
+  "subject": "u_123"
+}
+```
+
+**Response:** Proxied from herald-totp (e.g. `enroll_id`, QR/secret). On proxy error, Herald returns `502` with `proxy_failed`.
+
+#### Confirm TOTP Enrollment
+
+**POST /v1/totp/enroll/confirm**
+
+Confirm TOTP enrollment with a code from the app.
+
+**Request:**
+```json
+{
+  "enroll_id": "enroll_xxx",
+  "code": "123456"
+}
+```
+
+**Response:** Proxied from herald-totp. On failure, Herald may return `400` with `invalid` or proxy error.
+
+#### Revoke TOTP
+
+**POST /v1/totp/revoke**
+
+Revoke TOTP for a subject.
+
+**Request:**
+```json
+{
+  "subject": "u_123"
+}
+```
+
+**Response:** Proxied from herald-totp. On proxy error, Herald returns `502` with `proxy_failed`.
+
+**TOTP error codes (from Herald proxy):**
+- `totp_not_configured`: TOTP not enabled or herald-totp URL not set
+- `proxy_failed`: Request to herald-totp failed
+- `invalid_request`: Missing or invalid request body/query
+
 ## Rate Limiting
 
 Herald implements multi-dimensional rate limiting:

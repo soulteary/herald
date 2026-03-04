@@ -29,7 +29,7 @@
 2. **프로바이더 구성 확인**
    - SMTP 설정 확인 (내장 SMTP 사용 시): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`
    - herald-smtp를 통한 이메일: `HERALD_SMTP_API_URL` 설정 및 herald-smtp 연결 가능 여부 확인; 선택적으로 `HERALD_SMTP_API_KEY`. 이메일 미수신 시 herald-smtp 로그 및 SMTP 구성 확인.
-   - SMS 프로바이더 설정 확인: `SMS_PROVIDER`, `ALIYUN_ACCESS_KEY` 등
+   - SMS 채널 설정 확인: `SMS_PROVIDER`, `SMS_API_BASE_URL`, `SMS_API_KEY`(Herald는 HTTP API 모드 사용; 자격 증명은 SMS 게이트웨이가 보관하며 Herald에는 저장되지 않음)
    - 프로바이더 자격 증명이 올바른지 확인
 
 3. **Prometheus 메트릭 확인**

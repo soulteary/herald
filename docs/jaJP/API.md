@@ -1,6 +1,6 @@
 # Herald API ドキュメント
 
-Herald は、SMS と電子メールを介して検証コードを送信する検証コードおよび OTP サービスで、組み込みのレート制限とセキュリティ制御を備えています。
+Herald は、SMS・電子メール・DingTalk で検証コードを送信する検証コードおよび OTP サービスです（電子メールは `HERALD_SMTP_API_URL` 設定時は [herald-smtp](https://github.com/soulteary/herald-smtp)、DingTalk は [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) を利用）。組み込みのレート制限とセキュリティ制御を備えています。
 
 ## ベース URL
 
@@ -191,6 +191,8 @@ HTTP ステータスコード：
 HTTP ステータスコード：
 - `400 Bad Request`：無効なリクエスト
 - `500 Internal Server Error`：内部サーバーエラー
+
+**TOTP プロキシ（オプション）**：`HERALD_TOTP_ENABLED=true` かつ `HERALD_TOTP_BASE_URL` を設定すると、Herald は TOTP（Authenticator）リクエストを [herald-totp](https://github.com/soulteary/herald-totp) にプロキシします。エンドポイントと形式は [API (enUS)](enUS/API.md#totp-proxy-optional) を参照。
 
 ## レート制限
 

@@ -56,6 +56,10 @@ go build -o herald main.go
 | `HERALD_DINGTALK_API_KEY` | オプションの API キー；herald-dingtalk の `API_KEY` と一致させる必要あり（設定時） | `` | なし |
 | `HERALD_SMTP_API_URL` | [herald-smtp](https://github.com/soulteary/herald-smtp) のベース URL（例：`http://herald-smtp:8084`）；設定時は組み込み SMTP は使用されない | `` | 電子メールチャネル用（オプション） |
 | `HERALD_SMTP_API_KEY` | オプションの API キー；herald-smtp の `API_KEY` と一致させる必要あり（設定時） | `` | なし |
+| `HERALD_TOTP_ENABLED` | TOTP プロキシを有効化 | `false` | いいえ |
+| `HERALD_TOTP_BASE_URL` | [herald-totp](https://github.com/soulteary/herald-totp) のベース URL（例：`http://herald-totp:8085`） | `` | TOTP 有効時 |
+| `HERALD_TOTP_API_KEY` | Herald→herald-totp 用 API キー（オプション） | `` | いいえ |
+| `HERALD_TOTP_HMAC_SECRET` | Herald→herald-totp 用 HMAC シークレット（オプション） | `` | いいえ |
 | `HERALD_TEST_MODE` | `true` の場合：Redis/レスポンスに debug 用コード。**テスト専用；本番では必ず `false`。** | `false` | いいえ |
 
 ### 電子メールチャネル（herald-smtp）
@@ -65,6 +69,10 @@ go build -o herald main.go
 ### DingTalk チャネル（herald-dingtalk）
 
 `channel` が `dingtalk` の場合、Herald は自身でメッセージを送信せず、[herald-dingtalk](https://github.com/soulteary/herald-dingtalk) に HTTP で転送します。DingTalk の認証情報とビジネスロジックはすべて herald-dingtalk にあり、Herald は DingTalk 認証情報を保存しません。`HERALD_DINGTALK_API_URL` を herald-dingtalk サービスのベース URL に設定してください。herald-dingtalk で `API_KEY` を設定している場合は、`HERALD_DINGTALK_API_KEY` を同じ値に設定してください。
+
+### TOTP（herald-totp）
+
+`HERALD_TOTP_ENABLED=true` かつ `HERALD_TOTP_BASE_URL` を設定すると、Herald は TOTP（Authenticator）リクエストを [herald-totp](https://github.com/soulteary/herald-totp) にプロキシします。エンドポイントは `/v1/totp/*`（status、verify、enroll/start、enroll/confirm、revoke）。詳細は [API (enUS)](enUS/API.md#totp-proxy-optional) を参照。
 
 ## 他のサービスとの統合（オプション）
 

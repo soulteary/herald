@@ -22,17 +22,16 @@
 ### 1. 生产环境配置
 
 **必须配置项**:
-- 必须设置 `API_KEY` 环境变量用于 API Key 认证
-- 配置 `HERALD_HMAC_KEYS` 用于 HMAC 签名认证（生产环境推荐）
-- 设置 `MODE=production` 启用生产模式
-- 使用 `REDIS_PASSWORD` 或 `REDIS_PASSWORD_FILE` 配置 Redis 密码保护
-- 为 HMAC 密钥使用强且唯一的密钥
+- 必须设置 `API_KEY` 和/或 `HERALD_HMAC_KEYS`（或 `HMAC_SECRET`）用于服务认证（生产推荐）
+- 生产环境必须设置 `HERALD_TEST_MODE=false`（不得启用测试模式）
+- 需要时使用 `REDIS_PASSWORD` 配置 Redis 密码保护
+- 为 HMAC 使用强且唯一的密钥
 
 **配置示例**:
 ```bash
 export API_KEY="your-strong-api-key-here"
 export HERALD_HMAC_KEYS='{"key-id-1":"secret-key-1","key-id-2":"secret-key-2"}'
-export MODE=production
+export HERALD_TEST_MODE=false
 export REDIS_PASSWORD="your-redis-password"
 export REDIS_ADDR="redis:6379"
 ```
@@ -41,7 +40,7 @@ export REDIS_ADDR="redis:6379"
 
 **推荐做法**:
 - ✅ 使用环境变量存储 API 密钥和密钥
-- ✅ 使用密码文件（`REDIS_PASSWORD_FILE`）存储 Redis 密码
+- ✅ 需要时使用 `REDIS_PASSWORD` 或密钥管理服务存储 Redis 密码
 - ✅ 使用密钥管理服务（如 HashiCorp Vault）管理生产环境密钥
 - ✅ 确保配置文件权限设置正确（如 `chmod 600`）
 - ✅ 永远不要记录验证码或敏感用户数据
@@ -62,7 +61,7 @@ export REDIS_ADDR="redis:6379"
 
 **推荐配置**:
 - 使用反向代理（如 Nginx 或 Traefik）处理 SSL/TLS
-- 配置 `TRUSTED_PROXY_IPS` 以正确获取客户端真实 IP
+- 若按 IP 限流，确保反向代理正确转发客户端 IP（如 X-Forwarded-For）
 - 使用强 HMAC 密钥（最少 32 个字符）
 - 在生产环境中禁用不安全的认证方法（使用 mTLS 或 HMAC，尽可能避免 API Key）
 
@@ -164,7 +163,7 @@ export HERALD_TLS_REQUIRE_CLIENT_CERT=true
 ### Redis 安全
 
 - Redis 应配置密码保护
-- 使用 `REDIS_PASSWORD` 或 `REDIS_PASSWORD_FILE` 环境变量
+- 需要时使用 `REDIS_PASSWORD` 环境变量
 - 限制 Redis 的网络访问（仅允许 Herald 服务访问）
 - 使用 Redis AUTH 进行认证
 - 定期更新 Redis 以修复已知漏洞
@@ -236,7 +235,7 @@ export HERALD_RESEND_COOLDOWN_SECONDS=60
 
 ### 生产模式
 
-在生产模式下（`MODE=production` 或 `MODE=prod`）：
+在生产环境（且 `HERALD_TEST_MODE=false`）下：
 
 - 隐藏详细错误信息，防止信息泄露
 - 返回通用错误消息

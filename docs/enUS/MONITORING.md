@@ -293,12 +293,7 @@ groups:
 
 ## OpenTelemetry Support
 
-**Note**: OpenTelemetry support for distributed tracing is planned but not yet implemented. This includes:
-- `traceparent` / `tracestate` header propagation
-- Core spans: `otp.challenge.create`, `otp.provider.send`, `otp.verify`
-- Span tags: `channel`, `purpose`, `provider`, `result`, `reason`
-
-See the project roadmap for implementation timeline.
+When `OTLP_ENABLED=true` and `OTLP_ENDPOINT` is set, Herald enables OpenTelemetry tracing middleware. Trace context is propagated via `traceparent` and `tracestate` headers. Core spans include challenge create, provider send, and verify operations; span tags include `channel`, `purpose`, `provider`, `result`, and `reason`. Configure `OTLP_ENDPOINT` (e.g. `http://localhost:4318` for OTLP HTTP) as described in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Best Practices
 

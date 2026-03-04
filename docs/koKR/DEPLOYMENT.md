@@ -56,6 +56,10 @@ go build -o herald main.go
 | `HERALD_DINGTALK_API_KEY` | 선택적 API 키; herald-dingtalk의 `API_KEY`와 일치해야 함 (설정 시) | `` | 아니오 |
 | `HERALD_SMTP_API_URL` | [herald-smtp](https://github.com/soulteary/herald-smtp) 기본 URL (예: `http://herald-smtp:8084`); 설정 시 내장 SMTP 미사용 | `` | 이메일 채널용 (선택) |
 | `HERALD_SMTP_API_KEY` | 선택적 API 키; herald-smtp의 `API_KEY`와 일치해야 함 (설정 시) | `` | 아니오 |
+| `HERALD_TOTP_ENABLED` | TOTP 프록시 활성화 | `false` | 아니오 |
+| `HERALD_TOTP_BASE_URL` | [herald-totp](https://github.com/soulteary/herald-totp) 기본 URL (예: `http://herald-totp:8085`) | `` | TOTP 사용 시 |
+| `HERALD_TOTP_API_KEY` | Herald→herald-totp API 키 (선택) | `` | 아니오 |
+| `HERALD_TOTP_HMAC_SECRET` | Herald→herald-totp HMAC 시크릿 (선택) | `` | 아니오 |
 | `HERALD_TEST_MODE` | `true`일 때 Redis/응답에 디버그 코드. **테스트 전용; 프로덕션에서는 반드시 `false`.** | `false` | 아니오 |
 
 ### 이메일 채널 (herald-smtp)
@@ -65,6 +69,10 @@ go build -o herald main.go
 ### DingTalk 채널 (herald-dingtalk)
 
 `channel`이 `dingtalk`일 때 Herald는 직접 메시지를 보내지 않고 [herald-dingtalk](https://github.com/soulteary/herald-dingtalk)로 HTTP를 통해 전달합니다. 모든 DingTalk 자격 증명과 비즈니스 로직은 herald-dingtalk에 있으며 Herald는 DingTalk 자격 증명을 저장하지 않습니다. `HERALD_DINGTALK_API_URL`을 herald-dingtalk 서비스의 기본 URL로 설정하세요. herald-dingtalk에서 `API_KEY`를 설정한 경우 `HERALD_DINGTALK_API_KEY`를 동일한 값으로 설정하세요.
+
+### TOTP (herald-totp)
+
+`HERALD_TOTP_ENABLED=true`이고 `HERALD_TOTP_BASE_URL`이 설정되면 Herald는 TOTP(Authenticator) 요청을 [herald-totp](https://github.com/soulteary/herald-totp)로 프록시합니다. 엔드포인트는 `/v1/totp/*`(status, verify, enroll/start, enroll/confirm, revoke). 자세한 내용은 [API (enUS)](enUS/API.md#totp-proxy-optional) 참조.
 
 ## 다른 서비스와의 통합 (선택사항)
 

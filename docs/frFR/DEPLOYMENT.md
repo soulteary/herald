@@ -56,6 +56,10 @@ go build -o herald main.go
 | `HERALD_DINGTALK_API_KEY` | Clé API optionnelle ; doit correspondre à `API_KEY` de herald-dingtalk si défini | `` | Non |
 | `HERALD_SMTP_API_URL` | URL de base de [herald-smtp](https://github.com/soulteary/herald-smtp) (ex. `http://herald-smtp:8084`) ; si défini, le SMTP intégré n'est pas utilisé | `` | Pour le canal e-mail (optionnel) |
 | `HERALD_SMTP_API_KEY` | Clé API optionnelle ; doit correspondre à `API_KEY` de herald-smtp si défini | `` | Non |
+| `HERALD_TOTP_ENABLED` | Activer le proxy TOTP | `false` | Non |
+| `HERALD_TOTP_BASE_URL` | URL de base de [herald-totp](https://github.com/soulteary/herald-totp) (ex. `http://herald-totp:8085`) | `` | Si TOTP activé |
+| `HERALD_TOTP_API_KEY` | Clé API pour Herald→herald-totp (optionnel) | `` | Non |
+| `HERALD_TOTP_HMAC_SECRET` | Secret HMAC pour Herald→herald-totp (optionnel) | `` | Non |
 | `HERALD_TEST_MODE` | Si `true` : code debug dans Redis/réponse. **Uniquement pour les tests ; en production toujours `false`.** | `false` | Non |
 
 ### Canal e-mail (herald-smtp)
@@ -65,6 +69,10 @@ Lorsque `HERALD_SMTP_API_URL` est défini, Herald n'utilise pas le SMTP intégr�
 ### Canal DingTalk (herald-dingtalk)
 
 Lorsque `channel` est `dingtalk`, Herald n'envoie pas les messages lui-même ; il transmet l'envoi à [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) via HTTP. Toutes les identifiants et la logique DingTalk sont dans herald-dingtalk ; Herald ne stocke aucun identifiant DingTalk. Définissez `HERALD_DINGTALK_API_URL` sur l'URL de base de votre service herald-dingtalk. Si herald-dingtalk est configuré avec `API_KEY`, définissez `HERALD_DINGTALK_API_KEY` sur la même valeur.
+
+### TOTP (herald-totp)
+
+Lorsque `HERALD_TOTP_ENABLED=true` et `HERALD_TOTP_BASE_URL` sont définis, Herald transmet les requêtes TOTP (Authenticator) à [herald-totp](https://github.com/soulteary/herald-totp). Endpoints sous `/v1/totp/*` (status, verify, enroll/start, enroll/confirm, revoke). Voir [API (enUS)](enUS/API.md#totp-proxy-optional).
 
 ## Intégration avec d'autres services (Optionnel)
 

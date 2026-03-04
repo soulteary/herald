@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -330,6 +331,204 @@ func (c *Client) VerifyChallenge(ctx context.Context, req *VerifyChallengeReques
 	}
 
 	return &verifyResp, nil
+}
+
+// --- TOTP (proxied by Herald to herald-totp) ---
+
+// TOTPStatusResponse is the response from GET /v1/totp/status.
+type TOTPStatusResponse struct {
+	Subject     string `json:"subject"`
+	TotpEnabled bool   `json:"totp_enabled"`
+}
+
+// TOTPVerifyRequest is the request for POST /v1/totp/verify.
+type TOTPVerifyRequest struct {
+	Subject     string `json:"subject"`
+	Code        string `json:"code"`
+	ChallengeID string `json:"challenge_id,omitempty"`
+}
+
+// TOTPVerifyResponse is the response from POST /v1/totp/verify.
+type TOTPVerifyResponse struct {
+	OK     bool   `json:"ok"`
+	Reason string `json:"reason,omitempty"`
+}
+
+// TOTPEnrollStartRequest is the request for POST /v1/totp/enroll/start.
+type TOTPEnrollStartRequest struct {
+	Subject string `json:"subject"`
+	Label   string `json:"label"`
+}
+
+// TOTPEnrollStartResponse is the response from POST /v1/totp/enroll/start.
+type TOTPEnrollStartResponse struct {
+	EnrollID     string `json:"enroll_id"`
+	SecretBase32 string `json:"secret_base32,omitempty"`
+	OtpauthURI   string `json:"otpauth_uri"`
+}
+
+// TOTPEnrollConfirmRequest is the request for POST /v1/totp/enroll/confirm.
+type TOTPEnrollConfirmRequest struct {
+	EnrollID string `json:"enroll_id"`
+	Code     string `json:"code"`
+}
+
+// TOTPEnrollConfirmResponse is the response from POST /v1/totp/enroll/confirm.
+type TOTPEnrollConfirmResponse struct {
+	Subject     string   `json:"subject"`
+	TotpEnabled bool     `json:"totp_enabled"`
+	BackupCodes []string `json:"backup_codes,omitempty"`
+}
+
+// TOTPRevokeResponse is the response from POST /v1/totp/revoke.
+type TOTPRevokeResponse struct {
+	OK      bool   `json:"ok"`
+	Subject string `json:"subject"`
+}
+
+// TOTPStatus returns whether the subject has TOTP enabled (via Herald TOTP proxy).
+func (c *Client) TOTPStatus(ctx context.Context, subject string) (*TOTPStatusResponse, error) {
+	url := fmt.Sprintf("%s/v1/totp/status?subject=%s", c.baseURL, url.QueryEscape(subject))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	c.httpClient.InjectTraceContext(ctx, httpReq)
+	c.addAuthHeaders(httpReq, nil)
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, &HeraldError{StatusCode: 0, Reason: "connection_failed", Message: err.Error()}
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(resp.Body)
+	var out TOTPStatusResponse
+	if err := json.Unmarshal(body, &out); err != nil {
+		return nil, &HeraldError{StatusCode: resp.StatusCode, Reason: "invalid_response", Message: string(body)}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, &HeraldError{StatusCode: resp.StatusCode, Reason: "totp_proxy_failed", Message: string(body)}
+	}
+	return &out, nil
+}
+
+// TOTPVerify verifies a TOTP code for the subject (via Herald TOTP proxy).
+func (c *Client) TOTPVerify(ctx context.Context, req *TOTPVerifyRequest) (*TOTPVerifyResponse, error) {
+	url := fmt.Sprintf("%s/v1/totp/verify", c.baseURL)
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	c.httpClient.InjectTraceContext(ctx, httpReq)
+	c.addAuthHeaders(httpReq, body)
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, &HeraldError{StatusCode: 0, Reason: "connection_failed", Message: err.Error()}
+	}
+	defer func() { _ = resp.Body.Close() }()
+	respBody, _ := io.ReadAll(resp.Body)
+	var out TOTPVerifyResponse
+	_ = json.Unmarshal(respBody, &out)
+	if resp.StatusCode != http.StatusOK {
+		return &out, &HeraldError{StatusCode: resp.StatusCode, Reason: out.Reason, Message: string(respBody)}
+	}
+	return &out, nil
+}
+
+// TOTPEnrollStart starts TOTP enrollment (via Herald TOTP proxy).
+func (c *Client) TOTPEnrollStart(ctx context.Context, req *TOTPEnrollStartRequest) (*TOTPEnrollStartResponse, error) {
+	url := fmt.Sprintf("%s/v1/totp/enroll/start", c.baseURL)
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	c.httpClient.InjectTraceContext(ctx, httpReq)
+	c.addAuthHeaders(httpReq, body)
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, &HeraldError{StatusCode: 0, Reason: "connection_failed", Message: err.Error()}
+	}
+	defer func() { _ = resp.Body.Close() }()
+	respBody, _ := io.ReadAll(resp.Body)
+	var out TOTPEnrollStartResponse
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		return nil, &HeraldError{StatusCode: resp.StatusCode, Reason: "invalid_response", Message: string(respBody)}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, &HeraldError{StatusCode: resp.StatusCode, Reason: "totp_proxy_failed", Message: string(respBody)}
+	}
+	return &out, nil
+}
+
+// TOTPEnrollConfirm confirms TOTP enrollment (via Herald TOTP proxy).
+func (c *Client) TOTPEnrollConfirm(ctx context.Context, req *TOTPEnrollConfirmRequest) (*TOTPEnrollConfirmResponse, error) {
+	url := fmt.Sprintf("%s/v1/totp/enroll/confirm", c.baseURL)
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	c.httpClient.InjectTraceContext(ctx, httpReq)
+	c.addAuthHeaders(httpReq, body)
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, &HeraldError{StatusCode: 0, Reason: "connection_failed", Message: err.Error()}
+	}
+	defer func() { _ = resp.Body.Close() }()
+	respBody, _ := io.ReadAll(resp.Body)
+	var out TOTPEnrollConfirmResponse
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		return nil, &HeraldError{StatusCode: resp.StatusCode, Reason: "invalid_response", Message: string(respBody)}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, &HeraldError{StatusCode: resp.StatusCode, Reason: "invalid", Message: string(respBody)}
+	}
+	return &out, nil
+}
+
+// TOTPRevoke revokes TOTP for the subject (via Herald TOTP proxy).
+func (c *Client) TOTPRevoke(ctx context.Context, subject string) (*TOTPRevokeResponse, error) {
+	url := fmt.Sprintf("%s/v1/totp/revoke", c.baseURL)
+	body, err := json.Marshal(struct {
+		Subject string `json:"subject"`
+	}{Subject: subject})
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	c.httpClient.InjectTraceContext(ctx, httpReq)
+	c.addAuthHeaders(httpReq, body)
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, &HeraldError{StatusCode: 0, Reason: "connection_failed", Message: err.Error()}
+	}
+	defer func() { _ = resp.Body.Close() }()
+	respBody, _ := io.ReadAll(resp.Body)
+	var out TOTPRevokeResponse
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		return nil, &HeraldError{StatusCode: resp.StatusCode, Reason: "invalid_response", Message: string(respBody)}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, &HeraldError{StatusCode: resp.StatusCode, Reason: "proxy_failed", Message: string(respBody)}
+	}
+	return &out, nil
 }
 
 // addAuthHeaders adds authentication headers to the request

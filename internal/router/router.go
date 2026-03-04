@@ -124,6 +124,14 @@ func NewRouterWithClientAndHandlers(redisClient *redis.Client, log *logger.Logge
 	otp.Post("/verifications", authHandler, h.VerifyChallenge)
 	otp.Post("/challenges/:id/revoke", authHandler, h.RevokeChallenge)
 
+	// TOTP proxy routes (forward to herald-totp when HERALD_TOTP_ENABLED and HERALD_TOTP_BASE_URL are set)
+	totp := api.Group("/totp")
+	totp.Get("/status", authHandler, h.TOTPStatus)
+	totp.Post("/verify", authHandler, h.TOTPVerify)
+	totp.Post("/enroll/start", authHandler, h.TOTPEnrollStart)
+	totp.Post("/enroll/confirm", authHandler, h.TOTPEnrollConfirm)
+	totp.Post("/revoke", authHandler, h.TOTPRevoke)
+
 	return &RouterWithHandlers{
 		App:      app,
 		Handlers: h,

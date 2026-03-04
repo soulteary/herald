@@ -1,6 +1,6 @@
 # Documentation API Herald
 
-Herald est un service de codes de vérification et OTP qui gère l'envoi de codes de vérification via SMS et e-mail, avec limitation du débit intégrée et contrôles de sécurité.
+Herald est un service de codes de vérification et OTP qui envoie les codes par SMS, e-mail et DingTalk (e-mail optionnel via [herald-smtp](https://github.com/soulteary/herald-smtp) si `HERALD_SMTP_API_URL` est défini, DingTalk via [herald-dingtalk](https://github.com/soulteary/herald-dingtalk)), avec limitation du débit et contrôles de sécurité.
 
 ## URL de Base
 
@@ -191,6 +191,8 @@ Codes d'erreur possibles :
 Codes de Statut HTTP :
 - `400 Bad Request` : Requête invalide
 - `500 Internal Server Error` : Erreur interne du serveur
+
+**Proxy TOTP (optionnel)** : Lorsque `HERALD_TOTP_ENABLED=true` et `HERALD_TOTP_BASE_URL` sont définis, Herald transmet les requêtes TOTP (Authenticator) à [herald-totp](https://github.com/soulteary/herald-totp). Voir [API (enUS)](enUS/API.md#totp-proxy-optional) pour les endpoints et le format.
 
 ## Limitation du Débit
 

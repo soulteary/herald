@@ -293,12 +293,7 @@ groups:
 
 ## OpenTelemetry 지원
 
-**참고**: 분산 추적을 위한 OpenTelemetry 지원은 계획되어 있지만 아직 구현되지 않았습니다. 여기에는 다음이 포함됩니다:
-- `traceparent` / `tracestate` 헤더 전파
-- 핵심 스팬: `otp.challenge.create`, `otp.provider.send`, `otp.verify`
-- 스팬 태그: `channel`, `purpose`, `provider`, `result`, `reason`
-
-구현 일정은 프로젝트 로드맵을 참조하세요.
+`OTLP_ENABLED=true`이고 `OTLP_ENDPOINT`가 설정되면 Herald는 OpenTelemetry 트레이싱 미들웨어를 활성화합니다. 추적 컨텍스트는 `traceparent` 및 `tracestate` 헤더로 전파됩니다. 핵심 스팬에는 challenge 생성, provider 전송, 검증이 포함됩니다. 스팬 태그: `channel`, `purpose`, `provider`, `result`, `reason`. 설정은 [DEPLOYMENT.md](DEPLOYMENT.md)의 `OTLP_ENDPOINT`(예: OTLP HTTP의 경우 `http://localhost:4318`)를 참조하세요.
 
 ## 모범 사례
 

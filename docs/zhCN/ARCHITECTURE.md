@@ -22,6 +22,7 @@ flowchart LR
     Stargate[Stargate]
     Warden[Warden]
     Herald[Herald]
+    HeraldTOTP[herald-totp]
   end
 
   subgraph storage [存储]
@@ -46,6 +47,7 @@ flowchart LR
   Herald --> Email
   Herald --> HeraldSMTP
   Herald --> HeraldDingtalk
+  Herald -.->|TOTP 代理（可选）| HeraldTOTP
   HeraldSMTP -.->|SMTP| User
   HeraldDingtalk -.->|钉钉 API| User
 ```
@@ -69,6 +71,7 @@ flowchart LR
 | **创建 Challenge** | Stargate → Herald | `POST /v1/otp/challenges` — 创建 OTP challenge 并发送验证码 |
 | **验码** | Stargate → Herald | `POST /v1/otp/verifications` — 校验验证码并返回 user_id/amr |
 | **作废 Challenge** | Stargate → Herald | `POST /v1/otp/challenges/{id}/revoke` — 可选作废 |
+| **TOTP（可选）** | Stargate → Herald | `GET /v1/totp/status`、`POST /v1/totp/verify`、`POST /v1/totp/enroll/start`、`POST /v1/totp/enroll/confirm`、`POST /v1/totp/revoke` — Herald 在配置 `HERALD_TOTP_ENABLED` 与 `HERALD_TOTP_BASE_URL` 时代理到 herald-totp |
 | **Provider 发送** | Herald → Provider | `POST /v1/send`（HTTP）— Herald 调用短信/邮件/钉钉适配器；配置 `HERALD_SMTP_API_URL` 时邮件由 herald-smtp 发送，钉钉由 herald-dingtalk 发送 |
 | **用户查询** | Stargate → Warden | Warden API — 将标识解析为 user_id 与 destination |
 

@@ -21,6 +21,8 @@ Herald is a production-ready, standalone OTP and verification code service that 
 - 📊 **Built-in Rate Limiting**: Multi-dimensional rate limiting (per user, per IP, per destination) with configurable thresholds
 - 📝 **Complete Audit Trail**: Full audit logging for all operations with provider tracking
 - 🔌 **Pluggable Providers**: Extensible email, SMS, and DingTalk provider architecture (email via [herald-smtp](https://github.com/soulteary/herald-smtp), DingTalk via [herald-dingtalk](https://github.com/soulteary/herald-dingtalk))
+- ↩️ **Challenge Revoke**: **POST /v1/otp/challenges/{id}/revoke** to revoke (unbind/invalidate) a challenge when it is no longer needed
+- 🔐 **TOTP Proxy (Optional)**: When enabled, proxy TOTP (Authenticator) operations to [herald-totp](https://github.com/soulteary/herald-totp) so one Herald URL covers OTP and TOTP
 
 ## Quick Start
 

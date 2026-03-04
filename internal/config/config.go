@@ -58,6 +58,12 @@ var (
 	SMSAPIBaseURL = env.Get("SMS_API_BASE_URL", "") // HTTP API base URL for SMS provider
 	SMSAPIKey     = env.Get("SMS_API_KEY", "")      // HTTP API key for SMS provider
 
+	// TOTP (herald-totp): Herald proxies TOTP to herald-totp service when enabled
+	TOTPEnabled    = env.GetBool("HERALD_TOTP_ENABLED", false)
+	TOTPBaseURL    = env.Get("HERALD_TOTP_BASE_URL", "") // Base URL of herald-totp service
+	TOTPAPIKey     = env.Get("HERALD_TOTP_API_KEY", "")  // Optional API key for Herald to call herald-totp
+	TOTPHMACSecret = env.Get("HERALD_TOTP_HMAC_SECRET", "")
+
 	// DingTalk channel: Herald calls herald-dingtalk via HTTP (no DingTalk credentials in Herald)
 	HeraldDingtalkAPIURL = env.Get("HERALD_DINGTALK_API_URL", "") // Base URL of herald-dingtalk service
 	HeraldDingtalkAPIKey = env.Get("HERALD_DINGTALK_API_KEY", "") // Optional API key for herald-dingtalk

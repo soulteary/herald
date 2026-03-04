@@ -23,6 +23,7 @@ Welcome to the Herald OTP and Verification Code Service documentation.
   - Authentication methods
   - Health check endpoints
   - Challenge creation and verification
+  - Optional TOTP proxy (when herald-totp is enabled)
   - Rate limiting
   - Error codes and responses
 

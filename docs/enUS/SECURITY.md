@@ -22,17 +22,16 @@ This document explains Herald's security features, security configuration, and b
 ### 1. Production Environment Configuration
 
 **Required Configuration**:
-- Must set `API_KEY` environment variable for API Key authentication
-- Configure `HERALD_HMAC_KEYS` for HMAC signature authentication (recommended for production)
-- Set `MODE=production` to enable production mode
-- Configure Redis with password protection using `REDIS_PASSWORD` or `REDIS_PASSWORD_FILE`
+- Must set `API_KEY` and/or `HERALD_HMAC_KEYS` (or `HMAC_SECRET`) for service authentication (recommended for production)
+- Set `HERALD_TEST_MODE=false` in production (test mode must not be used in production)
+- Configure Redis with password protection using `REDIS_PASSWORD` when needed
 - Use strong, unique secrets for HMAC keys
 
 **Configuration Example**:
 ```bash
 export API_KEY="your-strong-api-key-here"
 export HERALD_HMAC_KEYS='{"key-id-1":"secret-key-1","key-id-2":"secret-key-2"}'
-export MODE=production
+export HERALD_TEST_MODE=false
 export REDIS_PASSWORD="your-redis-password"
 export REDIS_ADDR="redis:6379"
 ```
@@ -41,7 +40,7 @@ export REDIS_ADDR="redis:6379"
 
 **Recommended Practices**:
 - ✅ Use environment variables to store API keys and secrets
-- ✅ Use password files (`REDIS_PASSWORD_FILE`) to store Redis passwords
+- ✅ Use `REDIS_PASSWORD` or a secrets manager for Redis when needed
 - ✅ Use key management services (e.g., HashiCorp Vault) for production secrets
 - ✅ Ensure configuration file permissions are set correctly (e.g., `chmod 600`)
 - ✅ Never log verification codes or sensitive user data
@@ -62,7 +61,7 @@ export REDIS_ADDR="redis:6379"
 
 **Recommended Configuration**:
 - Use reverse proxy (such as Nginx or Traefik) to handle SSL/TLS
-- Configure `TRUSTED_PROXY_IPS` to correctly obtain client real IP
+- Ensure your reverse proxy forwards client IP (e.g. X-Forwarded-For) if rate limiting by IP is used
 - Use strong HMAC secrets (minimum 32 characters)
 - Disable insecure authentication methods in production (use mTLS or HMAC, avoid API Key if possible)
 
@@ -165,7 +164,7 @@ export HERALD_TLS_REQUIRE_CLIENT_CERT=true
 ### Redis Security
 
 - Redis should be configured with password protection
-- Use `REDIS_PASSWORD` or `REDIS_PASSWORD_FILE` environment variables
+- Use `REDIS_PASSWORD` environment variable when Redis requires authentication
 - Restrict Redis network access (only allow Herald service access)
 - Use Redis AUTH for authentication
 - Regularly update Redis to fix known vulnerabilities
@@ -237,7 +236,7 @@ export HERALD_RESEND_COOLDOWN_SECONDS=60
 
 ### Production Mode
 
-In production mode (`MODE=production` or `MODE=prod`):
+In production (with `HERALD_TEST_MODE=false`):
 
 - Hide detailed error information to prevent information leakage
 - Return generic error messages

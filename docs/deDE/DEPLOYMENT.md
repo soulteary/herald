@@ -56,6 +56,10 @@ go build -o herald main.go
 | `HERALD_DINGTALK_API_KEY` | Optionaler API-Schlüssel; muss mit herald-dingtalk `API_KEY` übereinstimmen, falls gesetzt | `` | Nein |
 | `HERALD_SMTP_API_URL` | Basis-URL von [herald-smtp](https://github.com/soulteary/herald-smtp) (z. B. `http://herald-smtp:8084`); wenn gesetzt, wird eingebautes SMTP nicht verwendet | `` | Für E-Mail-Kanal (optional) |
 | `HERALD_SMTP_API_KEY` | Optionaler API-Schlüssel; muss mit herald-smtp `API_KEY` übereinstimmen, falls gesetzt | `` | Nein |
+| `HERALD_TOTP_ENABLED` | TOTP-Proxy aktivieren | `false` | Nein |
+| `HERALD_TOTP_BASE_URL` | Basis-URL von [herald-totp](https://github.com/soulteary/herald-totp) (z. B. `http://herald-totp:8085`) | `` | Wenn TOTP aktiviert |
+| `HERALD_TOTP_API_KEY` | API-Schlüssel für Herald→herald-totp (optional) | `` | Nein |
+| `HERALD_TOTP_HMAC_SECRET` | HMAC-Geheimnis für Herald→herald-totp (optional) | `` | Nein |
 | `HERALD_TEST_MODE` | Wenn `true`: Debug-Code in Redis/Response. **Nur für Tests; in Produktion immer `false`.** | `false` | Nein |
 
 ### E-Mail-Kanal (herald-smtp)
@@ -65,6 +69,10 @@ Wenn `HERALD_SMTP_API_URL` gesetzt ist, verwendet Herald kein eingebautes SMTP. 
 ### DingTalk-Kanal (herald-dingtalk)
 
 Wenn `channel` `dingtalk` ist, sendet Herald keine Nachrichten selbst, sondern leitet den Versand per HTTP an [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) weiter. Alle DingTalk-Zugangsdaten und -logik liegen in herald-dingtalk; Herald speichert keine DingTalk-Zugangsdaten. Setzen Sie `HERALD_DINGTALK_API_URL` auf die Basis-URL Ihres herald-dingtalk-Dienstes. Wenn herald-dingtalk mit `API_KEY` konfiguriert ist, setzen Sie `HERALD_DINGTALK_API_KEY` auf denselben Wert.
+
+### TOTP (herald-totp)
+
+Wenn `HERALD_TOTP_ENABLED=true` und `HERALD_TOTP_BASE_URL` gesetzt sind, leitet Herald TOTP-Anfragen (Authenticator) an [herald-totp](https://github.com/soulteary/herald-totp) weiter. Endpunkte unter `/v1/totp/*` (status, verify, enroll/start, enroll/confirm, revoke). Details siehe [API (enUS)](enUS/API.md#totp-proxy-optional).
 
 ## Integration mit anderen Diensten (Optional)
 
