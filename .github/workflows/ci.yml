@@ -7,7 +7,6 @@ on:
     branches: [ main, develop ]
 
 env:
-  GO_VERSION: '1.26.0'
   DOCKER_BUILDKIT: 1
 
 jobs:
@@ -22,7 +21,7 @@ jobs:
       - name: Set up Go environment
         uses: actions/setup-go@v6
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: 'go.mod'
 
       - name: Check code formatting
         run: |
@@ -43,7 +42,7 @@ jobs:
       - name: Set up Go environment
         uses: actions/setup-go@v6
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: 'go.mod'
 
       - name: Cache Go modules
         uses: actions/cache@v5
@@ -65,9 +64,6 @@ jobs:
   test:
     name: Code Testing
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go-version: ['1.26.0']
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -75,7 +71,7 @@ jobs:
       - name: Set up Go environment
         uses: actions/setup-go@v6
         with:
-          go-version: ${{ matrix.go-version }}
+          go-version-file: 'go.mod'
 
       - name: Cache Go modules
         uses: actions/cache@v5
@@ -126,7 +122,7 @@ jobs:
       - name: Set up Go environment
         uses: actions/setup-go@v6
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: 'go.mod'
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
@@ -146,7 +142,7 @@ jobs:
       - name: Set up Go environment
         uses: actions/setup-go@v6
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: 'go.mod'
 
       - name: Cache Go modules
         uses: actions/cache@v5
@@ -210,7 +206,6 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ['1.26.0']
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - name: Checkout code
@@ -219,7 +214,7 @@ jobs:
       - name: Set up Go environment
         uses: actions/setup-go@v6
         with:
-          go-version: ${{ matrix.go-version }}
+          go-version-file: 'go.mod'
 
       - name: Cache Go modules
         uses: actions/cache@v5

@@ -1,4 +1,4 @@
-FROM golang:1.26-alpine3.22 AS Builder
+FROM golang:1.26.5-alpine3.23 AS Builder
 RUN apk add git bash gcc musl-dev upx
 WORKDIR /app
 ENV GO111MODULE=on
@@ -25,7 +25,7 @@ RUN if command -v upx > /dev/null 2>&1; then \
       upx -9 -o herald.minify herald 2>/dev/null && mv herald.minify herald || true; \
     fi
 
-FROM alpine:3.22
+FROM alpine:3.23
 COPY --from=Builder /app/herald /bin/herald
 RUN apk add --no-cache curl
 WORKDIR /app
