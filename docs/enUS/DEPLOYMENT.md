@@ -150,7 +150,6 @@ When enabled, Herald proxies TOTP (Authenticator) requests to [herald-totp](http
 | `AUDIT_DATABASE_URL` | DB URL when `AUDIT_STORAGE_TYPE` includes database | (empty) | No |
 | `AUDIT_TABLE_NAME` | Audit table name | `audit_logs` | No |
 | `AUDIT_FILE_PATH` | Audit file path when using file | (empty) | No |
-| `AUDIT_LOKI_URL` | Loki URL when using loki | (empty) | No |
 | `AUDIT_WRITER_QUEUE_SIZE` | Audit writer queue size | `1000` | No |
 | `AUDIT_WRITER_WORKERS` | Audit writer workers | `2` | No |
 

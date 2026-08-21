@@ -1,0 +1,30 @@
+# Keep the build context minimal: only source + module files are needed.
+.git
+.github
+docs
+*.md
+LICENSE
+
+# Local build / test artifacts that must never enter the image or leak.
+herald
+herald.exe
+*.test
+coverage.out
+coverage.html
+*.out
+*.prof
+
+# Editor / OS noise
+.vscode
+.idea
+.DS_Store
+
+# Secrets and local env — never copy into the image.
+.env
+*.env
+*.pem
+*.key
+*.crt
+
+# Compose is not needed inside the build context.
+docker-compose*.yml

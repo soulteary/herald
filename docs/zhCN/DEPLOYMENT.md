@@ -161,7 +161,6 @@ go build -o herald main.go
 | `AUDIT_DATABASE_URL` | 数据库连接串（当 `AUDIT_STORAGE_TYPE` 含 database） | （空） | 否 |
 | `AUDIT_TABLE_NAME` | 审计表名 | `audit_logs` | 否 |
 | `AUDIT_FILE_PATH` | 审计文件路径（当含 file） | （空） | 否 |
-| `AUDIT_LOKI_URL` | Loki 地址（当含 loki） | （空） | 否 |
 | `AUDIT_WRITER_QUEUE_SIZE` | 审计写入队列大小 | `1000` | 否 |
 | `AUDIT_WRITER_WORKERS` | 审计写入 worker 数 | `2` | 否 |
 

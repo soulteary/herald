@@ -3,18 +3,28 @@ name: Go Report Card
 on:
   workflow_dispatch:
 
+# Least privilege: read-only. The previous config used `contents: write` and
+# committed the generated SVG back to the repo, which lets a third-party action
+# push to the default branch. Instead we generate the report and upload it as a
+# build artifact; a maintainer can review and commit it manually if desired.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   report-card:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - id: grc
         uses: soulteary/goreportcard-action@v1.0.0
         with:
           directory: "."
           output: ".github/goreportcard.svg"
-          commit: "true"
+          # Do NOT auto-commit; artifact-only so the workflow needs no write scope.
+          commit: "false"
+      - name: Upload report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: goreportcard
+          path: .github/goreportcard.svg
       - run: echo "Grade ${{ steps.grc.outputs.grade }} (${{ steps.grc.outputs.score }}%)"
