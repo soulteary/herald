@@ -109,6 +109,31 @@ func TestAddAuthHeaders_HMACOnly(t *testing.T) {
 	assert.Equal(t, expectedSig, signature)
 }
 
+func TestComputeHMACv2_GoldenCanonical(t *testing.T) {
+	// Golden test that locks the v2 canonical string format. It MUST stay in sync
+	// with internal/auth.CanonicalRequest.Canonical() on the server:
+	//   HERALD-HMAC-V2\nMETHOD\nPATH\nQUERY\nTS\nNONCE\nSERVICE\nKEYID\nsha256hex(body)
+	client := &Client{hmacSecret: "test-secret"}
+	body := []byte(`{"user_id":"u1"}`)
+
+	bodyHash := sha256.Sum256(body)
+	canonical := "HERALD-HMAC-V2\n" +
+		"POST\n" +
+		"/v1/otp/challenges\n" +
+		"a=1&b=2\n" +
+		"1700000000\n" +
+		"nonce-xyz\n" +
+		"stargate\n" +
+		"key-1\n" +
+		hex.EncodeToString(bodyHash[:])
+	mac := hmac.New(sha256.New, []byte("test-secret"))
+	mac.Write([]byte(canonical))
+	expected := hex.EncodeToString(mac.Sum(nil))
+
+	got := client.computeHMACv2("POST", "/v1/otp/challenges", "a=1&b=2", "1700000000", "nonce-xyz", "stargate", "key-1", body)
+	assert.Equal(t, expected, got, "SDK v2 canonical must match the server canonical format")
+}
+
 func TestComputeHMAC(t *testing.T) {
 	client := &Client{hmacSecret: "hmac-secret"}
 	timestamp := "1700000000"
@@ -123,6 +148,63 @@ func TestComputeHMAC(t *testing.T) {
 	expected := hex.EncodeToString(mac.Sum(nil))
 
 	assert.Equal(t, expected, signature)
+}
+
+func TestAddAuthHeaders_V2Default(t *testing.T) {
+	client := &Client{
+		hmacSecret: "hmac-secret",
+		service:    "stargate",
+		sigVersion: SignatureV2,
+		keyID:      "key-1",
+		now:        func() time.Time { return time.Unix(1700000000, 0) },
+		newNonce:   func() string { return "fixed-nonce" },
+	}
+	body := []byte(`{"a":1}`)
+	req, err := http.NewRequest(http.MethodPost, "http://example.com/v1/otp/challenges?x=1", nil)
+	assert.NoError(t, err)
+
+	client.addAuthHeaders(req, body)
+
+	assert.Equal(t, "v2", req.Header.Get("X-Signature-Version"))
+	assert.Equal(t, "1700000000", req.Header.Get("X-Timestamp"))
+	assert.Equal(t, "fixed-nonce", req.Header.Get("X-Nonce"))
+	assert.Equal(t, "stargate", req.Header.Get("X-Service"))
+	assert.Equal(t, "key-1", req.Header.Get("X-Key-Id"))
+	// v2 must NOT be confused with v1: the signature must match the v2 canonical.
+	expected := client.computeHMACv2(http.MethodPost, "/v1/otp/challenges", "x=1", "1700000000", "fixed-nonce", "stargate", "key-1", body)
+	assert.Equal(t, expected, req.Header.Get("X-Signature"))
+}
+
+func TestAddAuthHeaders_V2NonceChangesPerRequest(t *testing.T) {
+	client, err := NewClient(DefaultOptions().WithBaseURL("http://example.com").WithHMACSecret("s"))
+	assert.NoError(t, err)
+	req1, _ := http.NewRequest(http.MethodPost, "http://example.com/v1/otp/challenges", nil)
+	req2, _ := http.NewRequest(http.MethodPost, "http://example.com/v1/otp/challenges", nil)
+	client.addAuthHeaders(req1, []byte(`{}`))
+	client.addAuthHeaders(req2, []byte(`{}`))
+	n1 := req1.Header.Get("X-Nonce")
+	n2 := req2.Header.Get("X-Nonce")
+	assert.NotEmpty(t, n1)
+	assert.NotEmpty(t, n2)
+	assert.NotEqual(t, n1, n2, "each request must use a fresh nonce")
+}
+
+func TestAddAuthHeaders_V1OptIn(t *testing.T) {
+	client, err := NewClient(DefaultOptions().
+		WithBaseURL("http://example.com").
+		WithHMACSecret("hmac-secret").
+		WithService("stargate").
+		WithSignatureVersion(SignatureV1))
+	assert.NoError(t, err)
+
+	body := []byte(`{"a":1}`)
+	req, _ := http.NewRequest(http.MethodPost, "http://example.com/v1/otp/challenges", nil)
+	client.addAuthHeaders(req, body)
+
+	// v1 must not emit v2-only headers.
+	assert.Equal(t, "", req.Header.Get("X-Signature-Version"))
+	assert.Equal(t, "", req.Header.Get("X-Nonce"))
+	assert.Equal(t, client.computeHMAC(req.Header.Get("X-Timestamp"), "stargate", body), req.Header.Get("X-Signature"))
 }
 
 func TestCreateChallenge_Success(t *testing.T) {
@@ -145,12 +227,19 @@ func TestCreateChallenge_Success(t *testing.T) {
 		bodyBytes, err := io.ReadAll(r.Body)
 		assert.NoError(t, err)
 
+		// NewClient defaults to HMAC v2: verify replay-resistant headers and the
+		// canonical signature binding.
+		assert.Equal(t, "v2", r.Header.Get("X-Signature-Version"))
 		timestamp := r.Header.Get("X-Timestamp")
 		service := r.Header.Get("X-Service")
+		nonce := r.Header.Get("X-Nonce")
 		signature := r.Header.Get("X-Signature")
 		assert.Equal(t, "stargate", service)
+		assert.NotEmpty(t, timestamp)
+		assert.NotEmpty(t, nonce)
 
-		expectedSig := (&Client{hmacSecret: "hmac-secret"}).computeHMAC(timestamp, service, bodyBytes)
+		expectedSig := (&Client{hmacSecret: "hmac-secret"}).computeHMACv2(
+			r.Method, r.URL.Path, r.URL.RawQuery, timestamp, nonce, service, r.Header.Get("X-Key-Id"), bodyBytes)
 		assert.Equal(t, expectedSig, signature)
 
 		var got CreateChallengeRequest

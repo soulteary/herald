@@ -8,6 +8,20 @@ import (
 	"github.com/soulteary/herald-totp/pkg/heraldtotp"
 )
 
+// maskSubject returns a short, non-reversible tag for a TOTP subject so logs
+// never contain the raw subject (which is PII, e.g. an email or user id). It
+// uses the same peppered digester as rate-limit keys.
+func (h *Handlers) maskSubject(subject string) string {
+	if subject == "" {
+		return ""
+	}
+	d := h.digester.Digest(subject)
+	if len(d) > 12 {
+		d = d[:12]
+	}
+	return "sub_" + d
+}
+
 // TOTPStatus proxies GET /v1/totp/status to herald-totp.
 func (h *Handlers) TOTPStatus(c *fiber.Ctx) error {
 	if h.totpClient == nil {
@@ -32,7 +46,7 @@ func (h *Handlers) TOTPStatus(c *fiber.Ctx) error {
 	}
 	resp, err := h.totpClient.Status(ctx, subject)
 	if err != nil {
-		h.log.Warn().Err(err).Str("subject", subject).Msg("TOTP status proxy failed")
+		h.log.Warn().Str("subject", h.maskSubject(subject)).Msg("TOTP status proxy failed")
 		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "proxy_failed",
@@ -54,7 +68,6 @@ func (h *Handlers) TOTPVerify(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "invalid_request",
-			"error":  err.Error(),
 		})
 	}
 	if req.Subject == "" || req.Code == "" {
@@ -72,7 +85,7 @@ func (h *Handlers) TOTPVerify(c *fiber.Ctx) error {
 	}
 	resp, err := h.totpClient.Verify(ctx, &req)
 	if err != nil {
-		h.log.Warn().Err(err).Str("subject", req.Subject).Msg("TOTP verify proxy failed")
+		h.log.Warn().Str("subject", h.maskSubject(req.Subject)).Msg("TOTP verify proxy failed")
 		// Return 200 with ok:false when verify fails (same as herald-totp)
 		if resp != nil {
 			return c.JSON(resp)
@@ -95,10 +108,10 @@ func (h *Handlers) TOTPEnrollStart(c *fiber.Ctx) error {
 	}
 	var req heraldtotp.EnrollStartRequest
 	if err := c.BodyParser(&req); err != nil {
+		// Never echo the enroll body/error: it may contain a label or subject.
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "invalid_request",
-			"error":  err.Error(),
 		})
 	}
 	if req.Subject == "" {
@@ -116,7 +129,8 @@ func (h *Handlers) TOTPEnrollStart(c *fiber.Ctx) error {
 	}
 	resp, err := h.totpClient.EnrollStart(ctx, &req)
 	if err != nil {
-		h.log.Warn().Err(err).Str("subject", req.Subject).Msg("TOTP enroll/start proxy failed")
+		// Do NOT log err (it may contain the upstream body) nor the raw subject.
+		h.log.Warn().Str("subject", h.maskSubject(req.Subject)).Msg("TOTP enroll/start proxy failed")
 		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "proxy_failed",
@@ -138,7 +152,6 @@ func (h *Handlers) TOTPEnrollConfirm(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "invalid_request",
-			"error":  err.Error(),
 		})
 	}
 	if req.EnrollID == "" || req.Code == "" {
@@ -156,11 +169,12 @@ func (h *Handlers) TOTPEnrollConfirm(c *fiber.Ctx) error {
 	}
 	resp, err := h.totpClient.EnrollConfirm(ctx, &req)
 	if err != nil {
-		h.log.Warn().Err(err).Str("enroll_id", req.EnrollID).Msg("TOTP enroll/confirm proxy failed")
+		// enroll_id is a random opaque token (not PII) so it is safe to log; the
+		// upstream error is not echoed to avoid leaking response bodies.
+		h.log.Warn().Str("enroll_id", req.EnrollID).Msg("TOTP enroll/confirm proxy failed")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "invalid",
-			"error":  err.Error(),
 		})
 	}
 	return c.JSON(resp)
@@ -181,7 +195,6 @@ func (h *Handlers) TOTPRevoke(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "invalid_request",
-			"error":  err.Error(),
 		})
 	}
 	if req.Subject == "" {
@@ -199,7 +212,7 @@ func (h *Handlers) TOTPRevoke(c *fiber.Ctx) error {
 	}
 	resp, err := h.totpClient.Revoke(ctx, req.Subject)
 	if err != nil {
-		h.log.Warn().Err(err).Str("subject", req.Subject).Msg("TOTP revoke proxy failed")
+		h.log.Warn().Str("subject", h.maskSubject(req.Subject)).Msg("TOTP revoke proxy failed")
 		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "proxy_failed",

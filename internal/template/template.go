@@ -11,6 +11,56 @@ import (
 	"github.com/soulteary/provider-kit"
 )
 
+// maxRenderBytes bounds the size of any single rendered message so a malformed
+// or hostile template cannot produce an unbounded string that is then handed to
+// a provider (SMS/email) or logged.
+const maxRenderBytes = 16 * 1024
+
+// errRenderTooLarge is returned when a template renders more than maxRenderBytes.
+var errRenderTooLarge = fmt.Errorf("template: rendered output exceeds %d bytes", maxRenderBytes)
+
+// boundedExecute executes a template into a size-capped buffer. It uses
+// missingkey=error semantics via the caller's parsed template options so
+// undefined fields fail instead of emitting "<no value>".
+func boundedExecute(tmpl *template.Template, data TemplateData) (string, error) {
+	lw := &limitedBuilder{limit: maxRenderBytes}
+	if err := tmpl.Execute(lw, data); err != nil {
+		if lw.overflow {
+			return "", errRenderTooLarge
+		}
+		return "", err
+	}
+	return lw.b.String(), nil
+}
+
+// limitedBuilder is an io.Writer that stops accepting bytes past a limit and
+// records that an overflow happened so callers can distinguish a size error
+// from other execution errors.
+type limitedBuilder struct {
+	b        strings.Builder
+	limit    int
+	overflow bool
+}
+
+func (w *limitedBuilder) Write(p []byte) (int, error) {
+	if w.b.Len()+len(p) > w.limit {
+		w.overflow = true
+		return 0, errRenderTooLarge
+	}
+	return w.b.Write(p)
+}
+
+// normalizeLocale canonicalizes a locale/alias to the canonical language tag
+// string used for template keys, closing gaps where "zh", "zh_CN", "zh-cn" and
+// "zh-CN" would otherwise miss the same template.
+func normalizeLocale(locale string) string {
+	lang, ok := i18n.ParseLanguage(locale)
+	if !ok {
+		return string(i18n.LangEN)
+	}
+	return string(lang)
+}
+
 // TemplateData represents the data available in templates
 type TemplateData struct {
 	Code      string
@@ -117,7 +167,9 @@ func (m *Manager) loadTemplates() {
 		purpose := strings.TrimSuffix(parts[2], filepath.Ext(parts[2]))
 
 		key := fmt.Sprintf("%s:%s:%s", locale, channel, purpose)
-		tmpl, err := template.ParseFiles(path)
+		// Strict mode: undefined fields error instead of silently emitting
+		// "<no value>", surfacing template mistakes at render time.
+		tmpl, err := template.New(filepath.Base(path)).Option("missingkey=error").ParseFiles(path)
 		if err == nil {
 			m.templates[key] = tmpl
 		}
@@ -128,21 +180,24 @@ func (m *Manager) loadTemplates() {
 
 // Render renders a template with the given data
 func (m *Manager) Render(locale, channel, purpose string, data TemplateData) (string, error) {
+	locale = normalizeLocale(locale)
 	// Try to find template: locale:channel:purpose
 	key := fmt.Sprintf("%s:%s:%s", locale, channel, purpose)
 	if tmpl, ok := m.templates[key]; ok {
-		var buf strings.Builder
-		if err := tmpl.Execute(&buf, data); err == nil {
-			return buf.String(), nil
+		if out, err := boundedExecute(tmpl, data); err == nil {
+			return out, nil
+		} else if err == errRenderTooLarge {
+			return "", err
 		}
 	}
 
 	// Fallback to locale:channel:*
 	key = fmt.Sprintf("%s:%s:*", locale, channel)
 	if tmpl, ok := m.templates[key]; ok {
-		var buf strings.Builder
-		if err := tmpl.Execute(&buf, data); err == nil {
-			return buf.String(), nil
+		if out, err := boundedExecute(tmpl, data); err == nil {
+			return out, nil
+		} else if err == errRenderTooLarge {
+			return "", err
 		}
 	}
 
@@ -152,19 +207,20 @@ func (m *Manager) Render(locale, channel, purpose string, data TemplateData) (st
 
 // RenderEmail renders an email template and returns subject and body
 func (m *Manager) RenderEmail(locale, purpose string, data TemplateData) (subject, body string, err error) {
+	locale = normalizeLocale(locale)
 	// Try to find template: locale:email:purpose
 	key := fmt.Sprintf("%s:email:%s", locale, purpose)
 	if tmpl, ok := m.templates[key]; ok {
-		var buf strings.Builder
-		if err := tmpl.Execute(&buf, data); err == nil {
+		if content, rerr := boundedExecute(tmpl, data); rerr == nil {
 			// For email, we expect the template to contain both subject and body
 			// For simplicity, we'll use the full content as body and extract subject if possible
-			content := buf.String()
 			lines := strings.SplitN(content, "\n", 2)
 			if len(lines) >= 2 {
 				return lines[0], lines[1], nil
 			}
 			return "Verification Code", content, nil
+		} else if rerr == errRenderTooLarge {
+			return "", "", rerr
 		}
 	}
 
@@ -175,12 +231,14 @@ func (m *Manager) RenderEmail(locale, purpose string, data TemplateData) (subjec
 
 // RenderSMS renders an SMS template and returns the message body
 func (m *Manager) RenderSMS(locale, purpose string, data TemplateData) (body string, err error) {
+	locale = normalizeLocale(locale)
 	// Try to find template: locale:sms:purpose
 	key := fmt.Sprintf("%s:sms:%s", locale, purpose)
 	if tmpl, ok := m.templates[key]; ok {
-		var buf strings.Builder
-		if err := tmpl.Execute(&buf, data); err == nil {
-			return buf.String(), nil
+		if out, rerr := boundedExecute(tmpl, data); rerr == nil {
+			return out, nil
+		} else if rerr == errRenderTooLarge {
+			return "", rerr
 		}
 	}
 

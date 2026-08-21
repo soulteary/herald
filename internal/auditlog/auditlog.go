@@ -2,6 +2,7 @@ package auditlog
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/redis/go-redis/v9"
@@ -9,6 +10,7 @@ import (
 	logger "github.com/soulteary/logger-kit"
 
 	"github.com/soulteary/herald/internal/config"
+	"github.com/soulteary/herald/internal/metrics"
 )
 
 var log *logger.Logger
@@ -21,15 +23,40 @@ func SetLogger(l *logger.Logger) {
 var (
 	auditLogger     *audit.Logger
 	auditLoggerInit sync.Once
+	auditInitErr    error
 )
 
-// Init initializes the audit logger with the given storage
+// Init initializes the audit logger with the given storage. Any initialization
+// error is retained and can be inspected via InitWithError; callers that need
+// fail-closed behavior in production should use InitWithError.
 func Init(redisClient *redis.Client) {
+	_ = InitWithError(redisClient)
+}
+
+// InitWithError initializes the audit logger and returns an error if the
+// configured storage backend could not be created. In production a failed
+// storage init is a hard error (the caller should refuse to start) instead of
+// silently degrading to a no-op sink that loses the audit trail.
+func InitWithError(redisClient *redis.Client) error {
 	auditLoggerInit.Do(func() {
 		cfg := audit.DefaultConfig()
 		cfg.Enabled = config.AuditEnabled
 		cfg.MaskDestination = config.AuditMaskDestination
 		cfg.TTL = config.AuditTTL
+
+		// Observe dropped/failed audit records instead of losing them silently.
+		cfg.OnEnqueueFailed = func(_ *audit.Record) {
+			metrics.RecordAuditDropped()
+			if log != nil {
+				log.Warn().Msg("audit record dropped: writer queue full")
+			}
+		}
+		cfg.OnWriteFailed = func(_ *audit.Record, err error) {
+			metrics.RecordAuditDropped()
+			if log != nil {
+				log.Error().Err(err).Msg("audit record write failed")
+			}
+		}
 
 		// Configure async writer
 		if config.AuditWriterQueueSize > 0 || config.AuditWriterWorkers > 0 {
@@ -60,6 +87,12 @@ func Init(redisClient *redis.Client) {
 
 			storage, err = audit.NewStorageFromType(storageType, opts)
 			if err != nil {
+				// In production, a configured-but-broken audit backend must not be
+				// silently swapped for a no-op sink.
+				if config.AuditEnabled && config.IsProduction() {
+					auditInitErr = fmt.Errorf("audit: failed to initialize %s storage: %w", storageType, err)
+					return
+				}
 				if log != nil {
 					log.Warn().Err(err).Msg("Failed to initialize audit storage, using no-op storage")
 				}
@@ -77,6 +110,7 @@ func Init(redisClient *redis.Client) {
 
 		auditLogger = audit.NewLoggerWithWriter(storage, cfg)
 	})
+	return auditInitErr
 }
 
 // GetLogger returns the audit logger instance

@@ -26,14 +26,17 @@ func TracingMiddleware(serviceName string) fiber.Handler {
 		})
 		ctx := propagator.Extract(c.Context(), &headerCarrier{headers: reqHeaders})
 
-		// Determine span name from route path
+		// Determine span name from the templated route path only. Never fall back
+		// to the raw URL/path: it can be high-cardinality and may carry PII in the
+		// query string (e.g. ?subject=...).
 		spanName := c.Route().Path
 		if spanName == "" {
-			spanName = c.Path()
+			spanName = c.Method() + " unmatched_route"
 		}
-		if spanName == "" {
-			spanName = c.Method() + " " + c.OriginalURL()
-		}
+
+		// http.target is the path WITHOUT the query string so PII carried in query
+		// params never lands in a span attribute.
+		path := c.Path()
 
 		// Start span
 		ctx, span := tracer.Start(
@@ -42,8 +45,7 @@ func TracingMiddleware(serviceName string) fiber.Handler {
 			trace.WithSpanKind(trace.SpanKindServer),
 			trace.WithAttributes(
 				semconv.HTTPMethod(c.Method()),
-				semconv.HTTPURL(c.OriginalURL()),
-				attribute.String("http.user_agent", c.Get("User-Agent")),
+				semconv.HTTPTarget(path),
 				attribute.String("http.remote_addr", c.IP()),
 			),
 		)

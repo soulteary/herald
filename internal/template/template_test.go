@@ -3,8 +3,46 @@ package template
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestBoundedExecute_RejectsOversizedRender(t *testing.T) {
+	dir := t.TempDir()
+	// templates/{locale}/{channel}/{purpose}.txt
+	tdir := filepath.Join(dir, "templates", "en", "sms")
+	if err := os.MkdirAll(tdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A template that repeats a large literal well past maxRenderBytes.
+	big := strings.Repeat("A", maxRenderBytes+100)
+	if err := os.WriteFile(filepath.Join(tdir, "login.txt"), []byte(big), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := NewManager(filepath.Join(dir, "templates"))
+	// Direct Render should hit the oversized branch and return an error rather
+	// than an enormous string.
+	_, err := m.Render("en", "sms", "login", TemplateData{Code: "123456", ExpiresIn: 300})
+	if err != errRenderTooLarge {
+		t.Fatalf("expected errRenderTooLarge, got %v", err)
+	}
+}
+
+func TestNormalizeLocale_Aliases(t *testing.T) {
+	// Different spellings of Chinese should collapse to one canonical key.
+	got := map[string]bool{}
+	for _, in := range []string{"zh", "zh-CN", "zh_CN", "zh-cn"} {
+		got[normalizeLocale(in)] = true
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected all zh aliases to normalize to one value, got %v", got)
+	}
+	// Unknown locale falls back to English.
+	if normalizeLocale("xx-YY") != normalizeLocale("en") {
+		t.Fatal("unknown locale should fall back to English")
+	}
+}
 
 func TestNewManager(t *testing.T) {
 	// Test with empty directory (uses built-in templates)

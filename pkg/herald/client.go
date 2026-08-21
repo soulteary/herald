@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -12,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	httpkit "github.com/soulteary/http-kit"
@@ -24,7 +26,25 @@ type Client struct {
 	apiKey     string
 	hmacSecret string
 	service    string
+
+	// sigVersion selects the HMAC signing scheme ("v2" default via NewClient,
+	// "v1" legacy). A bare &Client{} literal (used in some tests) has an empty
+	// value which is treated as v1 for backward compatibility.
+	sigVersion string
+	keyID      string
+
+	// now and newNonce are injectable for deterministic tests.
+	now      func() time.Time
+	newNonce func() string
 }
+
+// Signature scheme identifiers.
+const (
+	SignatureV1 = "v1"
+	SignatureV2 = "v2"
+
+	hmacV2CanonicalPrefix = "HERALD-HMAC-V2"
+)
 
 // Options for creating a Herald client
 type Options struct {
@@ -38,13 +58,21 @@ type Options struct {
 	TLSClientKey       string // Client private key file for mTLS
 	TLSServerName      string // Server name for TLS verification
 	InsecureSkipVerify bool   // Skip TLS certificate verification (not recommended)
+
+	// SignatureVersion selects the HMAC scheme. Defaults to v2 (replay-resistant).
+	// Set to v1 only during a migration window against an old server.
+	SignatureVersion string
+	// KeyID is sent as X-Key-Id and bound into the v2 signature. Empty means the
+	// server's configured default key id is used.
+	KeyID string
 }
 
 // DefaultOptions returns default options
 func DefaultOptions() *Options {
 	return &Options{
-		Timeout: 10 * time.Second,
-		Service: "stargate",
+		Timeout:          10 * time.Second,
+		Service:          "stargate",
+		SignatureVersion: SignatureV2,
 	}
 }
 
@@ -100,6 +128,18 @@ func (o *Options) WithTLSServerName(serverName string) *Options {
 // WithInsecureSkipVerify sets whether to skip TLS certificate verification
 func (o *Options) WithInsecureSkipVerify(skip bool) *Options {
 	o.InsecureSkipVerify = skip
+	return o
+}
+
+// WithSignatureVersion selects the HMAC signature scheme (v2 default, v1 legacy).
+func (o *Options) WithSignatureVersion(v string) *Options {
+	o.SignatureVersion = v
+	return o
+}
+
+// WithKeyID sets the HMAC key id sent as X-Key-Id and bound into the signature.
+func (o *Options) WithKeyID(id string) *Options {
+	o.KeyID = id
 	return o
 }
 
@@ -172,9 +212,27 @@ func NewClient(opts *Options) (*Client, error) {
 		apiKey:     opts.APIKey,
 		hmacSecret: opts.HMACSecret,
 		service:    opts.Service,
+		sigVersion: opts.SignatureVersion,
+		keyID:      opts.KeyID,
+		now:        time.Now,
+		newNonce:   defaultNonce,
+	}
+	if client.sigVersion == "" {
+		client.sigVersion = SignatureV2
 	}
 
 	return client, nil
+}
+
+// defaultNonce returns a random 128-bit hex nonce.
+func defaultNonce() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// Fall back to a timestamp-derived value; the server's single-use nonce
+		// store still prevents replay even if entropy is degraded.
+		return strconv.FormatInt(time.Now().UnixNano(), 16)
+	}
+	return hex.EncodeToString(b[:])
 }
 
 // CreateChallengeRequest represents the request to create a challenge
@@ -531,28 +589,95 @@ func (c *Client) TOTPRevoke(ctx context.Context, subject string) (*TOTPRevokeRes
 	return &out, nil
 }
 
-// addAuthHeaders adds authentication headers to the request
+// addAuthHeaders adds authentication headers to the request. It signs with the
+// configured scheme (v2 by default). It never downgrades: if a scheme is
+// selected, only that scheme's headers are produced.
 func (c *Client) addAuthHeaders(req *http.Request, body []byte) {
 	// Use API key if available
 	if c.apiKey != "" {
 		req.Header.Set("X-API-Key", c.apiKey)
 	}
 
-	// Use HMAC signature if secret is available
-	if c.hmacSecret != "" {
-		timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-		signature := c.computeHMAC(timestamp, c.service, body)
+	if c.hmacSecret == "" {
+		return
+	}
 
+	now := c.now
+	if now == nil {
+		now = time.Now
+	}
+	timestamp := strconv.FormatInt(now().Unix(), 10)
+
+	if c.sigVersion != SignatureV2 {
+		signature := c.computeHMAC(timestamp, c.service, body)
 		req.Header.Set("X-Timestamp", timestamp)
 		req.Header.Set("X-Service", c.service)
 		req.Header.Set("X-Signature", signature)
+		return
+	}
+
+	// v2: replay-resistant canonical binding with a single-use nonce.
+	nonceFn := c.newNonce
+	if nonceFn == nil {
+		nonceFn = defaultNonce
+	}
+	nonce := nonceFn()
+
+	query := ""
+	if req.URL != nil {
+		query = req.URL.RawQuery
+	}
+	path := ""
+	if req.URL != nil {
+		path = req.URL.Path
+	}
+
+	signature := c.computeHMACv2(req.Method, path, query, timestamp, nonce, c.service, c.keyID, body)
+
+	req.Header.Set("X-Signature-Version", SignatureV2)
+	req.Header.Set("X-Signature", signature)
+	req.Header.Set("X-Timestamp", timestamp)
+	req.Header.Set("X-Nonce", nonce)
+	req.Header.Set("X-Service", c.service)
+	if c.keyID != "" {
+		req.Header.Set("X-Key-Id", c.keyID)
 	}
 }
 
-// computeHMAC computes HMAC-SHA256 signature
+// computeHMAC computes the legacy v1 HMAC-SHA256 signature.
 func (c *Client) computeHMAC(timestamp, service string, body []byte) string {
 	message := fmt.Sprintf("%s:%s:%s", timestamp, service, string(body))
 	mac := hmac.New(sha256.New, []byte(c.hmacSecret))
 	mac.Write([]byte(message))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// computeHMACv2 builds the v2 canonical string and signs it. The canonical form
+// MUST match internal/auth.CanonicalRequest.Canonical() on the server:
+//
+//	HERALD-HMAC-V2\nMETHOD\nPATH\nQUERY\nTS\nNONCE\nSERVICE\nKEYID\nsha256hex(body)
+func (c *Client) computeHMACv2(method, path, query, timestamp, nonce, service, keyID string, body []byte) string {
+	bodyHash := sha256.Sum256(body)
+	var b strings.Builder
+	b.WriteString(hmacV2CanonicalPrefix)
+	b.WriteByte('\n')
+	b.WriteString(strings.ToUpper(method))
+	b.WriteByte('\n')
+	b.WriteString(path)
+	b.WriteByte('\n')
+	b.WriteString(query)
+	b.WriteByte('\n')
+	b.WriteString(timestamp)
+	b.WriteByte('\n')
+	b.WriteString(nonce)
+	b.WriteByte('\n')
+	b.WriteString(service)
+	b.WriteByte('\n')
+	b.WriteString(keyID)
+	b.WriteByte('\n')
+	b.WriteString(hex.EncodeToString(bodyHash[:]))
+
+	mac := hmac.New(sha256.New, []byte(c.hmacSecret))
+	mac.Write([]byte(b.String()))
 	return hex.EncodeToString(mac.Sum(nil))
 }
