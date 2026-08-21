@@ -49,21 +49,55 @@ func TestParseHMACKeys(t *testing.T) {
 		t.Errorf("Expected GetHMACSecret('key-id-1') to return 'secret-key-1', got %s", secret)
 	}
 
-	// Test GetHMACSecret with default key ID (empty)
-	// Note: default key ID is set to first key in map (order may vary)
+	// Phase 4 security policy: with MULTIPLE keys and no explicit
+	// HERALD_HMAC_DEFAULT_KEY_ID, GetHMACSecret("") must NOT map to an arbitrary
+	// key (no reliance on map iteration order). It returns empty so a request
+	// without X-Key-Id is rejected.
 	secret = GetHMACSecret("")
-	// Should return one of the keys (first one)
-	if secret == "" {
-		t.Errorf("Expected GetHMACSecret('') to return a key, got empty string")
-	}
-	if secret != "secret-key-1" && secret != "secret-key-2" {
-		t.Errorf("Expected GetHMACSecret('') to return one of the configured keys (secret-key-1 or secret-key-2), got %s", secret)
+	if secret != "" {
+		t.Errorf("Expected GetHMACSecret('') to return empty (no arbitrary default) with multiple keys, got %s", secret)
 	}
 
 	// Test GetHMACSecret with invalid key ID
 	secret = GetHMACSecret("invalid-key-id")
 	if secret != "" {
 		t.Errorf("Expected GetHMACSecret('invalid-key-id') to return empty string, got %s", secret)
+	}
+}
+
+// TestParseHMACKeys_ExplicitDefaultKeyID verifies that an explicitly configured
+// HERALD_HMAC_DEFAULT_KEY_ID is used deterministically for empty X-Key-Id, and
+// an unknown default is rejected.
+func TestParseHMACKeys_ExplicitDefaultKeyID(t *testing.T) {
+	originalHMACKeysJSON := HMACKeysJSON
+	originalDefault := HMACDefaultKeyID
+	defer func() {
+		HMACKeysJSON = originalHMACKeysJSON
+		HMACDefaultKeyID = originalDefault
+		hmacKeysMap = nil
+		hmacKeysMapOnce = sync.Once{}
+		hmacDefaultKeyID = ""
+	}()
+
+	HMACKeysJSON = `{"key-id-1":"secret-key-1","key-id-2":"secret-key-2"}`
+	HMACDefaultKeyID = "key-id-2"
+	hmacKeysMap = nil
+	hmacKeysMapOnce = sync.Once{}
+	hmacDefaultKeyID = ""
+	if err := parseHMACKeys(); err != nil {
+		t.Fatalf("parseHMACKeys() failed: %v", err)
+	}
+	if got := GetHMACSecret(""); got != "secret-key-2" {
+		t.Errorf("GetHMACSecret('') with explicit default = %q, want secret-key-2", got)
+	}
+
+	// Unknown default must be rejected.
+	HMACDefaultKeyID = "does-not-exist"
+	hmacKeysMap = nil
+	hmacKeysMapOnce = sync.Once{}
+	hmacDefaultKeyID = ""
+	if err := parseHMACKeys(); err == nil {
+		t.Errorf("parseHMACKeys() with unknown default key id should fail")
 	}
 }
 

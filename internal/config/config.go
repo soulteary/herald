@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -16,9 +17,76 @@ import (
 // log is the package-level logger, initialized in Initialize
 var log *logger.Logger
 
+// Environment describes the deployment environment. Production applies the
+// strictest Validate() checks; development/test relax some of them.
+type Environment string
+
+const (
+	// EnvDevelopment is the default relaxed environment.
+	EnvDevelopment Environment = "development"
+	// EnvTest enables test-only affordances (debug_code, test-code endpoint)
+	// but only in combination with HERALD_TEST_MODE=true.
+	EnvTest Environment = "test"
+	// EnvProduction applies fail-closed validation of security-sensitive config.
+	EnvProduction Environment = "production"
+)
+
+// parseEnvironment normalizes the ENVIRONMENT value. Unknown values default to
+// development so a typo never silently grants production trust while still not
+// accidentally enabling test affordances.
+func parseEnvironment(raw string) Environment {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "production", "prod":
+		return EnvProduction
+	case "test", "testing":
+		return EnvTest
+	case "development", "dev", "":
+		return EnvDevelopment
+	default:
+		return EnvDevelopment
+	}
+}
+
+// IsProduction reports whether Herald is running in the production environment.
+func IsProduction() bool { return Env == EnvProduction }
+
+// IsTestEnv reports whether Herald is running in the test environment.
+func IsTestEnv() bool { return Env == EnvTest }
+
+// TestCodeExposureEnabled reports whether plaintext test codes may be exposed
+// (debug_code field and the /test/code endpoint). This requires BOTH the test
+// environment AND HERALD_TEST_MODE=true, and is never true in production.
+func TestCodeExposureEnabled() bool {
+	return Env == EnvTest && TestMode
+}
+
 var (
+	// Environment: development | test | production. Controls Validate() strictness.
+	Env = parseEnvironment(env.Get("ENVIRONMENT", "development"))
+
 	// Server config
 	Port = env.Get("PORT", ":8082")
+
+	// Fiber/server hardening limits.
+	MaxBodyBytes = env.GetInt("HERALD_MAX_BODY_BYTES", 64*1024) // request body cap
+	ReadTimeout  = env.GetDuration("HERALD_READ_TIMEOUT", 15*time.Second)
+	WriteTimeout = env.GetDuration("HERALD_WRITE_TIMEOUT", 15*time.Second)
+	IdleTimeout  = env.GetDuration("HERALD_IDLE_TIMEOUT", 60*time.Second)
+
+	// CORS is disabled by default. Set an explicit comma-separated allowlist to
+	// enable it; "*" is rejected in production by Validate().
+	CORSAllowOrigins = env.Get("HERALD_CORS_ALLOW_ORIGINS", "")
+
+	// Dedicated auth + listener for the test-code endpoint. The endpoint is only
+	// mounted when TestCodeExposureEnabled() is true, is guarded by this key, and
+	// should be bound to a loopback/admin listener.
+	TestAPIKey       = env.Get("HERALD_TEST_API_KEY", "")
+	TestListenerAddr = env.Get("HERALD_TEST_LISTENER_ADDR", "127.0.0.1:0")
+
+	// RiskAckPasswordlessRedis explicitly acknowledges running against a
+	// passwordless Redis in production (discouraged). Without it, Validate()
+	// refuses to start in production when REDIS_PASSWORD is empty.
+	RiskAckPasswordlessRedis = env.GetBool("HERALD_RISK_ACK_PASSWORDLESS_REDIS", false)
 
 	// Redis config
 	RedisAddr     = env.Get("REDIS_ADDR", "localhost:6379")
@@ -37,8 +105,17 @@ var (
 	ResendCooldown    = env.GetDuration("RESEND_COOLDOWN", 60*time.Second)
 	CodeLength        = env.GetInt("CODE_LENGTH", 6)
 	LockoutDuration   = env.GetDuration("LOCKOUT_DURATION", 10*time.Minute)
-	IdempotencyKeyTTL = env.GetDuration("IDEMPOTENCY_KEY_TTL", 0)                      // 0 means use ChallengeExpiry
-	AllowedPurposes   = env.GetStringSlice("ALLOWED_PURPOSES", []string{"login"}, ",") // Comma-separated list: "login,reset,bind,stepup"
+	IdempotencyKeyTTL = env.GetDuration("IDEMPOTENCY_KEY_TTL", 0) // 0 means use ChallengeExpiry
+	// IdempotencySecret derives opaque Redis keys for idempotency records so a
+	// raw client-supplied key is never used directly and principals cannot
+	// collide. Falls back to HMAC_SECRET / API_KEY when unset (see Initialize).
+	IdempotencySecret = env.Get("HERALD_IDEMPOTENCY_SECRET", "")
+	// PIIPepper keys the peppered digests used for privacy-preserving
+	// rate-limit keys and audit fingerprints so raw email/phone/user values
+	// never land in Redis keys or metrics. Falls back to IdempotencySecret
+	// when unset (see Initialize).
+	PIIPepper       = env.Get("HERALD_PII_PEPPER", "")
+	AllowedPurposes = env.GetStringSlice("ALLOWED_PURPOSES", []string{"login"}, ",") // Comma-separated list: "login,reset,bind,stepup"
 
 	// Rate limiting config
 	RateLimitPerUser        = env.GetInt("RATE_LIMIT_PER_USER", 10)        // per hour
@@ -52,6 +129,11 @@ var (
 	SMTPPassword          = env.Get("SMTP_PASSWORD", "")
 	SMTPFrom              = env.Get("SMTP_FROM", "")
 	ProviderFailurePolicy = env.Get("PROVIDER_FAILURE_POLICY", "soft") // "strict" | "soft"
+
+	// Provider transport hardening (Phase 3).
+	ProviderTimeout          = env.GetDuration("PROVIDER_TIMEOUT", 10*time.Second)
+	ProviderMaxResponseBytes = env.GetInt("PROVIDER_MAX_RESPONSE_BYTES", 1<<20) // 1 MiB
+	ProviderRedirectPolicy   = env.Get("PROVIDER_REDIRECT_POLICY", "deny")      // "deny" | "same-origin"
 
 	// SMS Provider config (HTTP API mode - recommended)
 	SMSProvider   = env.Get("SMS_PROVIDER", "")     // Provider name (e.g., "aliyun", "tencent", "http")
@@ -77,6 +159,24 @@ var (
 	HMACKeysJSON = env.Get("HERALD_HMAC_KEYS", "") // JSON format: {"key-id-1":"secret-1","key-id-2":"secret-2"}
 	ServiceName  = env.Get("SERVICE_NAME", "herald")
 
+	// Phase 4: HMAC v2 replay-resistant auth policy.
+	//   REQUEST_AUTH_MODE selects the request-body auth scheme:
+	//     "hmac_v2" (default, replay-resistant), "api_key", or "none" (dev only).
+	//   CLIENT_CERT_MODE controls mTLS handling ("off" | "optional" | "require"),
+	//     kept independent from REQUEST_AUTH_MODE so a client cert is not
+	//     conflated with request-body integrity.
+	//   HMAC_V1_ENABLED explicitly re-enables the legacy v1 scheme for one
+	//     migration cycle; it is off by default.
+	//   HERALD_HMAC_DEFAULT_KEY_ID must be set explicitly when using a multi-key
+	//     map with unsigned X-Key-Id (no random/arbitrary default).
+	//   HMAC_MAX_DRIFT bounds the accepted timestamp skew (default 60s).
+	RequestAuthMode  = env.Get("REQUEST_AUTH_MODE", "hmac_v2")
+	ClientCertMode   = env.Get("CLIENT_CERT_MODE", "off")
+	HMACV1Enabled    = env.GetBool("HMAC_V1_ENABLED", false)
+	HMACDefaultKeyID = env.Get("HERALD_HMAC_DEFAULT_KEY_ID", "")
+	HMACMaxDrift     = env.GetDuration("HMAC_MAX_DRIFT", 60*time.Second)
+	NonceStorePrefix = env.Get("HERALD_NONCE_PREFIX", "otp:nonce:")
+
 	// HMAC keys map (parsed from HERALD_HMAC_KEYS)
 	hmacKeysMap      map[string]string
 	hmacKeysMapOnce  sync.Once
@@ -100,11 +200,10 @@ var (
 	AuditTTL             = env.GetDuration("AUDIT_TTL", 7*24*time.Hour) // 7 days default
 
 	// Audit persistent storage config
-	AuditStorageType     = env.Get("AUDIT_STORAGE_TYPE", "") // "database", "file", "loki", or comma-separated list
+	AuditStorageType     = env.Get("AUDIT_STORAGE_TYPE", "") // "database", "file", "redis", or comma-separated list
 	AuditDatabaseURL     = env.Get("AUDIT_DATABASE_URL", "")
 	AuditTableName       = env.Get("AUDIT_TABLE_NAME", "audit_logs")
 	AuditFilePath        = env.Get("AUDIT_FILE_PATH", "")
-	AuditLokiURL         = env.Get("AUDIT_LOKI_URL", "")
 	AuditWriterQueueSize = env.GetInt("AUDIT_WRITER_QUEUE_SIZE", 1000)
 	AuditWriterWorkers   = env.GetInt("AUDIT_WRITER_WORKERS", 2)
 
@@ -159,8 +258,40 @@ func Initialize(l *logger.Logger) error {
 		IdempotencyKeyTTL = ChallengeExpiry
 	}
 
+	// Derive an idempotency secret if not explicitly configured. Prefer a
+	// dedicated secret; otherwise reuse an existing service secret so keys are
+	// still opaque and principal-namespaced.
+	if IdempotencySecret == "" {
+		switch {
+		case HMACSecret != "":
+			IdempotencySecret = HMACSecret
+		case APIKey != "":
+			IdempotencySecret = APIKey
+		default:
+			IdempotencySecret = "herald-idempotency-fallback"
+		}
+	}
+
+	// Derive a PII pepper if not explicitly configured so rate-limit keys and
+	// audit fingerprints are still non-reversible. Production SHOULD set
+	// HERALD_PII_PEPPER explicitly (recommended, warned in Validate).
+	if PIIPepper == "" {
+		PIIPepper = IdempotencySecret
+	}
+
+	// Privacy default: in production, mask destinations in audit records unless
+	// the operator has explicitly opted out. This prevents raw phone/email from
+	// landing in the audit store by default.
+	if Env == EnvProduction && AuditEnabled {
+		if _, set := os.LookupEnv("AUDIT_MASK_DESTINATION"); !set {
+			AuditMaskDestination = true
+			log.Info().Msg("Production default: AUDIT_MASK_DESTINATION=true (set it explicitly to override)")
+		}
+	}
+
 	// Log configuration (excluding sensitive data)
 	log.Info().
+		Str("environment", string(Env)).
 		Str("port", Port).
 		Str("redis", maskSensitive(RedisAddr)).
 		Int("redis_db", RedisDB).
@@ -171,6 +302,105 @@ func Initialize(l *logger.Logger) error {
 		Bool("session_storage", SessionStorageEnabled).
 		Msg("Configuration initialized")
 
+	// Fail-closed validation. In production, misconfiguration must prevent
+	// startup instead of degrading silently.
+	if err := Validate(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// authConfigured reports whether at least one service-to-service auth mechanism
+// is configured (API key, single HMAC secret, or a multi-key HMAC map).
+func authConfigured() bool {
+	return APIKey != "" || HMACSecret != "" || len(hmacKeysMap) > 0
+}
+
+// Validate enforces security-sensitive invariants. Most checks are only fatal
+// in production; development/test environments log warnings instead so local
+// workflows are not blocked. Returns a non-nil error when startup must abort.
+func Validate() error {
+	var problems []string
+
+	// TLS must be configured coherently regardless of environment: a cert
+	// without a key (or vice versa) is a misconfiguration that would otherwise
+	// silently fall back to plaintext.
+	if (TLSCertFile == "") != (TLSKeyFile == "") {
+		problems = append(problems, "half-configured TLS: both TLS_CERT_FILE and TLS_KEY_FILE must be set together")
+	}
+	// A client CA (mTLS) requires a server cert/key to terminate TLS.
+	if TLSCACertFile != "" && (TLSCertFile == "" || TLSKeyFile == "") {
+		problems = append(problems, "TLS client CA configured without server certificate/key")
+	}
+
+	// AUDIT_STORAGE_TYPE=loki has no backend implementation in audit-kit, so a
+	// request for it would silently degrade to no-op storage. Flag it explicitly
+	// (fatal in production, warning otherwise) rather than dropping audit records
+	// without notice.
+	if strings.Contains(strings.ToLower(AuditStorageType), "loki") {
+		problems = append(problems, "AUDIT_STORAGE_TYPE=loki is not supported (no Loki audit backend); use database, file, or redis")
+	}
+
+	// Provider transport hardening: reject plaintext provider URLs in production.
+	for _, u := range []struct{ name, url string }{
+		{"HERALD_SMTP_API_URL", HeraldSMTPAPIURL},
+		{"SMS_API_BASE_URL", SMSAPIBaseURL},
+		{"HERALD_DINGTALK_API_URL", HeraldDingtalkAPIURL},
+		{"HERALD_TOTP_BASE_URL", TOTPBaseURL},
+	} {
+		if u.url != "" && !strings.HasPrefix(strings.ToLower(u.url), "https://") {
+			problems = append(problems, u.name+" must use https:// in production")
+		}
+	}
+
+	if Env != EnvProduction {
+		// Non-production: surface issues as warnings and continue, but never
+		// enable production trust.
+		if len(problems) > 0 && log != nil {
+			for _, p := range problems {
+				log.Warn().Str("check", "config.validate").Msg(p)
+			}
+		}
+		return nil
+	}
+
+	// Production-only fail-closed checks.
+	if !authConfigured() {
+		problems = append(problems, "no service-to-service authentication configured (set API_KEY, HMAC_SECRET, or HERALD_HMAC_KEYS)")
+	}
+	if TestMode {
+		problems = append(problems, "HERALD_TEST_MODE=true is forbidden in production")
+	}
+	if ProviderFailurePolicy == "soft" {
+		problems = append(problems, "PROVIDER_FAILURE_POLICY=soft is forbidden in production; use strict")
+	}
+	if RedisPassword == "" && !RiskAckPasswordlessRedis {
+		problems = append(problems, "passwordless Redis in production (set REDIS_PASSWORD or HERALD_RISK_ACK_PASSWORDLESS_REDIS=true to override)")
+	}
+	if strings.TrimSpace(CORSAllowOrigins) == "*" {
+		problems = append(problems, "CORS wildcard (HERALD_CORS_ALLOW_ORIGINS=*) is forbidden in production")
+	}
+	if strings.EqualFold(RequestAuthMode, "none") {
+		problems = append(problems, "REQUEST_AUTH_MODE=none is forbidden in production")
+	}
+	if HMACV1Enabled {
+		// Not fatal, but the legacy scheme is not replay-resistant; warn loudly.
+		if log != nil {
+			log.Warn().Str("check", "config.validate").Msg("HMAC_V1_ENABLED=true in production: the legacy v1 scheme is not replay-resistant; disable after migration")
+		}
+	}
+
+	// Recommendation (non-fatal): an explicit PII pepper distinct from the auth
+	// secret keeps rate-limit keys / audit fingerprints non-reversible even if
+	// an auth secret is rotated. Warn rather than refuse start.
+	if env.Get("HERALD_PII_PEPPER", "") == "" && log != nil {
+		log.Warn().Str("check", "config.validate").Msg("HERALD_PII_PEPPER not set; deriving PII pepper from an existing secret (set an explicit pepper in production)")
+	}
+
+	if len(problems) > 0 {
+		return fmt.Errorf("production config validation failed: %s", strings.Join(problems, "; "))
+	}
 	return nil
 }
 
@@ -213,11 +443,25 @@ func parseHMACKeys() error {
 			return
 		}
 
-		// Set default key ID to first key if available
-		for keyID := range hmacKeysMap {
-			hmacDefaultKeyID = keyID
-			break
+		// Choose the default key id. Prefer an explicitly configured
+		// HERALD_HMAC_DEFAULT_KEY_ID (deterministic, no reliance on map order).
+		// Only when there is exactly one key do we default to it implicitly.
+		if HMACDefaultKeyID != "" {
+			if _, ok := hmacKeysMap[HMACDefaultKeyID]; ok {
+				hmacDefaultKeyID = HMACDefaultKeyID
+			} else {
+				parseErr = fmt.Errorf("HERALD_HMAC_DEFAULT_KEY_ID %q not present in HERALD_HMAC_KEYS", HMACDefaultKeyID)
+				hmacKeysMap = nil
+				return
+			}
+		} else if len(hmacKeysMap) == 1 {
+			for keyID := range hmacKeysMap {
+				hmacDefaultKeyID = keyID
+			}
 		}
+		// With multiple keys and no explicit default, hmacDefaultKeyID stays
+		// empty so a request without X-Key-Id is rejected rather than mapped to
+		// an arbitrary key.
 	})
 
 	if parseErr != nil {

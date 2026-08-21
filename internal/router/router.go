@@ -1,6 +1,11 @@
 package router
 
 import (
+	"context"
+	"crypto/subtle"
+	"strings"
+	"time"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/recover"
@@ -11,12 +16,33 @@ import (
 	middlewarekit "github.com/soulteary/middleware-kit"
 	rediskit "github.com/soulteary/redis-kit/client"
 
+	"github.com/soulteary/herald/internal/auth"
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/handlers"
 	"github.com/soulteary/herald/internal/metrics"
 	"github.com/soulteary/herald/internal/tracing"
-	sessionkit "github.com/soulteary/session-kit"
 )
+
+// testAuthMiddleware guards the test-code endpoint with a constant-time
+// comparison against HERALD_TEST_API_KEY. It accepts the key via X-Test-Api-Key
+// or Authorization: Bearer <key>.
+func testAuthMiddleware(testKey string) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		provided := c.Get("X-Test-Api-Key")
+		if provided == "" {
+			if authz := c.Get("Authorization"); strings.HasPrefix(authz, "Bearer ") {
+				provided = strings.TrimPrefix(authz, "Bearer ")
+			}
+		}
+		if provided == "" || subtle.ConstantTimeCompare([]byte(provided), []byte(testKey)) != 1 {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"ok":     false,
+				"reason": "unauthorized",
+			})
+		}
+		return c.Next()
+	}
+}
 
 // NewRouter creates and configures a new Fiber router
 // It initializes Redis client from config
@@ -52,6 +78,12 @@ func NewRouterWithClient(redisClient *redis.Client, log *logger.Logger) *fiber.A
 func NewRouterWithClientAndHandlers(redisClient *redis.Client, log *logger.Logger) *RouterWithHandlers {
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: true,
+		// Server hardening: cap request body size and enforce timeouts so a slow
+		// or oversized client cannot exhaust resources.
+		BodyLimit:    config.MaxBodyBytes,
+		ReadTimeout:  config.ReadTimeout,
+		WriteTimeout: config.WriteTimeout,
+		IdleTimeout:  config.IdleTimeout,
 	})
 
 	// Middleware
@@ -60,7 +92,7 @@ func NewRouterWithClientAndHandlers(redisClient *redis.Client, log *logger.Logge
 	// Request logging using logger-kit
 	app.Use(logger.FiberMiddleware(logger.MiddlewareConfig{
 		Logger:           log,
-		SkipPaths:        []string{"/healthz", "/metrics"},
+		SkipPaths:        []string{"/healthz", "/metrics", "/livez", "/readyz"},
 		IncludeRequestID: true,
 		IncludeLatency:   true,
 	}))
@@ -71,22 +103,20 @@ func NewRouterWithClientAndHandlers(redisClient *redis.Client, log *logger.Logge
 		log.Info().Msg("OpenTelemetry tracing middleware enabled")
 	}
 
-	app.Use(cors.New(cors.Config{
-		AllowOrigins: "*",
-		AllowMethods: "GET,POST,OPTIONS",
-		AllowHeaders: "Content-Type,Authorization,X-Service,X-Signature,X-Timestamp,X-API-Key,traceparent,tracestate",
-	}))
-
-	// Initialize session manager if enabled (uses session-kit Store + KVManager)
-	var sessionManager *sessionkit.KVManager
-	if config.SessionStorageEnabled {
-		store := sessionkit.NewRedisStore(redisClient, config.SessionKeyPrefix)
-		sessionManager = sessionkit.NewKVManager(store, config.SessionDefaultTTL)
-		log.Info().Msg("Session storage manager initialized")
+	// CORS is disabled by default. Only enable it when an explicit origin
+	// allowlist is configured; a wildcard is rejected by config.Validate() in
+	// production so it can never be enabled there.
+	if origins := strings.TrimSpace(config.CORSAllowOrigins); origins != "" {
+		app.Use(cors.New(cors.Config{
+			AllowOrigins: origins,
+			AllowMethods: "GET,POST,OPTIONS",
+			AllowHeaders: "Content-Type,Authorization,X-Service,X-Signature,X-Signature-Version,X-Timestamp,X-Nonce,X-Key-Id,X-API-Key,Idempotency-Key,traceparent,tracestate",
+		}))
+		log.Info().Str("origins", origins).Msg("CORS enabled with explicit allowlist")
 	}
 
 	// Initialize handlers
-	h := handlers.NewHandlers(redisClient, sessionManager, log)
+	h := handlers.NewHandlers(redisClient, log)
 
 	// Health check using health-kit
 	healthConfig := health.DefaultConfig().WithServiceName(config.ServiceName)
@@ -94,28 +124,88 @@ func NewRouterWithClientAndHandlers(redisClient *redis.Client, log *logger.Logge
 	healthAggregator.AddChecker(health.NewRedisChecker(redisClient))
 	app.Get("/healthz", health.FiberHandler(healthAggregator))
 
+	// Liveness: the process is up and able to serve. Never touches dependencies
+	// so a transient Redis outage cannot cause the orchestrator to kill the pod.
+	app.Get("/livez", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"ok": true, "status": "live"})
+	})
+
+	// Readiness: only ready to receive traffic when the OTP backend (Redis) is
+	// reachable. Fail closed (503) on backend errors so load balancers stop
+	// routing to an instance that cannot serve OTP requests.
+	app.Get("/readyz", func(c *fiber.Ctx) error {
+		ctx, cancel := context.WithTimeout(c.UserContext(), 2*time.Second)
+		defer cancel()
+		if err := redisClient.Ping(ctx).Err(); err != nil {
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+				"ok":     false,
+				"status": "not_ready",
+				"reason": "redis_unreachable",
+			})
+		}
+		return c.JSON(fiber.Map{"ok": true, "status": "ready"})
+	})
+
 	// Prometheus metrics endpoint
 	app.Get("/metrics", metricskit.FiberHandlerFor(metrics.Registry))
 
-	// Test mode endpoint (only available when HERALD_TEST_MODE=true)
-	if config.TestMode {
-		app.Get("/v1/test/code/:challenge_id", h.GetTestCode)
+	// Test mode endpoint: only mounted when the combined test-environment +
+	// test-mode switch is on, and always guarded by a dedicated test API key
+	// (HERALD_TEST_API_KEY). It is never reachable in development or production,
+	// nor without the test key. Operators should additionally bind this on a
+	// loopback/admin listener (see config.TestListenerAddr).
+	if config.TestCodeExposureEnabled() {
+		if config.TestAPIKey == "" {
+			log.Error().Msg("Test-code endpoint requested but HERALD_TEST_API_KEY is empty; refusing to mount it")
+		} else {
+			app.Get("/v1/test/code/:challenge_id", testAuthMiddleware(config.TestAPIKey), h.GetTestCode)
+			log.Warn().Msg("Test-code endpoint mounted (test environment only, guarded by HERALD_TEST_API_KEY)")
+		}
 	}
 
 	// API routes
 	api := app.Group("/v1")
 
-	// Create authentication middleware using middleware-kit
+	// Request authentication policy (Phase 4). Herald owns the policy so that:
+	//   - HMAC v2 is replay-resistant (canonical binding + single-use nonce),
+	//   - there is no silent HMAC -> API-key downgrade,
+	//   - client-cert (mTLS) handling is independent of request-body auth.
 	zerologLogger := log.Zerolog()
-	authHandler := middlewarekit.CombinedAuth(middlewarekit.AuthConfig{
-		HMACConfig: &middlewarekit.HMACConfig{
-			KeyProvider: config.GetHMACSecret,
-		},
-		APIKeyConfig: &middlewarekit.APIKeyConfig{
-			APIKey: config.APIKey,
-		},
-		AllowNoAuth: config.APIKey == "" && config.HMACSecret == "" && !config.HasHMACKeys(),
-		Logger:      &zerologLogger,
+	authMode := auth.ParseMode(config.RequestAuthMode)
+
+	// Legacy v1 handler (middleware-kit) is only constructed when explicitly
+	// enabled for a migration cycle.
+	var v1Handler fiber.Handler
+	if config.HMACV1Enabled {
+		v1Handler = middlewarekit.HMACAuth(middlewarekit.HMACConfig{
+			KeyProvider:  config.GetHMACSecret,
+			MaxTimeDrift: config.HMACMaxDrift,
+			Logger:       &zerologLogger,
+		})
+		log.Warn().Msg("HMAC v1 is enabled (deprecated); disable HMAC_V1_ENABLED after migration")
+	}
+
+	// Determine the effective default key id. With a single HMAC_SECRET (no
+	// multi-key map) an explicit X-Key-Id is not required, so we supply a
+	// stable implicit default. With a multi-key map, config.HMACDefaultKeyID
+	// governs (empty => X-Key-Id mandatory).
+	defaultKeyID := config.HMACDefaultKeyID
+	if defaultKeyID == "" && !config.HasHMACKeys() && config.HMACSecret != "" {
+		defaultKeyID = "default"
+	}
+
+	nonceStore := auth.NewNonceStore(redisClient, config.NonceStorePrefix, []byte(config.IdempotencySecret), config.HMACMaxDrift+30*time.Second)
+	authHandler := auth.New(auth.Config{
+		Mode:         authMode,
+		KeyProvider:  config.GetHMACSecret,
+		DefaultKeyID: defaultKeyID,
+		APIKey:       config.APIKey,
+		NonceStore:   nonceStore,
+		MaxDrift:     config.HMACMaxDrift,
+		V1Enabled:    config.HMACV1Enabled,
+		V1Handler:    v1Handler,
+		FailClosed:   config.IsProduction(),
+		Logger:       &zerologLogger,
 	})
 
 	// OTP routes
@@ -123,6 +213,12 @@ func NewRouterWithClientAndHandlers(redisClient *redis.Client, log *logger.Logge
 	otp.Post("/challenges", authHandler, h.CreateChallenge)
 	otp.Post("/verifications", authHandler, h.VerifyChallenge)
 	otp.Post("/challenges/:id/revoke", authHandler, h.RevokeChallenge)
+
+	// v2 OTP routes: context-bound verification. v1 is kept for backward
+	// compatibility; new integrations should prefer v2.
+	apiV2 := app.Group("/v2")
+	otpV2 := apiV2.Group("/otp")
+	otpV2.Post("/verifications", authHandler, h.VerifyChallengeV2)
 
 	// TOTP proxy routes (forward to herald-totp when HERALD_TOTP_ENABLED and HERALD_TOTP_BASE_URL are set)
 	totp := api.Group("/totp")
