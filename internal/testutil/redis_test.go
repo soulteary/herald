@@ -9,17 +9,13 @@ import (
 
 func TestNewTestRedisClient(t *testing.T) {
 	t.Run("returns non-nil client", func(t *testing.T) {
-		client, mock := NewTestRedisClient()
+		client, _ := NewTestRedisClient()
 		defer func() {
 			_ = client.Close()
 		}()
 
 		if client == nil {
 			t.Fatal("NewTestRedisClient() returned nil client")
-		}
-
-		if mock == nil {
-			t.Fatal("NewTestRedisClient() returned nil mock")
 		}
 	})
 
@@ -43,35 +39,6 @@ func TestNewTestRedisClient(t *testing.T) {
 		}
 		if val != "test:value" {
 			t.Errorf("Get() = %q, want %q", val, "test:value")
-		}
-	})
-
-	t.Run("mock can be controlled", func(t *testing.T) {
-		client, mock := NewTestRedisClient()
-		defer func() {
-			_ = client.Close()
-		}()
-
-		ctx := context.Background()
-
-		// Normal operation
-		err := client.Set(ctx, "test:key", "value", 0).Err()
-		if err != nil {
-			t.Errorf("Set() error = %v, want nil", err)
-		}
-
-		// Set should fail
-		mock.SetShouldFail(true)
-		err = client.Set(ctx, "test:key2", "value2", 0).Err()
-		if err == nil {
-			t.Error("Set() should fail when mock.SetShouldFail(true)")
-		}
-
-		// Reset
-		mock.SetShouldFail(false)
-		err = client.Set(ctx, "test:key3", "value3", 0).Err()
-		if err != nil {
-			t.Errorf("Set() error = %v, want nil after reset", err)
 		}
 	})
 

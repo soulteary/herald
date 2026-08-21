@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
+	"flag"
+	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -16,6 +18,7 @@ import (
 
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/router"
+	"github.com/soulteary/herald/internal/server"
 	rediskit "github.com/soulteary/redis-kit/client"
 	"github.com/soulteary/tracing-kit"
 )
@@ -36,6 +39,49 @@ func showBanner() {
 }
 
 func main() {
+	// -healthcheck performs a lightweight self-probe against the local /livez
+	// endpoint and exits 0/1. This lets the container healthcheck use the
+	// shipped binary instead of adding curl to the runtime image.
+	healthcheck := flag.Bool("healthcheck", false, "probe local /livez and exit")
+	flag.Parse()
+	if *healthcheck {
+		os.Exit(runHealthcheck())
+	}
+
+	if err := run(); err != nil {
+		if log != nil {
+			log.Fatal().Err(err).Msg("Herald exited with error")
+		}
+		os.Exit(1)
+	}
+}
+
+// runHealthcheck probes the local liveness endpoint and returns a process exit
+// code (0 healthy, 1 unhealthy). It derives the port from the same config the
+// server uses so it works regardless of PORT overrides.
+func runHealthcheck() int {
+	port := config.GetPort()
+	// GetPort returns forms like ":8082"; build a loopback URL.
+	host := "127.0.0.1" + port
+	if _, p, err := net.SplitHostPort(port); err == nil && p != "" {
+		host = "127.0.0.1:" + p
+	}
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(fmt.Sprintf("http://%s/livez", host))
+	if err != nil {
+		return 1
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return 1
+	}
+	return 0
+}
+
+// run wires up dependencies and blocks until shutdown. Returning an error here
+// (instead of calling log.Fatal deep in the stack) keeps startup failures
+// testable and shutdown ordering in one place.
+func run() error {
 	// Display startup banner
 	showBanner()
 
@@ -47,33 +93,17 @@ func main() {
 		ServiceVersion: version.Version,
 	})
 
-	// Initialize configuration
+	// Initialize configuration (fails closed on invalid production config)
 	if err := config.Initialize(log); err != nil {
-		log.Fatal().Err(err).Msg("Failed to initialize configuration")
+		return err
 	}
 
 	// Initialize OpenTelemetry tracing if enabled
 	if config.OTLPEnabled {
-		_, err := tracing.InitTracer(
-			config.ServiceName,
-			version.Version,
-			config.OTLPEndpoint,
-		)
-		if err != nil {
+		if _, err := tracing.InitTracer(config.ServiceName, version.Version, config.OTLPEndpoint); err != nil {
 			log.Warn().Err(err).Msg("Failed to initialize OpenTelemetry tracing")
 		} else {
 			log.Info().Msg("OpenTelemetry tracing initialized")
-			// Setup graceful shutdown for tracer
-			go func() {
-				sigChan := make(chan os.Signal, 1)
-				signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-				<-sigChan
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				if err := tracing.Shutdown(ctx); err != nil {
-					log.Error().Err(err).Msg("Failed to shutdown tracer")
-				}
-			}()
 		}
 	}
 
@@ -85,130 +115,43 @@ func main() {
 
 	redisClient, err := rediskit.NewClient(cfg)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to connect to Redis")
+		return err
 	}
 
-	// Create and start server
 	routerWithHandlers := router.NewRouterWithClientAndHandlers(redisClient, log)
-	app := routerWithHandlers.App
 	port := config.GetPort()
 
-	// Check if TLS is configured
-	if config.TLSCertFile != "" && config.TLSKeyFile != "" {
+	srv, err := server.New(routerWithHandlers.App, server.Config{
+		Addr:            port,
+		TLSCertFile:     config.TLSCertFile,
+		TLSKeyFile:      config.TLSKeyFile,
+		TLSClientCAFile: config.TLSCACertFile,
+		Logger:          log,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Shutdown ordering: flush audit writer, then shut down the tracer.
+	if routerWithHandlers.Handlers != nil {
+		srv.OnShutdown(func(context.Context) error {
+			return routerWithHandlers.Handlers.StopAuditWriter()
+		})
+	}
+	if config.OTLPEnabled {
+		srv.OnShutdown(func(ctx context.Context) error {
+			return tracing.Shutdown(ctx)
+		})
+	}
+
+	if srv.TLSEnabled() {
 		log.Info().Str("port", port).Msg("Herald service starting with TLS")
-
-		// Load server certificate
-		cert, err := tls.LoadX509KeyPair(config.TLSCertFile, config.TLSKeyFile)
-		if err != nil {
-			log.Fatal().Err(err).Msg("Failed to load TLS certificate")
-		}
-
-		// Configure TLS
-		tlsConfig := &tls.Config{
-			Certificates: []tls.Certificate{cert},
-			MinVersion:   tls.VersionTLS12,
-		}
-
-		// Configure mTLS if CA certificate is provided
-		if config.TLSCACertFile != "" {
-			log.Info().Msg("mTLS enabled: client certificate verification required")
-
-			// Load CA certificate for client verification
-			caCert, err := os.ReadFile(config.TLSCACertFile)
-			if err != nil {
-				log.Fatal().Err(err).Msg("Failed to read CA certificate")
-			}
-
-			caCertPool := x509.NewCertPool()
-			if !caCertPool.AppendCertsFromPEM(caCert) {
-				log.Fatal().Msg("Failed to parse CA certificate")
-			}
-
-			tlsConfig.ClientCAs = caCertPool
-			// Require client certificates (but allow fallback to HMAC/API Key if not provided)
-			tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
-		}
-
-		// Start server with TLS
-		ln, err := tls.Listen("tcp", port, tlsConfig)
-		if err != nil {
-			log.Fatal().Err(err).Msg("Failed to start TLS listener")
-		}
-
-		// Setup graceful shutdown
-		sigChan := make(chan os.Signal, 1)
-		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
-		serverErr := make(chan error, 1)
-		go func() {
-			serverErr <- app.Listener(ln)
-		}()
-
-		// Wait for server error or shutdown signal
-		select {
-		case err := <-serverErr:
-			if err != nil {
-				log.Fatal().Err(err).Msg("Failed to start server")
-			}
-		case sig := <-sigChan:
-			log.Info().Str("signal", sig.String()).Msg("Received signal, shutting down gracefully...")
-
-			// Shutdown audit writer
-			if routerWithHandlers.Handlers != nil {
-				if err := routerWithHandlers.Handlers.StopAuditWriter(); err != nil {
-					log.Error().Err(err).Msg("Failed to shutdown audit writer")
-				}
-			}
-
-			// Shutdown tracer
-			if config.OTLPEnabled {
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				if err := tracing.Shutdown(ctx); err != nil {
-					log.Error().Err(err).Msg("Failed to shutdown tracer")
-				}
-			}
-
-			log.Info().Msg("Herald service stopped")
-		}
 	} else {
 		log.Info().Str("port", port).Msg("Herald service starting")
-
-		// Setup graceful shutdown
-		sigChan := make(chan os.Signal, 1)
-		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
-		serverErr := make(chan error, 1)
-		go func() {
-			serverErr <- app.Listen(port)
-		}()
-
-		// Wait for server error or shutdown signal
-		select {
-		case err := <-serverErr:
-			if err != nil {
-				log.Fatal().Err(err).Msg("Failed to start server")
-			}
-		case sig := <-sigChan:
-			log.Info().Str("signal", sig.String()).Msg("Received signal, shutting down gracefully...")
-
-			// Shutdown audit writer
-			if routerWithHandlers.Handlers != nil {
-				if err := routerWithHandlers.Handlers.StopAuditWriter(); err != nil {
-					log.Error().Err(err).Msg("Failed to shutdown audit writer")
-				}
-			}
-
-			// Shutdown tracer
-			if config.OTLPEnabled {
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				if err := tracing.Shutdown(ctx); err != nil {
-					log.Error().Err(err).Msg("Failed to shutdown tracer")
-				}
-			}
-
-			log.Info().Msg("Herald service stopped")
-		}
 	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	return srv.Run(ctx)
 }
