@@ -162,6 +162,16 @@ jobs:
           exit-code: '0'          # report-only for now; flip to '1' to gate merges
           ignore-unfixed: true
           severity: HIGH,CRITICAL
+          # Pin a Trivy version whose release assets exist. The action's own
+          # default (v0.64.1) — plus v0.66.0/v0.68.0 — have had their Linux
+          # binaries yanked upstream, so setup-trivy resolves the tag then dies
+          # with a bare "exit code 1" on the missing asset download
+          # (aquasecurity/trivy-action#516). v0.74.0 assets are present.
+          version: v0.74.0
+          # Authenticate setup-trivy's GitHub API/download calls to avoid the
+          # anonymous shared-IP rate limiting that can also surface as exit 1.
+          token-setup-trivy: ${{ secrets.GITHUB_TOKEN }}
+          cache: true
 
   compose-smoke:
     name: Compose Smoke + Config Startup Failure
