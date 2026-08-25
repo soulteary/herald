@@ -4,14 +4,14 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 func TestTracingMiddleware(t *testing.T) {
 	t.Run("creates span", func(t *testing.T) {
 		app := fiber.New()
 		app.Use(TracingMiddleware("test-service"))
-		app.Get("/test", func(c *fiber.Ctx) error {
+		app.Get("/test", func(c fiber.Ctx) error {
 			// Verify span is in context
 			span := c.Locals("trace_span")
 			if span == nil {
@@ -39,7 +39,7 @@ func TestTracingMiddleware(t *testing.T) {
 	t.Run("extracts trace context", func(t *testing.T) {
 		app := fiber.New()
 		app.Use(TracingMiddleware("test-service"))
-		app.Get("/test", func(c *fiber.Ctx) error {
+		app.Get("/test", func(c fiber.Ctx) error {
 			return c.SendString("OK")
 		})
 
@@ -59,7 +59,7 @@ func TestTracingMiddleware(t *testing.T) {
 	t.Run("injects trace context", func(t *testing.T) {
 		app := fiber.New()
 		app.Use(TracingMiddleware("test-service"))
-		app.Get("/test", func(c *fiber.Ctx) error {
+		app.Get("/test", func(c fiber.Ctx) error {
 			return c.SendString("OK")
 		})
 
@@ -80,7 +80,7 @@ func TestTracingMiddleware(t *testing.T) {
 	t.Run("sets HTTP attributes", func(t *testing.T) {
 		app := fiber.New()
 		app.Use(TracingMiddleware("test-service"))
-		app.Get("/test", func(c *fiber.Ctx) error {
+		app.Get("/test", func(c fiber.Ctx) error {
 			return c.SendString("OK")
 		})
 
@@ -100,7 +100,7 @@ func TestTracingMiddleware(t *testing.T) {
 	t.Run("handles error", func(t *testing.T) {
 		app := fiber.New()
 		app.Use(TracingMiddleware("test-service"))
-		app.Get("/test", func(c *fiber.Ctx) error {
+		app.Get("/test", func(c fiber.Ctx) error {
 			return fiber.NewError(500, "test error")
 		})
 
@@ -119,7 +119,7 @@ func TestTracingMiddleware(t *testing.T) {
 	t.Run("handles 4xx status code", func(t *testing.T) {
 		app := fiber.New()
 		app.Use(TracingMiddleware("test-service"))
-		app.Get("/test", func(c *fiber.Ctx) error {
+		app.Get("/test", func(c fiber.Ctx) error {
 			return c.Status(404).SendString("Not Found")
 		})
 
@@ -138,7 +138,7 @@ func TestTracingMiddleware(t *testing.T) {
 	t.Run("uses route path for span name", func(t *testing.T) {
 		app := fiber.New()
 		app.Use(TracingMiddleware("test-service"))
-		app.Get("/api/v1/users/:id", func(c *fiber.Ctx) error {
+		app.Get("/api/v1/users/:id", func(c fiber.Ctx) error {
 			return c.SendString("OK")
 		})
 
@@ -157,7 +157,7 @@ func TestTracingMiddleware(t *testing.T) {
 	t.Run("uses method and URL when no route", func(t *testing.T) {
 		app := fiber.New()
 		app.Use(TracingMiddleware("test-service"))
-		app.Get("/*", func(c *fiber.Ctx) error {
+		app.Get("/*", func(c fiber.Ctx) error {
 			return c.SendString("OK")
 		})
 

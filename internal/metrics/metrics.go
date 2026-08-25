@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	metrics "github.com/soulteary/metrics-kit"
+	metrics "github.com/soulteary/metrics-kit/v2"
 )
 
 var (

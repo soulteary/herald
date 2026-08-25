@@ -7,7 +7,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	audit "github.com/soulteary/audit-kit"
-	logger "github.com/soulteary/logger-kit"
+	logger "github.com/soulteary/logger-kit/v2"
 
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/metrics"

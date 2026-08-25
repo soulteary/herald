@@ -10,7 +10,7 @@ import (
 
 	"github.com/soulteary/cli-kit/env"
 	"github.com/soulteary/cli-kit/validator"
-	logger "github.com/soulteary/logger-kit"
+	logger "github.com/soulteary/logger-kit/v2"
 	secure "github.com/soulteary/secure-kit"
 )
 

@@ -6,14 +6,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/cors"
+	"github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/redis/go-redis/v9"
-	health "github.com/soulteary/health-kit"
-	logger "github.com/soulteary/logger-kit"
-	metricskit "github.com/soulteary/metrics-kit"
-	middlewarekit "github.com/soulteary/middleware-kit"
+	health "github.com/soulteary/health-kit/v2"
+	logger "github.com/soulteary/logger-kit/v2"
+	metricskit "github.com/soulteary/metrics-kit/v2"
+	middlewarekit "github.com/soulteary/middleware-kit/v2"
 	rediskit "github.com/soulteary/redis-kit/client"
 
 	"github.com/soulteary/herald/internal/auth"
@@ -27,7 +27,7 @@ import (
 // comparison against HERALD_TEST_API_KEY. It accepts the key via X-Test-Api-Key
 // or Authorization: Bearer <key>.
 func testAuthMiddleware(testKey string) fiber.Handler {
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		provided := c.Get("X-Test-Api-Key")
 		if provided == "" {
 			if authz := c.Get("Authorization"); strings.HasPrefix(authz, "Bearer ") {
@@ -77,7 +77,6 @@ func NewRouterWithClient(redisClient *redis.Client, log *logger.Logger) *fiber.A
 // NewRouterWithClientAndHandlers creates a router with handlers for graceful shutdown
 func NewRouterWithClientAndHandlers(redisClient *redis.Client, log *logger.Logger) *RouterWithHandlers {
 	app := fiber.New(fiber.Config{
-		DisableStartupMessage: true,
 		// Server hardening: cap request body size and enforce timeouts so a slow
 		// or oversized client cannot exhaust resources.
 		BodyLimit:    config.MaxBodyBytes,
@@ -107,10 +106,14 @@ func NewRouterWithClientAndHandlers(redisClient *redis.Client, log *logger.Logge
 	// allowlist is configured; a wildcard is rejected by config.Validate() in
 	// production so it can never be enabled there.
 	if origins := strings.TrimSpace(config.CORSAllowOrigins); origins != "" {
+		allowedOrigins := strings.Split(origins, ",")
+		for i := range allowedOrigins {
+			allowedOrigins[i] = strings.TrimSpace(allowedOrigins[i])
+		}
 		app.Use(cors.New(cors.Config{
-			AllowOrigins: origins,
-			AllowMethods: "GET,POST,OPTIONS",
-			AllowHeaders: "Content-Type,Authorization,X-Service,X-Signature,X-Signature-Version,X-Timestamp,X-Nonce,X-Key-Id,X-API-Key,Idempotency-Key,traceparent,tracestate",
+			AllowOrigins: allowedOrigins,
+			AllowMethods: []string{"GET", "POST", "OPTIONS"},
+			AllowHeaders: []string{"Content-Type", "Authorization", "X-Service", "X-Signature", "X-Signature-Version", "X-Timestamp", "X-Nonce", "X-Key-Id", "X-API-Key", "Idempotency-Key", "traceparent", "tracestate"},
 		}))
 		log.Info().Str("origins", origins).Msg("CORS enabled with explicit allowlist")
 	}
@@ -126,15 +129,15 @@ func NewRouterWithClientAndHandlers(redisClient *redis.Client, log *logger.Logge
 
 	// Liveness: the process is up and able to serve. Never touches dependencies
 	// so a transient Redis outage cannot cause the orchestrator to kill the pod.
-	app.Get("/livez", func(c *fiber.Ctx) error {
+	app.Get("/livez", func(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{"ok": true, "status": "live"})
 	})
 
 	// Readiness: only ready to receive traffic when the OTP backend (Redis) is
 	// reachable. Fail closed (503) on backend errors so load balancers stop
 	// routing to an instance that cannot serve OTP requests.
-	app.Get("/readyz", func(c *fiber.Ctx) error {
-		ctx, cancel := context.WithTimeout(c.UserContext(), 2*time.Second)
+	app.Get("/readyz", func(c fiber.Ctx) error {
+		ctx, cancel := context.WithTimeout(c.Context(), 2*time.Second)
 		defer cancel()
 		if err := redisClient.Ping(ctx).Err(); err != nil {
 			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{

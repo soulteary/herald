@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	audit "github.com/soulteary/audit-kit"
-	logger "github.com/soulteary/logger-kit"
+	logger "github.com/soulteary/logger-kit/v2"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/soulteary/herald/internal/config"

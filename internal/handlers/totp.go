@@ -3,7 +3,7 @@ package handlers
 import (
 	"context"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 
 	"github.com/soulteary/herald-totp/pkg/heraldtotp"
 )
@@ -23,7 +23,7 @@ func (h *Handlers) maskSubject(subject string) string {
 }
 
 // TOTPStatus proxies GET /v1/totp/status to herald-totp.
-func (h *Handlers) TOTPStatus(c *fiber.Ctx) error {
+func (h *Handlers) TOTPStatus(c fiber.Ctx) error {
 	if h.totpClient == nil {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
 			"ok":     false,
@@ -38,7 +38,7 @@ func (h *Handlers) TOTPStatus(c *fiber.Ctx) error {
 			"error":  "subject required",
 		})
 	}
-	ctx := c.UserContext()
+	ctx := c.Context()
 	if v := c.Locals("trace_context"); v != nil {
 		if cc, ok := v.(context.Context); ok {
 			ctx = cc
@@ -56,7 +56,7 @@ func (h *Handlers) TOTPStatus(c *fiber.Ctx) error {
 }
 
 // TOTPVerify proxies POST /v1/totp/verify to herald-totp.
-func (h *Handlers) TOTPVerify(c *fiber.Ctx) error {
+func (h *Handlers) TOTPVerify(c fiber.Ctx) error {
 	if h.totpClient == nil {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
 			"ok":     false,
@@ -64,7 +64,7 @@ func (h *Handlers) TOTPVerify(c *fiber.Ctx) error {
 		})
 	}
 	var req heraldtotp.VerifyRequest
-	if err := c.BodyParser(&req); err != nil {
+	if err := c.Bind().Body(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "invalid_request",
@@ -77,7 +77,7 @@ func (h *Handlers) TOTPVerify(c *fiber.Ctx) error {
 			"error":  "subject and code required",
 		})
 	}
-	ctx := c.UserContext()
+	ctx := c.Context()
 	if v := c.Locals("trace_context"); v != nil {
 		if cc, ok := v.(context.Context); ok {
 			ctx = cc
@@ -99,7 +99,7 @@ func (h *Handlers) TOTPVerify(c *fiber.Ctx) error {
 }
 
 // TOTPEnrollStart proxies POST /v1/totp/enroll/start to herald-totp.
-func (h *Handlers) TOTPEnrollStart(c *fiber.Ctx) error {
+func (h *Handlers) TOTPEnrollStart(c fiber.Ctx) error {
 	if h.totpClient == nil {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
 			"ok":     false,
@@ -107,7 +107,7 @@ func (h *Handlers) TOTPEnrollStart(c *fiber.Ctx) error {
 		})
 	}
 	var req heraldtotp.EnrollStartRequest
-	if err := c.BodyParser(&req); err != nil {
+	if err := c.Bind().Body(&req); err != nil {
 		// Never echo the enroll body/error: it may contain a label or subject.
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"ok":     false,
@@ -121,7 +121,7 @@ func (h *Handlers) TOTPEnrollStart(c *fiber.Ctx) error {
 			"error":  "subject required",
 		})
 	}
-	ctx := c.UserContext()
+	ctx := c.Context()
 	if v := c.Locals("trace_context"); v != nil {
 		if cc, ok := v.(context.Context); ok {
 			ctx = cc
@@ -140,7 +140,7 @@ func (h *Handlers) TOTPEnrollStart(c *fiber.Ctx) error {
 }
 
 // TOTPEnrollConfirm proxies POST /v1/totp/enroll/confirm to herald-totp.
-func (h *Handlers) TOTPEnrollConfirm(c *fiber.Ctx) error {
+func (h *Handlers) TOTPEnrollConfirm(c fiber.Ctx) error {
 	if h.totpClient == nil {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
 			"ok":     false,
@@ -148,7 +148,7 @@ func (h *Handlers) TOTPEnrollConfirm(c *fiber.Ctx) error {
 		})
 	}
 	var req heraldtotp.EnrollConfirmRequest
-	if err := c.BodyParser(&req); err != nil {
+	if err := c.Bind().Body(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "invalid_request",
@@ -161,7 +161,7 @@ func (h *Handlers) TOTPEnrollConfirm(c *fiber.Ctx) error {
 			"error":  "enroll_id and code required",
 		})
 	}
-	ctx := c.UserContext()
+	ctx := c.Context()
 	if v := c.Locals("trace_context"); v != nil {
 		if cc, ok := v.(context.Context); ok {
 			ctx = cc
@@ -181,7 +181,7 @@ func (h *Handlers) TOTPEnrollConfirm(c *fiber.Ctx) error {
 }
 
 // TOTPRevoke proxies POST /v1/totp/revoke to herald-totp.
-func (h *Handlers) TOTPRevoke(c *fiber.Ctx) error {
+func (h *Handlers) TOTPRevoke(c fiber.Ctx) error {
 	if h.totpClient == nil {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
 			"ok":     false,
@@ -191,7 +191,7 @@ func (h *Handlers) TOTPRevoke(c *fiber.Ctx) error {
 	var req struct {
 		Subject string `json:"subject"`
 	}
-	if err := c.BodyParser(&req); err != nil {
+	if err := c.Bind().Body(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "invalid_request",
@@ -204,7 +204,7 @@ func (h *Handlers) TOTPRevoke(c *fiber.Ctx) error {
 			"error":  "subject required",
 		})
 	}
-	ctx := c.UserContext()
+	ctx := c.Context()
 	if v := c.Locals("trace_context"); v != nil {
 		if cc, ok := v.(context.Context); ok {
 			ctx = cc

@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	logger "github.com/soulteary/logger-kit"
+	logger "github.com/soulteary/logger-kit/v2"
 )
 
 func TestLoggerKitParseLevelFromEnv(t *testing.T) {

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	provider "github.com/soulteary/provider-kit"
 
 	"github.com/soulteary/herald/internal/config"
@@ -58,7 +58,7 @@ func newClientIPApp(t *testing.T, perIP int) *fiber.App {
 func postChallengeIP(app *fiber.App, body string) (int, []byte) {
 	req := httptest.NewRequest("POST", "/v1/otp/challenges", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req, 5000)
+	resp, _ := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 	b, _ := io.ReadAll(resp.Body)
 	return resp.StatusCode, b
 }
