@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/redis/go-redis/v9"
-	logger "github.com/soulteary/logger-kit"
+	logger "github.com/soulteary/logger-kit/v2"
 	rediskitcache "github.com/soulteary/redis-kit/cache"
 	secure "github.com/soulteary/secure-kit"
 	"go.opentelemetry.io/otel/attribute"
@@ -232,7 +232,7 @@ type IdempotencyRecord struct {
 }
 
 // CreateChallenge handles challenge creation
-func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
+func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 	// Get trace context from middleware
 	ctx := c.Locals("trace_context")
 	if ctx == nil {
@@ -660,7 +660,7 @@ func (h *Handlers) CreateChallenge(c *fiber.Ctx) error {
 // idempotencyPrincipal derives a per-caller principal for idempotency
 // namespacing from the authenticated service/key headers, falling back to the
 // client IP when unauthenticated. It never returns an empty string.
-func idempotencyPrincipal(c *fiber.Ctx) string {
+func idempotencyPrincipal(c fiber.Ctx) string {
 	svc := c.Get("X-Service")
 	keyID := c.Get("X-Key-Id")
 	if svc != "" || keyID != "" {
@@ -690,7 +690,7 @@ type VerifyChallengeRequest struct {
 }
 
 // VerifyChallenge handles challenge verification
-func (h *Handlers) VerifyChallenge(c *fiber.Ctx) error {
+func (h *Handlers) VerifyChallenge(c fiber.Ctx) error {
 	ctx := c.Context()
 
 	var req VerifyChallengeRequest
@@ -829,7 +829,7 @@ type VerifyChallengeV2Request struct {
 }
 
 // VerifyChallengeV2 handles context-bound challenge verification.
-func (h *Handlers) VerifyChallengeV2(c *fiber.Ctx) error {
+func (h *Handlers) VerifyChallengeV2(c fiber.Ctx) error {
 	ctx := c.Context()
 
 	var req VerifyChallengeV2Request
@@ -933,7 +933,7 @@ func (h *Handlers) VerifyChallengeV2(c *fiber.Ctx) error {
 }
 
 // RevokeChallenge handles challenge revocation
-func (h *Handlers) RevokeChallenge(c *fiber.Ctx) error {
+func (h *Handlers) RevokeChallenge(c fiber.Ctx) error {
 	// Get trace context from middleware
 	traceCtx := c.Locals("trace_context")
 	if traceCtx == nil {
@@ -968,7 +968,7 @@ func (h *Handlers) RevokeChallenge(c *fiber.Ctx) error {
 
 // GetTestCode retrieves the verification code for a challenge in test mode
 // This endpoint is only available when HERALD_TEST_MODE=true
-func (h *Handlers) GetTestCode(c *fiber.Ctx) error {
+func (h *Handlers) GetTestCode(c fiber.Ctx) error {
 	if !config.TestCodeExposureEnabled() {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"ok":     false,

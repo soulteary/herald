@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	provider "github.com/soulteary/provider-kit"
 
 	"github.com/soulteary/herald/internal/config"
@@ -60,7 +60,7 @@ func newDeliveryApp(t *testing.T, policy string) *fiber.App {
 func postChallenge(app *fiber.App, body string) *fiberTestResp {
 	req := httptest.NewRequest("POST", "/v1/otp/challenges", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req, 5000)
+	resp, _ := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 	b, _ := io.ReadAll(resp.Body)
 	return &fiberTestResp{status: resp.StatusCode, body: b}
 }

@@ -16,8 +16,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
-	logger "github.com/soulteary/logger-kit"
+	"github.com/gofiber/fiber/v3"
+	logger "github.com/soulteary/logger-kit/v2"
 )
 
 // ShutdownHook runs during graceful shutdown. Hooks run in registration order
@@ -132,7 +132,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 	serveErr := make(chan error, 1)
 	go func() {
-		serveErr <- s.app.Listener(ln)
+		serveErr <- s.app.Listener(ln, fiber.ListenConfig{DisableStartupMessage: true})
 	}()
 
 	select {

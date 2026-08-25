@@ -13,8 +13,8 @@ import (
 
 	"github.com/pterm/pterm"
 	"github.com/pterm/pterm/putils"
-	logger "github.com/soulteary/logger-kit"
-	version "github.com/soulteary/version-kit"
+	logger "github.com/soulteary/logger-kit/v2"
+	version "github.com/soulteary/version-kit/v2"
 
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/router"

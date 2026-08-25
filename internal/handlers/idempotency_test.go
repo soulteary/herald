@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	provider "github.com/soulteary/provider-kit"
 
 	"github.com/soulteary/herald/internal/config"
@@ -70,7 +70,7 @@ func idemRequest(app *fiber.App, key, body string) (*fiberTestResp, error) {
 	if key != "" {
 		req.Header.Set("Idempotency-Key", key)
 	}
-	resp, err := app.Test(req, 5000)
+	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +161,7 @@ func TestIdempotency_DifferentPrincipalsIsolated(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Idempotency-Key", "shared-key")
 		req.Header.Set("X-Service", service)
-		resp, _ := app.Test(req, 5000)
+		resp, _ := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
 		b, _ := io.ReadAll(resp.Body)
 		return &fiberTestResp{status: resp.StatusCode, body: b}
 	}

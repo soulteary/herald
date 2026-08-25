@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 
 	"github.com/soulteary/herald/internal/auth"
 	"github.com/soulteary/herald/internal/config"

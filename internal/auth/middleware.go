@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/rs/zerolog"
 	"github.com/soulteary/herald/internal/metrics"
 )
@@ -76,7 +76,7 @@ type Config struct {
 	Logger *zerolog.Logger
 }
 
-func deny(c *fiber.Ctx, reason string) error {
+func deny(c fiber.Ctx, reason string) error {
 	return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"ok": false, "reason": reason})
 }
 
@@ -90,7 +90,7 @@ func New(cfg Config) fiber.Handler {
 		cfg.Clock = time.Now
 	}
 
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		switch cfg.Mode {
 		case ModeNone:
 			return c.Next()
@@ -102,7 +102,7 @@ func New(cfg Config) fiber.Handler {
 	}
 }
 
-func verifyAPIKey(c *fiber.Ctx, cfg Config) error {
+func verifyAPIKey(c fiber.Ctx, cfg Config) error {
 	provided := c.Get("X-API-Key")
 	if provided == "" {
 		if authz := c.Get("Authorization"); strings.HasPrefix(authz, "Bearer ") {
@@ -116,7 +116,7 @@ func verifyAPIKey(c *fiber.Ctx, cfg Config) error {
 	return c.Next()
 }
 
-func verifyHMACV2(c *fiber.Ctx, cfg Config) error {
+func verifyHMACV2(c fiber.Ctx, cfg Config) error {
 	version := c.Get(HeaderSignatureVersion)
 
 	// Legacy v1 selection: only when explicitly enabled AND the request does not

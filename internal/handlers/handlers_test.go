@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/redis/go-redis/v9"
-	logger "github.com/soulteary/logger-kit"
+	logger "github.com/soulteary/logger-kit/v2"
 
 	challengekit "github.com/soulteary/challenge-kit"
 	"github.com/soulteary/herald/internal/config"

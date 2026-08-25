@@ -15,6 +15,8 @@
 
 Herald is a production-ready, standalone OTP and verification code service that sends verification codes via email and SMS. It features built-in rate limiting, security controls, and audit logging. Herald is designed to work independently and can be integrated with other services as needed.
 
+The HTTP server uses Fiber v3.4.0 and the matching v2 module lines of the Fiber-facing kit packages. Building from source requires Go 1.26 or later.
+
 ## Core Features
 
 - 🔒 **Secure by Design**: Challenge-based verification with Argon2 hash storage, multiple authentication methods (mTLS, HMAC, API Key)

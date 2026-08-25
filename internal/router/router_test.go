@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gofiber/fiber/v2"
-	logger "github.com/soulteary/logger-kit"
+	"github.com/gofiber/fiber/v3"
+	logger "github.com/soulteary/logger-kit/v2"
 
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/testutil"

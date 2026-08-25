@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 func newApp() *fiber.App {
-	app := fiber.New(fiber.Config{DisableStartupMessage: true})
-	app.Get("/ping", func(c *fiber.Ctx) error { return c.SendString("pong") })
+	app := fiber.New()
+	app.Get("/ping", func(c fiber.Ctx) error { return c.SendString("pong") })
 	return app
 }
 

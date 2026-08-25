@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 
 	challengekit "github.com/soulteary/challenge-kit"
 	"github.com/soulteary/herald/internal/config"

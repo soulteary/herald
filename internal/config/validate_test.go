@@ -3,7 +3,7 @@ package config
 import (
 	"testing"
 
-	logger "github.com/soulteary/logger-kit"
+	logger "github.com/soulteary/logger-kit/v2"
 )
 
 // withProdEnv sets production environment and restores all touched globals.

@@ -7,7 +7,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 // errStrictBody is returned by parseStrictJSON when the request body is not a
@@ -27,7 +27,7 @@ func (e *strictBodyError) Error() string { return e.msg }
 // It intentionally does NOT read from c.Body() lazily; it copies the (already
 // body-limited by Fiber's BodyLimit) buffer so the decoder can enforce the
 // single-value rule.
-func parseStrictJSON(c *fiber.Ctx, dst interface{}) error {
+func parseStrictJSON(c fiber.Ctx, dst interface{}) error {
 	ct := strings.ToLower(strings.TrimSpace(c.Get("Content-Type")))
 	// Allow "application/json" and "application/json; charset=utf-8".
 	if i := strings.IndexByte(ct, ';'); i >= 0 {
@@ -56,7 +56,7 @@ func parseStrictJSON(c *fiber.Ctx, dst interface{}) error {
 
 // writeStrictBodyError writes the appropriate 4xx status for a strict body
 // error. Unsupported media type -> 415; everything else -> 400.
-func writeStrictBodyError(c *fiber.Ctx, err error) error {
+func writeStrictBodyError(c fiber.Ctx, err error) error {
 	be, ok := err.(*strictBodyError)
 	if !ok {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"ok": false, "reason": "invalid_request"})
