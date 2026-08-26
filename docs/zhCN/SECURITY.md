@@ -22,16 +22,23 @@
 ### 1. 生产环境配置
 
 **必须配置项**:
-- 必须设置 `API_KEY` 和/或 `HERALD_HMAC_KEYS`（或 `HMAC_SECRET`）用于服务认证（生产推荐）
-- 生产环境必须设置 `HERALD_TEST_MODE=false`（不得启用测试模式）
-- 需要时使用 `REDIS_PASSWORD` 配置 Redis 密码保护
-- 为 HMAC 使用强且唯一的密钥
+- 设置 `ENVIRONMENT=production`；生产配置校验会对不安全组合执行 fail-closed
+- 选择 `REQUEST_AUTH_MODE=hmac_v2`（推荐）或 `api_key`，并配置该模式对应的凭据
+- 保持 `HERALD_TEST_MODE=false`；生产环境会拒绝测试模式
+- 设置 `PROVIDER_FAILURE_POLICY=strict`，Provider URL 必须使用 HTTPS
+- 使用 `REDIS_PASSWORD` 保护 Redis（或通过 `HERALD_RISK_ACK_PASSWORDLESS_REDIS=true` 显式接受风险）
+- 使用强且唯一的 HMAC 密钥，并通过明确的 Key ID 完成轮换
 
 **配置示例**:
 ```bash
-export API_KEY="your-strong-api-key-here"
+export ENVIRONMENT=production
+export REQUEST_AUTH_MODE=hmac_v2
 export HERALD_HMAC_KEYS='{"key-id-1":"secret-key-1","key-id-2":"secret-key-2"}'
+export HERALD_HMAC_DEFAULT_KEY_ID=key-id-1
+export HMAC_MAX_DRIFT=60s
+export HMAC_V1_ENABLED=false
 export HERALD_TEST_MODE=false
+export PROVIDER_FAILURE_POLICY=strict
 export REDIS_PASSWORD="your-redis-password"
 export REDIS_ADDR="redis:6379"
 ```
@@ -77,9 +84,9 @@ Herald 实现多维度限流以防止滥用：
 **配置示例**:
 ```bash
 # 限流配置（每小时请求数）
-export HERALD_RATE_LIMIT_USER=10      # 按 user_id
-export HERALD_RATE_LIMIT_DESTINATION=5 # 按邮箱/手机
-export HERALD_RATE_LIMIT_IP=20        # 按 IP 地址
+export RATE_LIMIT_PER_USER=10         # 按 user_id，每小时
+export RATE_LIMIT_PER_DESTINATION=10  # 按邮箱/手机，每小时
+export RATE_LIMIT_PER_IP=5            # 按 IP，每分钟
 ```
 
 ### 5. Challenge 安全
@@ -91,66 +98,74 @@ export HERALD_RATE_LIMIT_IP=20        # 按 IP 地址
 
 **配置示例**:
 ```bash
-export HERALD_CHALLENGE_TTL_SECONDS=300
-export HERALD_MAX_ATTEMPTS=5
-export HERALD_RESEND_COOLDOWN_SECONDS=60
+export CHALLENGE_EXPIRY=5m
+export MAX_ATTEMPTS=5
+export RESEND_COOLDOWN=60s
 ```
 
 ## API 安全
 
-### 认证方式
+### 相互独立的安全层
 
-Herald 支持三种认证方式，优先级如下：
+Herald 分别配置传输层认证和请求层认证：
 
-1. **mTLS**（最安全 - 生产环境推荐）
-   - 双向 TLS 客户端证书验证
-   - 最高安全级别
-   - 需要 TLS 证书配置
+1. **传输层（可选 mTLS）**
+   - `CLIENT_CERT_MODE=off|optional|require`
+   - 当所有调用方都持有可信客户端证书时，推荐使用 `require`
+   - mTLS 不替代请求正文完整性校验
 
-2. **HMAC 签名**（安全 - 生产环境推荐）
-   - HMAC-SHA256 签名验证
-   - 基于时间戳的重放保护（5 分钟窗口）
-   - 服务标识符支持多租户场景
+2. **请求层**
+   - `REQUEST_AUTH_MODE=hmac_v2`（推荐）：可防重放的 HMAC-SHA256
+   - `REQUEST_AUTH_MODE=api_key`：通过 `X-API-Key` 或 `Authorization: Bearer ...` 传递 API Key
+   - `REQUEST_AUTH_MODE=none`：仅限开发；生产环境会拒绝启动
 
-3. **API Key**（简单 - 仅开发环境）
-   - 通过 `X-API-Key` 请求头进行基本 API 密钥认证
-   - 适用于开发和测试
-   - 不推荐用于生产环境服务间通信
+### HMAC v2 认证
 
-### HMAC 签名认证
+HMAC v2 对完整的请求形态和正文摘要进行签名：
 
-**签名算法**:
+```text
+HERALD-HMAC-V2
+METHOD
+PATH
+QUERY
+TIMESTAMP
+NONCE
+SERVICE
+KEY_ID
+SHA256_HEX(RAW_BODY)
 ```
-signature = HMAC-SHA256(timestamp:service:body, secret)
-```
 
-**请求头**:
-- `X-Signature`: HMAC 签名值
-- `X-Timestamp`: Unix 时间戳（秒）
-- `X-Service`: 服务标识符（可选）
+**必需请求头**:
+- `X-Signature-Version: v2`
+- `X-Signature`：规范串的 HMAC-SHA256 小写十六进制值
+- `X-Timestamp`：Unix 秒级时间戳
+- `X-Nonce`：本次请求的唯一值
+- `X-Service`：调用方服务标识
+- `X-Key-Id`：Key ID；仅当配置 `HERALD_HMAC_DEFAULT_KEY_ID` 时可省略
 
-**配置**:
+**服务端配置**:
 ```bash
+export REQUEST_AUTH_MODE=hmac_v2
 export HERALD_HMAC_KEYS='{"key-id-1":"secret-key-1","key-id-2":"secret-key-2"}'
-export HERALD_HMAC_TIMESTAMP_TOLERANCE=300  # 5 分钟（秒）
+export HERALD_HMAC_DEFAULT_KEY_ID=key-id-1
+export HMAC_MAX_DRIFT=60s
+export HMAC_V1_ENABLED=false
 ```
 
-**安全注意事项**:
-- 时间戳必须在容差窗口内（默认：5 分钟）以防止重放攻击
-- 为每个服务使用强且唯一的密钥
-- 定期轮换 HMAC 密钥
+Herald 先校验签名，再在 Redis 中原子消费 Nonce；重复使用的 Nonce 会被拒绝。默认时间偏差窗口为 60 秒。旧版 v1 默认关闭，只应在迁移期通过 `HMAC_V1_ENABLED=true` 临时启用。
 
 ### mTLS 认证
 
-为了获得最高安全性，使用双向 TLS：
+要求可信客户端证书时：
 
-**配置**:
 ```bash
-export HERALD_TLS_CERT=/path/to/herald.crt
-export HERALD_TLS_KEY=/path/to/herald.key
-export HERALD_TLS_CA=/path/to/ca.crt
-export HERALD_TLS_REQUIRE_CLIENT_CERT=true
+export TLS_CERT_FILE=/path/to/herald.crt
+export TLS_KEY_FILE=/path/to/herald.key
+export TLS_CA_CERT_FILE=/path/to/client-ca.crt
+export CLIENT_CERT_MODE=require
 ```
+
+`TLS_CLIENT_CA_FILE` 可作为 `TLS_CA_CERT_FILE` 的别名。容器内启用 TLS 时，还需通过相应的 `HERALD_HEALTHCHECK_TLS_*` 变量配置回环健康检查。
 
 ## 数据安全
 
@@ -220,22 +235,22 @@ Herald 实现多层限流：
 ### 配置
 
 ```bash
-# 限流配置（每小时）
-export HERALD_RATE_LIMIT_USER=10
-export HERALD_RATE_LIMIT_DESTINATION=5
-export HERALD_RATE_LIMIT_IP=20
+# 限流配置
+export RATE_LIMIT_PER_USER=10         # 每小时
+export RATE_LIMIT_PER_DESTINATION=10  # 每小时
+export RATE_LIMIT_PER_IP=5            # 每分钟
 
 # Challenge 设置
-export HERALD_CHALLENGE_TTL_SECONDS=300
-export HERALD_MAX_ATTEMPTS=5
-export HERALD_RESEND_COOLDOWN_SECONDS=60
+export CHALLENGE_EXPIRY=5m
+export MAX_ATTEMPTS=5
+export RESEND_COOLDOWN=60s
 ```
 
 ## 错误处理
 
 ### 生产模式
 
-在生产环境（且 `HERALD_TEST_MODE=false`）下：
+在生产环境（`ENVIRONMENT=production`，且 `HERALD_TEST_MODE=true` 会被拒绝）下：
 
 - 隐藏详细错误信息，防止信息泄露
 - 返回通用错误消息
