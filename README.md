@@ -33,8 +33,12 @@ The HTTP server uses Fiber v3.4.0 and the matching v2 module lines of the Fiber-
 The easiest way to get started is with Docker Compose, which includes Redis:
 
 ```bash
-# Start Herald and Redis
-docker-compose up -d
+# Required secrets: Compose refuses insecure repository-known defaults.
+export REDIS_PASSWORD="$(openssl rand -hex 32)"
+export HERALD_API_KEY="$(openssl rand -hex 32)"
+
+# Start Herald and Redis in API-key mode
+docker compose up -d
 
 # Verify the service is running
 curl http://localhost:8082/healthz
@@ -53,8 +57,8 @@ Expected response:
 Create a test challenge (requires authentication - see [API Documentation](docs/enUS/API.md)):
 
 ```bash
-# Set your API key (from docker-compose.yml: your-secret-api-key-here)
-export API_KEY="your-secret-api-key-here"
+# Reuse the key exported before docker compose up
+export API_KEY="$HERALD_API_KEY"
 
 # Create a challenge
 curl -X POST http://localhost:8082/v1/otp/challenges \
@@ -72,7 +76,7 @@ curl -X POST http://localhost:8082/v1/otp/challenges \
 
 ```bash
 # Docker Compose logs
-docker-compose logs -f herald
+docker compose logs -f herald
 ```
 
 ### Manual Deployment

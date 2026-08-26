@@ -33,8 +33,12 @@ HTTP 服务使用 Fiber v3.4.0 及与之匹配的 Fiber 相关 kit v2 模块版�
 最简单的方式是使用 Docker Compose，它包含 Redis：
 
 ```bash
-# Start Herald and Redis
-docker-compose up -d
+# 必须显式提供随机密钥，Compose 不再使用仓库中的公开占位值
+export REDIS_PASSWORD="$(openssl rand -hex 32)"
+export HERALD_API_KEY="$(openssl rand -hex 32)"
+
+# 以 API Key 模式启动 Herald 和 Redis
+docker compose up -d
 
 # Verify the service is running
 curl http://localhost:8082/healthz
@@ -53,8 +57,8 @@ curl http://localhost:8082/healthz
 创建测试挑战（需要身份验证 - 请参阅 [API 文档](docs/zhCN/API.md)）：
 
 ```bash
-# Set your API key (from docker-compose.yml: your-secret-api-key-here)
-export API_KEY="your-secret-api-key-here"
+# 复用启动 Compose 前设置的 API Key
+export API_KEY="$HERALD_API_KEY"
 
 # Create a challenge
 curl -X POST http://localhost:8082/v1/otp/challenges \
@@ -72,7 +76,7 @@ curl -X POST http://localhost:8082/v1/otp/challenges \
 
 ```bash
 # Docker Compose logs
-docker-compose logs -f herald
+docker compose logs -f herald
 ```
 
 ### 手动部署
