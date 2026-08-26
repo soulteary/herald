@@ -40,14 +40,14 @@ services:
       - ALL
 
   redis:
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
     # Redis is NOT published to the host by default. Uncomment only if you must
     # reach it from outside the compose network, and protect it with a password.
     # ports:
     #   - "127.0.0.1:6379:6379"
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD}"]
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-CHANGE_ME_redis_password}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?set REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
