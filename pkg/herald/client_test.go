@@ -21,6 +21,7 @@ func TestDefaultOptions(t *testing.T) {
 	assert.Equal(t, 10*time.Second, opts.Timeout)
 	assert.Equal(t, "stargate", opts.Service)
 	assert.Equal(t, "", opts.BaseURL)
+	assert.Equal(t, defaultMaxResponseBytes, opts.MaxResponseBytes)
 }
 
 func TestOptionsValidate(t *testing.T) {
@@ -29,6 +30,11 @@ func TestOptionsValidate(t *testing.T) {
 
 	opts := &Options{BaseURL: "http://example.com"}
 	assert.NoError(t, opts.Validate())
+	assert.Error(t, (&Options{BaseURL: "ftp://example.com"}).Validate())
+	assert.Error(t, (&Options{BaseURL: "not-a-url"}).Validate())
+	assert.Error(t, (&Options{BaseURL: "https://example.com", TLSClientCert: "cert.pem"}).Validate())
+	assert.Error(t, (&Options{BaseURL: "https://example.com", SignatureVersion: "v3"}).Validate())
+	assert.Error(t, (&Options{BaseURL: "https://example.com", MaxResponseBytes: -1}).Validate())
 }
 
 func TestOptionsFluentSetters(t *testing.T) {
@@ -37,13 +43,15 @@ func TestOptionsFluentSetters(t *testing.T) {
 		WithAPIKey("api-key").
 		WithHMACSecret("hmac-secret").
 		WithService("custom-service").
-		WithTimeout(3 * time.Second)
+		WithTimeout(3 * time.Second).
+		WithMaxResponseBytes(2048)
 
 	assert.Equal(t, "http://example.com", opts.BaseURL)
 	assert.Equal(t, "api-key", opts.APIKey)
 	assert.Equal(t, "hmac-secret", opts.HMACSecret)
 	assert.Equal(t, "custom-service", opts.Service)
 	assert.Equal(t, 3*time.Second, opts.Timeout)
+	assert.Equal(t, int64(2048), opts.MaxResponseBytes)
 }
 
 func TestNewClient_MissingBaseURL(t *testing.T) {
@@ -249,9 +257,10 @@ func TestCreateChallenge_Success(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(CreateChallengeResponse{
-			ChallengeID:  "challenge-1",
-			ExpiresIn:    120,
-			NextResendIn: 30,
+			ChallengeID:    "challenge-1",
+			ExpiresIn:      120,
+			NextResendIn:   30,
+			DeliveryStatus: "failed",
 		})
 	}))
 	defer server.Close()
@@ -269,6 +278,21 @@ func TestCreateChallenge_Success(t *testing.T) {
 	assert.Equal(t, "challenge-1", resp.ChallengeID)
 	assert.Equal(t, 120, resp.ExpiresIn)
 	assert.Equal(t, 30, resp.NextResendIn)
+	assert.Equal(t, "failed", resp.DeliveryStatus)
+}
+
+func TestCreateChallenge_ResponseSizeLimit(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(strings.Repeat("x", 128)))
+	}))
+	defer server.Close()
+
+	client, err := NewClient(DefaultOptions().WithBaseURL(server.URL).WithMaxResponseBytes(32))
+	assert.NoError(t, err)
+	_, err = client.CreateChallenge(context.Background(), &CreateChallengeRequest{UserID: "u", Channel: "email", Destination: "u@example.com"})
+	var heraldErr *HeraldError
+	assert.ErrorAs(t, err, &heraldErr)
+	assert.Equal(t, "response_too_large", heraldErr.Reason)
 }
 
 func TestCreateChallenge_StatusError(t *testing.T) {
@@ -377,6 +401,43 @@ func TestVerifyChallenge_DecodeError(t *testing.T) {
 		Code:        "123456",
 	})
 	assert.NotNil(t, err)
+}
+
+func TestVerifyChallengeV2_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v2/otp/verifications", r.URL.Path)
+		var request VerifyChallengeV2Request
+		assert.NoError(t, json.NewDecoder(r.Body).Decode(&request))
+		assert.Equal(t, "login", request.ExpectedPurpose)
+		_ = json.NewEncoder(w).Encode(VerifyChallengeV2Response{
+			OK: true, UserID: "user-1", Purpose: "login", Channel: "email", ChallengeID: "challenge-1",
+		})
+	}))
+	defer server.Close()
+	client, err := NewClient(DefaultOptions().WithBaseURL(server.URL))
+	assert.NoError(t, err)
+	resp, err := client.VerifyChallengeV2(context.Background(), &VerifyChallengeV2Request{
+		ChallengeID: "challenge-1", Code: "123456", ExpectedPurpose: "login",
+	})
+	assert.NoError(t, err)
+	assert.True(t, resp.OK)
+	assert.Equal(t, "login", resp.Purpose)
+}
+
+func TestRevokeChallenge_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, "/v1/otp/challenges/challenge-1/revoke", r.URL.Path)
+		_ = json.NewEncoder(w).Encode(RevokeChallengeResponse{OK: true})
+	}))
+	defer server.Close()
+	client, err := NewClient(DefaultOptions().WithBaseURL(server.URL))
+	assert.NoError(t, err)
+	resp, err := client.RevokeChallenge(context.Background(), "challenge-1")
+	assert.NoError(t, err)
+	assert.True(t, resp.OK)
+	_, err = client.RevokeChallenge(context.Background(), "")
+	assert.Error(t, err)
 }
 
 func TestOptions_TLSFluentSetters(t *testing.T) {
