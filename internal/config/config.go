@@ -190,11 +190,6 @@ var (
 	TLSClientCAFile = env.Get("TLS_CLIENT_CA_FILE", "") // Alias for TLS_CA_CERT_FILE
 	TestMode        = env.GetBool("HERALD_TEST_MODE", false)
 
-	// Session storage config
-	SessionStorageEnabled = env.GetBool("HERALD_SESSION_STORAGE_ENABLED", false)
-	SessionDefaultTTL     = env.GetDuration("HERALD_SESSION_DEFAULT_TTL", 1*time.Hour)
-	SessionKeyPrefix      = env.Get("HERALD_SESSION_KEY_PREFIX", "session:")
-
 	// Audit logging config
 	AuditEnabled         = env.GetBool("AUDIT_ENABLED", true)
 	AuditMaskDestination = env.GetBool("AUDIT_MASK_DESTINATION", false)
@@ -295,7 +290,6 @@ func Initialize(l *logger.Logger) error {
 		Dur("challenge_expiry", ChallengeExpiry).
 		Int("max_attempts", MaxAttempts).
 		Int("code_length", CodeLength).
-		Bool("session_storage", SessionStorageEnabled).
 		Msg("Configuration initialized")
 
 	// Fail-closed validation. In production, misconfiguration must prevent
