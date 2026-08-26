@@ -134,8 +134,8 @@ func (h *Handlers) TOTPEnrollStart(c fiber.Ctx) error {
 }
 
 // classifyEnrollConfirmError preserves herald-totp's explicit 400 contract.
- // herald-totp v1.0.0 exposes upstream status only in this stable error prefix;
- // all other failures (transport, malformed response, or 5xx) are proxy failures.
+// herald-totp v1.0.0 exposes upstream status only in this stable error prefix;
+// all other failures (transport, malformed response, or 5xx) are proxy failures.
 func classifyEnrollConfirmError(err error) (int, string) {
 	if err != nil && strings.HasPrefix(err.Error(), "enroll/confirm returned 400:") {
 		return fiber.StatusBadRequest, "invalid"
@@ -173,7 +173,7 @@ func (h *Handlers) TOTPEnrollConfirm(c fiber.Ctx) error {
 		// enroll_id is a random opaque token (not PII) so it is safe to log; the
 		// upstream error is not echoed to avoid leaking response bodies.
 		status, reason := classifyEnrollConfirmError(err)
-		h.log.Warn().Str("enroll_id", req.EnrollID).Int("upstream_status", status).Msg("TOTP enroll/confirm proxy failed")
+		h.log.Warn().Str("enroll_id", req.EnrollID).Int("response_status", status).Msg("TOTP enroll/confirm proxy failed")
 		return c.Status(status).JSON(fiber.Map{
 			"ok":     false,
 			"reason": reason,
