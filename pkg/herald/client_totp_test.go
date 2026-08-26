@@ -33,22 +33,32 @@ func TestTOTPClientHappyPaths(t *testing.T) {
 		case "/v1/totp/verify":
 			var req TOTPVerifyRequest
 			_ = json.NewDecoder(r.Body).Decode(&req)
-			if req.Subject != "user-1" || req.Code != "123456" { t.Errorf("verify request: %+v", req) }
+			if req.Subject != "user-1" || req.Code != "123456" {
+				t.Errorf("verify request: %+v", req)
+			}
 			_ = json.NewEncoder(w).Encode(TOTPVerifyResponse{OK: true})
 		case "/v1/totp/enroll/start":
 			var req TOTPEnrollStartRequest
 			_ = json.NewDecoder(r.Body).Decode(&req)
-			if req.Subject != "user-1" || req.Label != "Work" { t.Errorf("start request: %+v", req) }
+			if req.Subject != "user-1" || req.Label != "Work" {
+				t.Errorf("start request: %+v", req)
+			}
 			_ = json.NewEncoder(w).Encode(TOTPEnrollStartResponse{EnrollID: "enroll-1", SecretBase32: "SECRET", OtpauthURI: "otpauth://totp/test"})
 		case "/v1/totp/enroll/confirm":
 			var req TOTPEnrollConfirmRequest
 			_ = json.NewDecoder(r.Body).Decode(&req)
-			if req.EnrollID != "enroll-1" || req.Code != "654321" { t.Errorf("confirm request: %+v", req) }
+			if req.EnrollID != "enroll-1" || req.Code != "654321" {
+				t.Errorf("confirm request: %+v", req)
+			}
 			_ = json.NewEncoder(w).Encode(TOTPEnrollConfirmResponse{Subject: "user-1", TotpEnabled: true, BackupCodes: []string{"backup"}})
 		case "/v1/totp/revoke":
-			var req struct { Subject string `json:"subject"` }
+			var req struct {
+				Subject string `json:"subject"`
+			}
 			_ = json.NewDecoder(r.Body).Decode(&req)
-			if req.Subject != "user-1" { t.Errorf("revoke request: %+v", req) }
+			if req.Subject != "user-1" {
+				t.Errorf("revoke request: %+v", req)
+			}
 			_ = json.NewEncoder(w).Encode(TOTPRevokeResponse{OK: true, Subject: "user-1"})
 		default:
 			http.NotFound(w, r)
@@ -59,15 +69,25 @@ func TestTOTPClientHappyPaths(t *testing.T) {
 	ctx := context.Background()
 
 	status, err := client.TOTPStatus(ctx, "user+1@example.com")
-	if err != nil || !status.TotpEnabled { t.Fatalf("TOTPStatus: resp=%+v err=%v", status, err) }
+	if err != nil || !status.TotpEnabled {
+		t.Fatalf("TOTPStatus: resp=%+v err=%v", status, err)
+	}
 	verify, err := client.TOTPVerify(ctx, &TOTPVerifyRequest{Subject: "user-1", Code: "123456"})
-	if err != nil || !verify.OK { t.Fatalf("TOTPVerify: resp=%+v err=%v", verify, err) }
+	if err != nil || !verify.OK {
+		t.Fatalf("TOTPVerify: resp=%+v err=%v", verify, err)
+	}
 	start, err := client.TOTPEnrollStart(ctx, &TOTPEnrollStartRequest{Subject: "user-1", Label: "Work"})
-	if err != nil || start.EnrollID != "enroll-1" { t.Fatalf("TOTPEnrollStart: resp=%+v err=%v", start, err) }
+	if err != nil || start.EnrollID != "enroll-1" {
+		t.Fatalf("TOTPEnrollStart: resp=%+v err=%v", start, err)
+	}
 	confirm, err := client.TOTPEnrollConfirm(ctx, &TOTPEnrollConfirmRequest{EnrollID: "enroll-1", Code: "654321"})
-	if err != nil || !confirm.TotpEnabled { t.Fatalf("TOTPEnrollConfirm: resp=%+v err=%v", confirm, err) }
+	if err != nil || !confirm.TotpEnabled {
+		t.Fatalf("TOTPEnrollConfirm: resp=%+v err=%v", confirm, err)
+	}
 	revoke, err := client.TOTPRevoke(ctx, "user-1")
-	if err != nil || !revoke.OK { t.Fatalf("TOTPRevoke: resp=%+v err=%v", revoke, err) }
+	if err != nil || !revoke.OK {
+		t.Fatalf("TOTPRevoke: resp=%+v err=%v", revoke, err)
+	}
 }
 
 func TestTOTPClientProxyErrors(t *testing.T) {
@@ -78,8 +98,14 @@ func TestTOTPClientProxyErrors(t *testing.T) {
 	}{
 		{"status", func(c *Client) error { _, err := c.TOTPStatus(context.Background(), "u"); return err }, "totp_proxy_failed"},
 		{"verify", func(c *Client) error { _, err := c.TOTPVerify(context.Background(), &TOTPVerifyRequest{}); return err }, "denied"},
-		{"enroll start", func(c *Client) error { _, err := c.TOTPEnrollStart(context.Background(), &TOTPEnrollStartRequest{}); return err }, "totp_proxy_failed"},
-		{"enroll confirm", func(c *Client) error { _, err := c.TOTPEnrollConfirm(context.Background(), &TOTPEnrollConfirmRequest{}); return err }, "invalid"},
+		{"enroll start", func(c *Client) error {
+			_, err := c.TOTPEnrollStart(context.Background(), &TOTPEnrollStartRequest{})
+			return err
+		}, "totp_proxy_failed"},
+		{"enroll confirm", func(c *Client) error {
+			_, err := c.TOTPEnrollConfirm(context.Background(), &TOTPEnrollConfirmRequest{})
+			return err
+		}, "invalid"},
 		{"revoke", func(c *Client) error { _, err := c.TOTPRevoke(context.Background(), "u"); return err }, "proxy_failed"},
 	}
 	for _, tt := range tests {
@@ -107,8 +133,14 @@ func TestTOTPClientInvalidResponses(t *testing.T) {
 		invoke func(*Client) error
 	}{
 		{"status", func(c *Client) error { _, err := c.TOTPStatus(context.Background(), "u"); return err }},
-		{"enroll start", func(c *Client) error { _, err := c.TOTPEnrollStart(context.Background(), &TOTPEnrollStartRequest{}); return err }},
-		{"enroll confirm", func(c *Client) error { _, err := c.TOTPEnrollConfirm(context.Background(), &TOTPEnrollConfirmRequest{}); return err }},
+		{"enroll start", func(c *Client) error {
+			_, err := c.TOTPEnrollStart(context.Background(), &TOTPEnrollStartRequest{})
+			return err
+		}},
+		{"enroll confirm", func(c *Client) error {
+			_, err := c.TOTPEnrollConfirm(context.Background(), &TOTPEnrollConfirmRequest{})
+			return err
+		}},
 		{"revoke", func(c *Client) error { _, err := c.TOTPRevoke(context.Background(), "u"); return err }},
 	}
 	for _, tt := range tests {
@@ -132,7 +164,9 @@ func TestTOTPClientResponseLimit(t *testing.T) {
 	}))
 	defer server.Close()
 	client, err := NewClient(DefaultOptions().WithBaseURL(server.URL).WithMaxResponseBytes(8))
-	if err != nil { t.Fatalf("NewClient: %v", err) }
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
 	_, err = client.TOTPStatus(context.Background(), "u")
 	var heraldErr *HeraldError
 	if !errors.As(err, &heraldErr) || heraldErr.Reason != "response_too_large" {
