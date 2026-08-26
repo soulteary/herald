@@ -100,7 +100,9 @@ func TestMiddleware_HMACV2SuccessReplayAndSignatureOrder(t *testing.T) {
 	cfg := Config{
 		Mode: ModeHMACV2, MaxDrift: time.Minute, Clock: func() time.Time { return now },
 		KeyProvider: func(id string) string {
-			if id == "key-1" { return "secret" }
+			if id == "key-1" {
+				return "secret"
+			}
 			return ""
 		},
 		NonceStore: store, FailClosed: true,
@@ -125,7 +127,9 @@ func TestMiddleware_HMACV2DefaultKeyID(t *testing.T) {
 	cfg := Config{
 		Mode: ModeHMACV2, Clock: func() time.Time { return now }, DefaultKeyID: "default",
 		KeyProvider: func(id string) string {
-			if id == "default" { return "secret" }
+			if id == "default" {
+				return "secret"
+			}
 			return ""
 		},
 		NonceStore: newNonceStore(t), FailClosed: true,
@@ -140,7 +144,9 @@ func TestMiddleware_HMACV2Rejections(t *testing.T) {
 	base := Config{
 		Mode: ModeHMACV2, Clock: func() time.Time { return now }, MaxDrift: time.Minute,
 		KeyProvider: func(id string) string {
-			if id == "key-1" { return "secret" }
+			if id == "key-1" {
+				return "secret"
+			}
 			return ""
 		},
 		NonceStore: newNonceStore(t), FailClosed: true,
@@ -148,7 +154,9 @@ func TestMiddleware_HMACV2Rejections(t *testing.T) {
 	valid := signedHeaders(now, "nonce-base", "key-1", "secret")
 	clone := func() map[string]string {
 		out := make(map[string]string, len(valid))
-		for k, v := range valid { out[k] = v }
+		for k, v := range valid {
+			out[k] = v
+		}
 		return out
 	}
 
@@ -188,7 +196,7 @@ func TestMiddleware_HMACV2NonceBackendPolicy(t *testing.T) {
 	base := Config{
 		Mode: ModeHMACV2, Clock: func() time.Time { return now },
 		KeyProvider: func(string) string { return "secret" },
-		NonceStore: NewNonceStore(nil, "", nil, 0),
+		NonceStore:  NewNonceStore(nil, "", nil, 0),
 	}
 
 	closed := base
