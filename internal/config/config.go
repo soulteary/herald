@@ -188,7 +188,12 @@ var (
 	TLSKeyFile      = env.Get("TLS_KEY_FILE", "")
 	TLSCACertFile   = env.Get("TLS_CA_CERT_FILE", "")   // For mTLS (client certificate verification)
 	TLSClientCAFile = env.Get("TLS_CLIENT_CA_FILE", "") // Alias for TLS_CA_CERT_FILE
-	TestMode        = env.GetBool("HERALD_TEST_MODE", false)
+	// TLS settings used only by the in-container loopback health probe.
+	HealthcheckTLSCAFile         = env.Get("HERALD_HEALTHCHECK_TLS_CA_FILE", "")
+	HealthcheckTLSServerName     = env.Get("HERALD_HEALTHCHECK_TLS_SERVER_NAME", "localhost")
+	HealthcheckTLSClientCertFile = env.Get("HERALD_HEALTHCHECK_TLS_CLIENT_CERT_FILE", "")
+	HealthcheckTLSClientKeyFile  = env.Get("HERALD_HEALTHCHECK_TLS_CLIENT_KEY_FILE", "")
+	TestMode                     = env.GetBool("HERALD_TEST_MODE", false)
 
 	// Session storage config
 	SessionStorageEnabled = env.GetBool("HERALD_SESSION_STORAGE_ENABLED", false)
