@@ -11,6 +11,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/redis/go-redis/v9"
 	logger "github.com/soulteary/logger-kit/v2"
+	rediskitcache "github.com/soulteary/redis-kit/cache"
 	secure "github.com/soulteary/secure-kit"
 	"go.opentelemetry.io/otel/attribute"
 
