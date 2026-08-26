@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"io"
 	"net/http"
@@ -30,15 +31,60 @@ func TestNew_RejectsHalfConfiguredTLS(t *testing.T) {
 }
 
 func TestNew_RejectsClientCAWithoutServerCert(t *testing.T) {
-	_, err := New(newApp(), Config{Addr: ":0", TLSClientCAFile: "ca.pem"})
+	_, err := New(newApp(), Config{Addr: ":0", TLSClientCAFile: "ca.pem", ClientCertMode: "require"})
 	if err == nil {
 		t.Fatal("expected error for client CA without server cert/key")
+	}
+}
+
+func TestNew_ValidatesClientCertMode(t *testing.T) {
+	tests := []Config{
+		{Addr: ":0", ClientCertMode: "unknown"},
+		{Addr: ":0", ClientCertMode: "optional"},
+		{Addr: ":0", ClientCertMode: "require"},
+		{Addr: ":0", ClientCertMode: "off", TLSClientCAFile: "ca.pem"},
+	}
+	for _, cfg := range tests {
+		if _, err := New(newApp(), cfg); err == nil {
+			t.Errorf("New(%+v) should reject invalid client certificate configuration", cfg)
+		}
+	}
+}
+
+func TestClientAuthType(t *testing.T) {
+	if got := clientAuthType("off"); got != tls.NoClientCert {
+		t.Errorf("off = %v, want NoClientCert", got)
+	}
+	if got := clientAuthType("optional"); got != tls.VerifyClientCertIfGiven {
+		t.Errorf("optional = %v, want VerifyClientCertIfGiven", got)
+	}
+	if got := clientAuthType("require"); got != tls.RequireAndVerifyClientCert {
+		t.Errorf("require = %v, want RequireAndVerifyClientCert", got)
+	}
+}
+
+func TestRunAll_RejectsEmptyGroup(t *testing.T) {
+	if err := RunAll(context.Background()); err == nil {
+		t.Fatal("expected error for empty server group")
 	}
 }
 
 func TestNew_RejectsEmptyAddr(t *testing.T) {
 	if _, err := New(newApp(), Config{}); err == nil {
 		t.Fatal("expected error for empty addr")
+	}
+}
+
+func TestNew_EnforcesLoopbackOnly(t *testing.T) {
+	for _, addr := range []string{"0.0.0.0:8080", ":8080", "192.0.2.10:8080"} {
+		if _, err := New(newApp(), Config{Addr: addr, LoopbackOnly: true}); err == nil {
+			t.Errorf("expected %q to be rejected", addr)
+		}
+	}
+	for _, addr := range []string{"127.0.0.1:0", "[::1]:0", "localhost:0"} {
+		if _, err := New(newApp(), Config{Addr: addr, LoopbackOnly: true}); err != nil {
+			t.Errorf("expected %q to be accepted: %v", addr, err)
+		}
 	}
 }
 
