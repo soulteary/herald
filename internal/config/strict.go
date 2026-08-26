@@ -30,6 +30,9 @@ func validateStrictSettings() error {
 	if !normalizedOneOf(ClientCertMode, "off", "optional", "require") {
 		problems = append(problems, "CLIENT_CERT_MODE must be off, optional, or require")
 	}
+	if (HealthcheckTLSClientCertFile == "") != (HealthcheckTLSClientKeyFile == "") {
+		problems = append(problems, "HERALD_HEALTHCHECK_TLS_CLIENT_CERT_FILE and HERALD_HEALTHCHECK_TLS_CLIENT_KEY_FILE must be set together")
+	}
 	if !normalizedOneOf(ProviderFailurePolicy, "strict", "soft") {
 		problems = append(problems, "PROVIDER_FAILURE_POLICY must be strict or soft")
 	}
@@ -69,9 +72,6 @@ func validateStrictSettings() error {
 	}
 	if HMACMaxDrift <= 0 {
 		problems = append(problems, "HMAC_MAX_DRIFT must be positive")
-	}
-	if SessionStorageEnabled && SessionDefaultTTL <= 0 {
-		problems = append(problems, "HERALD_SESSION_DEFAULT_TTL must be positive when session storage is enabled")
 	}
 	if AuditEnabled && AuditTTL <= 0 {
 		problems = append(problems, "AUDIT_TTL must be positive when audit logging is enabled")
