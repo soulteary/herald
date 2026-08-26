@@ -53,7 +53,6 @@ func TestNewRouterWithClient(t *testing.T) {
 	}
 }
 
-
 func TestRouter_FrameworkErrorsAreJSON(t *testing.T) {
 	redisClient, _ := testutil.NewTestRedisClient()
 	defer func() { _ = redisClient.Close() }()
