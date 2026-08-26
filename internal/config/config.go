@@ -62,7 +62,8 @@ func TestCodeExposureEnabled() bool {
 
 var (
 	// Environment: development | test | production. Controls Validate() strictness.
-	Env = parseEnvironment(env.Get("ENVIRONMENT", "development"))
+	EnvironmentValue = env.Get("ENVIRONMENT", "development")
+	Env              = parseEnvironment(EnvironmentValue)
 
 	// Server config
 	Port = env.Get("PORT", ":8082")
@@ -321,6 +322,10 @@ func authConfigured() bool {
 // in production; development/test environments log warnings instead so local
 // workflows are not blocked. Returns a non-nil error when startup must abort.
 func Validate() error {
+	if err := validateStrictSettings(); err != nil {
+		return err
+	}
+
 	var problems []string
 
 	// TLS must be configured coherently regardless of environment: a cert
