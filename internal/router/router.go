@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -23,6 +24,25 @@ import (
 	"github.com/soulteary/herald/internal/metrics"
 	"github.com/soulteary/herald/internal/tracing"
 )
+
+func jsonErrorHandler(c fiber.Ctx, err error) error {
+	status := fiber.StatusInternalServerError
+	if fiberErr := new(fiber.Error); errors.As(err, &fiberErr) {
+		status = fiberErr.Code
+	}
+	reason := "internal_error"
+	switch status {
+	case fiber.StatusNotFound:
+		reason = "not_found"
+	case fiber.StatusMethodNotAllowed:
+		reason = "method_not_allowed"
+	default:
+		if status < fiber.StatusInternalServerError {
+			reason = "request_error"
+		}
+	}
+	return c.Status(status).JSON(fiber.Map{"ok": false, "reason": reason})
+}
 
 // testAuthMiddleware guards the test-code endpoint with a constant-time
 // comparison against HERALD_TEST_API_KEY. It accepts the key via X-Test-Api-Key
@@ -96,6 +116,7 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 		ReadTimeout:  config.ReadTimeout,
 		WriteTimeout: config.WriteTimeout,
 		IdleTimeout:  config.IdleTimeout,
+		ErrorHandler: jsonErrorHandler,
 		// Fiber only reads the proxy header when the immediate peer matches the
 		// explicit proxy allowlist, preventing direct header spoofing.
 		ProxyHeader: config.TrustedProxyHeader,
@@ -184,7 +205,7 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 		if config.TestAPIKey == "" {
 			log.Error().Msg("Test-code endpoint requested but HERALD_TEST_API_KEY is empty; refusing to mount it")
 		} else {
-			testApp = fiber.New(fiber.Config{BodyLimit: config.MaxBodyBytes})
+			testApp = fiber.New(fiber.Config{BodyLimit: config.MaxBodyBytes, ErrorHandler: jsonErrorHandler})
 			testApp.Use(recover.New())
 			testApp.Get("/livez", func(c fiber.Ctx) error {
 				return c.JSON(fiber.Map{"ok": true, "status": "live"})
