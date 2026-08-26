@@ -2,7 +2,7 @@
 
 # Pin the builder base image by digest so the build is reproducible and cannot
 # be silently swapped by a moved tag. Update deliberately when bumping Go.
-FROM golang:1.26.6-alpine3.23@sha256:e57c41c1d5864341031181b0db34b9a537bb5773eb6428e4e5bdaea0f9135406 AS builder
+FROM golang:1.27.0-alpine3.23 AS builder
 
 # Only the packages actually needed to build a CGO_ENABLED=0 static binary.
 # git is used by the Go toolchain for VCS stamping; ca-certificates lets module

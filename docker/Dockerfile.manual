@@ -2,7 +2,7 @@
 
 # Manual/China-mirror build variant. Same hardening as docker/Dockerfile but
 # uses tuna mirrors and goproxy.cn for environments without direct access.
-FROM golang:1.26.6-alpine3.23 AS builder
+FROM golang:1.27.0-alpine3.23 AS builder
 RUN echo '' > /etc/apk/repositories && \
     echo "https://mirror.tuna.tsinghua.edu.cn/alpine/v3.23/main"      >> /etc/apk/repositories && \
     echo "https://mirror.tuna.tsinghua.edu.cn/alpine/v3.23/community" >> /etc/apk/repositories
