@@ -8,8 +8,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -73,6 +75,9 @@ type Options struct {
 }
 
 const defaultMaxResponseBytes int64 = 1 << 20
+
+// ErrResponseTooLarge marks responses that exceed the configured SDK limit.
+var ErrResponseTooLarge = errors.New("herald: response too large")
 
 // DefaultOptions returns default options
 func DefaultOptions() *Options {
@@ -538,18 +543,28 @@ func (c *Client) readResponseBody(resp *http.Response) ([]byte, error) {
 	if limit <= 0 {
 		limit = defaultMaxResponseBytes
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+	var reader io.Reader = resp.Body
+	// Avoid overflowing the one-byte sentinel when callers intentionally use
+	// MaxInt64 as an effectively unlimited cap.
+	if limit < math.MaxInt64 {
+		reader = io.LimitReader(resp.Body, limit+1)
+	}
+	body, err := io.ReadAll(reader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 	if int64(len(body)) > limit {
-		return nil, fmt.Errorf("response exceeds %d byte limit", limit)
+		return nil, fmt.Errorf("%w: response exceeds %d byte limit", ErrResponseTooLarge, limit)
 	}
 	return body, nil
 }
 
 func responseReadError(status int, err error) *HeraldError {
-	return &HeraldError{StatusCode: status, Reason: "response_too_large", Message: err.Error()}
+	reason := "response_read_failed"
+	if errors.Is(err, ErrResponseTooLarge) {
+		reason = "response_too_large"
+	}
+	return &HeraldError{StatusCode: status, Reason: reason, Message: err.Error()}
 }
 
 // --- TOTP (proxied by Herald to herald-totp) ---

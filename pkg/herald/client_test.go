@@ -6,7 +6,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -293,6 +295,27 @@ func TestCreateChallenge_ResponseSizeLimit(t *testing.T) {
 	var heraldErr *HeraldError
 	assert.ErrorAs(t, err, &heraldErr)
 	assert.Equal(t, "response_too_large", heraldErr.Reason)
+}
+
+func TestResponseLimitMaxInt64DoesNotOverflow(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(CreateChallengeResponse{ChallengeID: "challenge-1"})
+	}))
+	defer server.Close()
+
+	client, err := NewClient(DefaultOptions().WithBaseURL(server.URL).WithMaxResponseBytes(math.MaxInt64))
+	assert.NoError(t, err)
+	resp, err := client.CreateChallenge(context.Background(), &CreateChallengeRequest{})
+	assert.NoError(t, err)
+	assert.Equal(t, "challenge-1", resp.ChallengeID)
+}
+
+func TestResponseReadErrorReasons(t *testing.T) {
+	readErr := responseReadError(http.StatusOK, io.ErrUnexpectedEOF)
+	assert.Equal(t, "response_read_failed", readErr.Reason)
+
+	tooLarge := responseReadError(http.StatusOK, fmt.Errorf("%w: limit", ErrResponseTooLarge))
+	assert.Equal(t, "response_too_large", tooLarge.Reason)
 }
 
 func TestCreateChallenge_StatusError(t *testing.T) {
