@@ -58,6 +58,8 @@ go build -o herald main.go
 | `REDIS_DB` | Redis 数据库索引 | `0` | 否 |
 | `LOG_LEVEL` | 日志级别 | `info` | 否 |
 | `SERVICE_NAME` | 服务标识（用于 HMAC/日志/健康检查） | `herald` | 否 |
+| `HERALD_TRUSTED_PROXY_HEADER` | 转发客户端 IP 的请求头；仅信任允许列表中的代理 | （空） | 配置可信代理时 |
+| `HERALD_TRUSTED_PROXIES` | 可信代理 IP/CIDR 允许列表，逗号分隔 | （空） | 配置代理请求头时 |
 
 #### 服务间认证
 
@@ -152,6 +154,10 @@ go build -o herald main.go
 | `TLS_CA_CERT_FILE` | 客户端 CA 证书（mTLS 校验用） | （空） | optional/require 模式 |
 | `TLS_CLIENT_CA_FILE` | 与 `TLS_CA_CERT_FILE` 同义 | （空） | 可选 |
 | `CLIENT_CERT_MODE` | 客户端证书策略：`off`、`optional` 或 `require` | `off` | 否 |
+| `HERALD_HEALTHCHECK_TLS_CA_FILE` | 二进制回环 HTTPS 探针使用的 CA | （空） | 私有服务端 CA 时 |
+| `HERALD_HEALTHCHECK_TLS_SERVER_NAME` | 回环 HTTPS 探针校验的服务端名称 | `localhost` | 否 |
+| `HERALD_HEALTHCHECK_TLS_CLIENT_CERT_FILE` | 回环探针使用的客户端证书 | （空） | 要求客户端证书时 |
+| `HERALD_HEALTHCHECK_TLS_CLIENT_KEY_FILE` | 回环探针客户端私钥，必须与证书同时配置 | （空） | 要求客户端证书时 |
 
 #### 审计日志
 
