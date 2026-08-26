@@ -36,6 +36,15 @@ func validateStrictSettings() error {
 	if !normalizedOneOf(ProviderRedirectPolicy, "deny", "same-origin") {
 		problems = append(problems, "PROVIDER_REDIRECT_POLICY must be deny or same-origin")
 	}
+	if (strings.TrimSpace(TrustedProxyHeader) == "") != (len(TrustedProxies) == 0) {
+		problems = append(problems, "HERALD_TRUSTED_PROXY_HEADER and HERALD_TRUSTED_PROXIES must be configured together")
+	}
+	for _, proxy := range TrustedProxies {
+		if strings.TrimSpace(proxy) == "" {
+			problems = append(problems, "HERALD_TRUSTED_PROXIES must not contain empty entries")
+			break
+		}
+	}
 
 	if MaxBodyBytes <= 0 {
 		problems = append(problems, "HERALD_MAX_BODY_BYTES must be positive")
