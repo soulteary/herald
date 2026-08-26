@@ -94,13 +94,15 @@ func VerifyV2(secret, providedSig string, r CanonicalRequest) bool {
 // TimestampWithinDrift reports whether the given unix-seconds timestamp string
 // is within +/- drift of now.
 func TimestampWithinDrift(timestamp string, now time.Time, drift time.Duration) bool {
+	if drift <= 0 {
+		return false
+	}
 	ts, err := strconv.ParseInt(timestamp, 10, 64)
 	if err != nil {
 		return false
 	}
-	delta := now.Unix() - ts
-	if delta < 0 {
-		delta = -delta
-	}
-	return time.Duration(delta)*time.Second <= drift
+	// Compare time.Time values instead of multiplying an attacker-controlled
+	// seconds delta by time.Second, which can overflow time.Duration.
+	candidate := time.Unix(ts, 0)
+	return !candidate.Before(now.Add(-drift)) && !candidate.After(now.Add(drift))
 }
