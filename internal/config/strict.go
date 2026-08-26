@@ -58,6 +58,9 @@ func validateStrictSettings() error {
 	if ProviderTimeout <= 0 || ProviderMaxResponseBytes <= 0 {
 		problems = append(problems, "PROVIDER_TIMEOUT and PROVIDER_MAX_RESPONSE_BYTES must be positive")
 	}
+	if IdempotencyKeyTTL > 0 && ProviderTimeout > 0 && IdempotencyKeyTTL <= ProviderTimeout {
+		problems = append(problems, "IDEMPOTENCY_KEY_TTL must be greater than PROVIDER_TIMEOUT")
+	}
 	if HMACMaxDrift <= 0 {
 		problems = append(problems, "HMAC_MAX_DRIFT must be positive")
 	}
