@@ -54,15 +54,15 @@ jobs:
           VERSION=${{ steps.version.outputs.version }}
           COMMIT=${{ github.sha }}
           BUILD_DATE=$(date +%FT%T%z)
-          LDFLAGS="-s -w -X 'github.com/soulteary/version-kit.Version=${VERSION}' -X 'github.com/soulteary/version-kit.Commit=${COMMIT}' -X 'github.com/soulteary/version-kit.BuildDate=${BUILD_DATE}'"
+          LDFLAGS="-s -w -X 'github.com/soulteary/version-kit/v2.Version=${VERSION}' -X 'github.com/soulteary/version-kit/v2.Commit=${COMMIT}' -X 'github.com/soulteary/version-kit/v2.BuildDate=${BUILD_DATE}'"
           
           # Build for multiple platforms
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o dist/herald-linux-amd64 ./main.go
-          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o dist/herald-linux-arm64 ./main.go
-          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o dist/herald-darwin-amd64 ./main.go
-          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o dist/herald-darwin-arm64 ./main.go
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o dist/herald-windows-amd64.exe ./main.go
-          GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o dist/herald-windows-arm64.exe ./main.go
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o dist/herald-linux-amd64 ./main.go
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o dist/herald-linux-arm64 ./main.go
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o dist/herald-darwin-amd64 ./main.go
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o dist/herald-darwin-arm64 ./main.go
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o dist/herald-windows-amd64.exe ./main.go
+          GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o dist/herald-windows-arm64.exe ./main.go
 
       - name: Generate checksums
         run: |
