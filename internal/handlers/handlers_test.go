@@ -762,6 +762,29 @@ func TestHandlers_VerifyChallenge_InvalidRequest(t *testing.T) {
 	}
 }
 
+func TestVerificationFailureStatus(t *testing.T) {
+	tests := []struct {
+		name   string
+		reason string
+		err    error
+		want   int
+	}{
+		{name: "invalid code", reason: "invalid", want: fiber.StatusUnauthorized},
+		{name: "expired", reason: "expired", want: fiber.StatusUnauthorized},
+		{name: "context mismatch", reason: "context_mismatch", want: fiber.StatusConflict},
+		{name: "contention", reason: "verification_contention", want: fiber.StatusConflict},
+		{name: "backend", reason: "backend_unavailable", want: fiber.StatusServiceUnavailable},
+		{name: "deadline", reason: "verification_failed", err: context.DeadlineExceeded, want: fiber.StatusServiceUnavailable},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := verificationFailureStatus(tt.reason, tt.err); got != tt.want {
+				t.Errorf("verificationFailureStatus(%q, %v) = %d, want %d", tt.reason, tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestHandlers_RevokeChallenge(t *testing.T) {
 	// Save original config
 	originalChallengeExpiry := config.ChallengeExpiry
