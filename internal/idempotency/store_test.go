@@ -126,6 +126,12 @@ func TestStore_StaleOwnerCannotMutateReplacement(t *testing.T) {
 	if err := s.Succeed(ctx, "p1", "k1", "fp1", staleOwner, json.RawMessage(`{"stale":true}`)); err != ErrOwnershipLost {
 		t.Fatalf("stale Succeed error = %v, want ErrOwnershipLost", err)
 	}
+	if err := s.Refresh(ctx, "p1", "k1", "fp1", staleOwner); err != ErrOwnershipLost {
+		t.Fatalf("stale Refresh error = %v, want ErrOwnershipLost", err)
+	}
+	if err := s.Refresh(ctx, "p1", "k1", "fp1", replacementOwner); err != nil {
+		t.Fatalf("replacement Refresh: %v", err)
+	}
 	if err := s.Succeed(ctx, "p1", "k1", "fp1", replacementOwner, json.RawMessage(`{"fresh":true}`)); err != nil {
 		t.Fatalf("replacement Succeed: %v", err)
 	}

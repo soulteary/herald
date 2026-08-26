@@ -181,6 +181,20 @@ func (s *Store) Fail(ctx context.Context, principal, clientKey, fingerprint, own
 	})
 }
 
+// Refresh verifies that the caller still owns a pending record and renews its
+// TTL. Handlers call this immediately before activation so an expired, stale
+// request cannot mutate challenge state owned by a replacement request.
+func (s *Store) Refresh(ctx context.Context, principal, clientKey, fingerprint, owner string) error {
+	key := s.redisKey(principal, clientKey)
+	return s.mutateOwned(ctx, key, fingerprint, owner, func(tx *redis.Tx) error {
+		_, err := tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+			pipe.Expire(ctx, key, s.ttl)
+			return nil
+		})
+		return err
+	})
+}
+
 func (s *Store) mutateOwned(ctx context.Context, key, fingerprint, owner string, mutate func(*redis.Tx) error) error {
 	err := s.client.Watch(ctx, func(tx *redis.Tx) error {
 		raw, err := tx.Get(ctx, key).Bytes()
