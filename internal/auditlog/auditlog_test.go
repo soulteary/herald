@@ -145,3 +145,21 @@ func TestInit_StorageErrorFallback(t *testing.T) {
 	l := GetLogger()
 	assert.NotNil(t, l)
 }
+
+func TestSetLoggerConcurrent(t *testing.T) {
+	shared := logger.New(logger.Config{Level: logger.ErrorLevel, Format: logger.FormatJSON})
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			if i%2 == 0 {
+				SetLogger(shared)
+				return
+			}
+			SetLogger(nil)
+		}(i)
+	}
+	wg.Wait()
+	SetLogger(nil)
+}

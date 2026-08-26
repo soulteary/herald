@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/redis/go-redis/v9"
 	audit "github.com/soulteary/audit-kit"
@@ -13,11 +14,12 @@ import (
 	"github.com/soulteary/herald/internal/metrics"
 )
 
-var log *logger.Logger
+var packageLogger atomic.Pointer[logger.Logger]
 
-// SetLogger sets the logger instance for the audit package
+// SetLogger sets the logger used by the next audit-writer initialization.
+// Atomic storage keeps concurrent handler construction race-free.
 func SetLogger(l *logger.Logger) {
-	log = l
+	packageLogger.Store(l)
 }
 
 var (
@@ -39,6 +41,9 @@ func Init(redisClient *redis.Client) {
 // silently degrading to a no-op sink that loses the audit trail.
 func InitWithError(redisClient *redis.Client) error {
 	auditLoggerInit.Do(func() {
+		// Capture one logger for this writer. Later handler construction must not
+		// reroute callbacks that belong to an already-running audit writer.
+		currentLog := packageLogger.Load()
 		cfg := audit.DefaultConfig()
 		cfg.Enabled = config.AuditEnabled
 		cfg.MaskDestination = config.AuditMaskDestination
@@ -47,14 +52,14 @@ func InitWithError(redisClient *redis.Client) error {
 		// Observe dropped/failed audit records instead of losing them silently.
 		cfg.OnEnqueueFailed = func(_ *audit.Record) {
 			metrics.RecordAuditDropped()
-			if log != nil {
-				log.Warn().Msg("audit record dropped: writer queue full")
+			if currentLog != nil {
+				currentLog.Warn().Msg("audit record dropped: writer queue full")
 			}
 		}
 		cfg.OnWriteFailed = func(_ *audit.Record, err error) {
 			metrics.RecordAuditDropped()
-			if log != nil {
-				log.Error().Err(err).Msg("audit record write failed")
+			if currentLog != nil {
+				currentLog.Error().Err(err).Msg("audit record write failed")
 			}
 		}
 
@@ -93,8 +98,8 @@ func InitWithError(redisClient *redis.Client) error {
 					auditInitErr = fmt.Errorf("audit: failed to initialize %s storage: %w", storageType, err)
 					return
 				}
-				if log != nil {
-					log.Warn().Err(err).Msg("Failed to initialize audit storage, using no-op storage")
+				if currentLog != nil {
+					currentLog.Warn().Err(err).Msg("Failed to initialize audit storage, using no-op storage")
 				}
 				storage = audit.NewNoopStorage()
 			}

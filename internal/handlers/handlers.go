@@ -99,6 +99,9 @@ func NewHandlersWithError(redisClient *redis.Client, log *logger.Logger) (*Handl
 
 	rateLimitMgr := ratelimit.NewManager(redisClient)
 
+	// Wire the application logger before initialization so asynchronous
+	// enqueue/write failures are visible as well as counted.
+	auditlog.SetLogger(log)
 	// Initialize audit logger with Redis client. In production a broken audit
 	// backend is a hard startup error rather than a silent downgrade to no-op.
 	if err := auditlog.InitWithError(redisClient); err != nil {
