@@ -65,6 +65,7 @@ func NewRouter(log *logger.Logger) *fiber.App {
 // RouterWithHandlers wraps the router and handlers for graceful shutdown
 type RouterWithHandlers struct {
 	App      *fiber.App
+	TestApp  *fiber.App
 	Handlers *handlers.Handlers
 }
 
@@ -152,17 +153,21 @@ func NewRouterWithClientAndHandlers(redisClient *redis.Client, log *logger.Logge
 	// Prometheus metrics endpoint
 	app.Get("/metrics", metricskit.FiberHandlerFor(metrics.Registry))
 
-	// Test mode endpoint: only mounted when the combined test-environment +
-	// test-mode switch is on, and always guarded by a dedicated test API key
-	// (HERALD_TEST_API_KEY). It is never reachable in development or production,
-	// nor without the test key. Operators should additionally bind this on a
-	// loopback/admin listener (see config.TestListenerAddr).
+	// Test mode endpoint: build a separate app so the route can only be exposed
+	// on the dedicated loopback/admin listener. It is never part of the public
+	// application, even in the test environment.
+	var testApp *fiber.App
 	if config.TestCodeExposureEnabled() {
 		if config.TestAPIKey == "" {
 			log.Error().Msg("Test-code endpoint requested but HERALD_TEST_API_KEY is empty; refusing to mount it")
 		} else {
-			app.Get("/v1/test/code/:challenge_id", testAuthMiddleware(config.TestAPIKey), h.GetTestCode)
-			log.Warn().Msg("Test-code endpoint mounted (test environment only, guarded by HERALD_TEST_API_KEY)")
+			testApp = fiber.New(fiber.Config{BodyLimit: config.MaxBodyBytes})
+			testApp.Use(recover.New())
+			testApp.Get("/livez", func(c fiber.Ctx) error {
+				return c.JSON(fiber.Map{"ok": true, "status": "live"})
+			})
+			testApp.Get("/v1/test/code/:challenge_id", testAuthMiddleware(config.TestAPIKey), h.GetTestCode)
+			log.Warn().Str("addr", config.TestListenerAddr).Msg("Test-code endpoint enabled on dedicated listener")
 		}
 	}
 
@@ -233,6 +238,7 @@ func NewRouterWithClientAndHandlers(redisClient *redis.Client, log *logger.Logge
 
 	return &RouterWithHandlers{
 		App:      app,
+		TestApp:  testApp,
 		Handlers: h,
 	}
 }
