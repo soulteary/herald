@@ -11,6 +11,8 @@ export HERALD_API_KEY="$(openssl rand -hex 32)"
 docker compose up -d
 ```
 
+仓库中的 Compose 服务已设置生产启动所必需的 `PROVIDER_FAILURE_POLICY=strict`。
+
 ### 手动部署
 
 ```bash
