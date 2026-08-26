@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -97,8 +98,19 @@ func NewRouterWithClient(redisClient *redis.Client, log *logger.Logger) *fiber.A
 	return NewRouterWithClientAndHandlers(redisClient, log).App
 }
 
-// NewRouterWithClientAndHandlers creates a router with handlers for graceful shutdown
+// NewRouterWithClientAndHandlers creates a router with handlers for graceful shutdown.
+// Initialization failures panic rather than leave a partially initialized app running.
 func NewRouterWithClientAndHandlers(redisClient *redis.Client, log *logger.Logger) *RouterWithHandlers {
+	router, err := NewRouterWithClientAndHandlersE(redisClient, log)
+	if err != nil {
+		panic(err)
+	}
+	return router
+}
+
+// NewRouterWithClientAndHandlersE creates a router and reports handler/provider
+// initialization failures to the startup path.
+func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logger) (*RouterWithHandlers, error) {
 	app := fiber.New(fiber.Config{
 		// Server hardening: cap request body size and enforce timeouts so a slow
 		// or oversized client cannot exhaust resources.
@@ -107,6 +119,13 @@ func NewRouterWithClientAndHandlers(redisClient *redis.Client, log *logger.Logge
 		WriteTimeout: config.WriteTimeout,
 		IdleTimeout:  config.IdleTimeout,
 		ErrorHandler: jsonErrorHandler,
+		// Fiber only reads the proxy header when the immediate peer matches the
+		// explicit proxy allowlist, preventing direct header spoofing.
+		ProxyHeader: config.TrustedProxyHeader,
+		TrustProxy:  len(config.TrustedProxies) > 0,
+		TrustProxyConfig: fiber.TrustProxyConfig{
+			Proxies: config.TrustedProxies,
+		},
 	})
 
 	// Middleware
@@ -142,8 +161,12 @@ func NewRouterWithClientAndHandlers(redisClient *redis.Client, log *logger.Logge
 		log.Info().Str("origins", origins).Msg("CORS enabled with explicit allowlist")
 	}
 
-	// Initialize handlers
-	h := handlers.NewHandlers(redisClient, log)
+	// A configured provider that cannot be constructed must abort startup
+	// rather than silently disabling that channel.
+	h, err := handlers.NewHandlersWithError(redisClient, log)
+	if err != nil {
+		return nil, fmt.Errorf("initialize handlers: %w", err)
+	}
 
 	// Health check using health-kit
 	healthConfig := health.DefaultConfig().WithServiceName(config.ServiceName)
@@ -263,5 +286,5 @@ func NewRouterWithClientAndHandlers(redisClient *redis.Client, log *logger.Logge
 		App:      app,
 		TestApp:  testApp,
 		Handlers: h,
-	}
+	}, nil
 }

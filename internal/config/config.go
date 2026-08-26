@@ -78,6 +78,11 @@ var (
 	// enable it; "*" is rejected in production by Validate().
 	CORSAllowOrigins = env.Get("HERALD_CORS_ALLOW_ORIGINS", "")
 
+	// Proxy-derived client IPs are disabled unless both a header and an
+	// explicit proxy IP/CIDR allowlist are configured.
+	TrustedProxyHeader = env.Get("HERALD_TRUSTED_PROXY_HEADER", "")
+	TrustedProxies     = env.GetStringSlice("HERALD_TRUSTED_PROXIES", []string{}, ",")
+
 	// Dedicated auth + listener for the test-code endpoint. The endpoint is only
 	// mounted when TestCodeExposureEnabled() is true, is guarded by this key, and
 	// should be bound to a loopback/admin listener.

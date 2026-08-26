@@ -53,6 +53,19 @@ func TestNewRouterWithClient(t *testing.T) {
 	}
 }
 
+func TestNewRouterWithClientAndHandlersE_ReturnsProviderInitError(t *testing.T) {
+	redisClient, _ := testutil.NewTestRedisClient()
+	defer func() { _ = redisClient.Close() }()
+
+	originalURL := config.HeraldSMTPAPIURL
+	defer func() { config.HeraldSMTPAPIURL = originalURL }()
+	config.HeraldSMTPAPIURL = "://invalid-provider-url"
+
+	if _, err := NewRouterWithClientAndHandlersE(redisClient, testLogger()); err == nil {
+		t.Fatal("expected configured provider initialization error")
+	}
+}
+
 func TestRouter_FrameworkErrorsAreJSON(t *testing.T) {
 	redisClient, _ := testutil.NewTestRedisClient()
 	defer func() { _ = redisClient.Close() }()
