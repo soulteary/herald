@@ -380,6 +380,11 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 	)
 	if err != nil {
 		h.log.Error().Err(err).Msg("Rate limit check failed")
+		failIdem()
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "backend_unavailable",
+		})
 	}
 	if !allowed {
 		metrics.RecordRateLimitHit("user")
@@ -396,6 +401,11 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 	)
 	if err != nil {
 		h.log.Error().Err(err).Msg("Rate limit check failed")
+		failIdem()
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "backend_unavailable",
+		})
 	}
 	if !allowed {
 		metrics.RecordRateLimitHit("ip")
@@ -412,6 +422,11 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 	)
 	if err != nil {
 		h.log.Error().Err(err).Msg("Rate limit check failed")
+		failIdem()
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "backend_unavailable",
+		})
 	}
 	if !allowed {
 		metrics.RecordRateLimitHit("destination")
@@ -427,6 +442,11 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 	allowed, _, err = h.rateLimitManager.CheckResendCooldown(spanCtx, cooldownKey, config.ResendCooldown)
 	if err != nil {
 		h.log.Error().Err(err).Msg("Cooldown check failed")
+		failIdem()
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "backend_unavailable",
+		})
 	}
 	if !allowed {
 		metrics.RecordRateLimitHit("resend_cooldown")
