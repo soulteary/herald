@@ -88,3 +88,21 @@ func TestValidateStrictSettingsRequiresCompleteTrustedProxyConfig(t *testing.T) 
 		t.Fatalf("complete trusted proxy config should pass: %v", err)
 	}
 }
+
+func TestValidateStrictSettingsRequiresLeaseBeyondProviderTimeout(t *testing.T) {
+	originalTTL, originalTimeout := IdempotencyKeyTTL, ProviderTimeout
+	defer func() {
+		IdempotencyKeyTTL, ProviderTimeout = originalTTL, originalTimeout
+	}()
+
+	IdempotencyKeyTTL = 5 * time.Second
+	ProviderTimeout = 10 * time.Second
+	if err := validateStrictSettings(); err == nil {
+		t.Fatal("idempotency lease shorter than provider timeout must be rejected")
+	}
+
+	IdempotencyKeyTTL = 11 * time.Second
+	if err := validateStrictSettings(); err != nil {
+		t.Fatalf("lease longer than provider timeout should pass: %v", err)
+	}
+}
