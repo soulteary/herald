@@ -73,9 +73,6 @@ func validateStrictSettings() error {
 	if HMACMaxDrift <= 0 {
 		problems = append(problems, "HMAC_MAX_DRIFT must be positive")
 	}
-	if SessionStorageEnabled && SessionDefaultTTL <= 0 {
-		problems = append(problems, "HERALD_SESSION_DEFAULT_TTL must be positive when session storage is enabled")
-	}
 	if AuditEnabled && AuditTTL <= 0 {
 		problems = append(problems, "AUDIT_TTL must be positive when audit logging is enabled")
 	}
