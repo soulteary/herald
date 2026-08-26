@@ -78,6 +78,11 @@ var (
 	// enable it; "*" is rejected in production by Validate().
 	CORSAllowOrigins = env.Get("HERALD_CORS_ALLOW_ORIGINS", "")
 
+	// Proxy-derived client IPs are disabled unless both a header and an
+	// explicit proxy IP/CIDR allowlist are configured.
+	TrustedProxyHeader = env.Get("HERALD_TRUSTED_PROXY_HEADER", "")
+	TrustedProxies     = env.GetStringSlice("HERALD_TRUSTED_PROXIES", []string{}, ",")
+
 	// Dedicated auth + listener for the test-code endpoint. The endpoint is only
 	// mounted when TestCodeExposureEnabled() is true, is guarded by this key, and
 	// should be bound to a loopback/admin listener.
@@ -188,12 +193,12 @@ var (
 	TLSKeyFile      = env.Get("TLS_KEY_FILE", "")
 	TLSCACertFile   = env.Get("TLS_CA_CERT_FILE", "")   // For mTLS (client certificate verification)
 	TLSClientCAFile = env.Get("TLS_CLIENT_CA_FILE", "") // Alias for TLS_CA_CERT_FILE
-	TestMode        = env.GetBool("HERALD_TEST_MODE", false)
-
-	// Session storage config
-	SessionStorageEnabled = env.GetBool("HERALD_SESSION_STORAGE_ENABLED", false)
-	SessionDefaultTTL     = env.GetDuration("HERALD_SESSION_DEFAULT_TTL", 1*time.Hour)
-	SessionKeyPrefix      = env.Get("HERALD_SESSION_KEY_PREFIX", "session:")
+	// TLS settings used only by the in-container loopback health probe.
+	HealthcheckTLSCAFile         = env.Get("HERALD_HEALTHCHECK_TLS_CA_FILE", "")
+	HealthcheckTLSServerName     = env.Get("HERALD_HEALTHCHECK_TLS_SERVER_NAME", "localhost")
+	HealthcheckTLSClientCertFile = env.Get("HERALD_HEALTHCHECK_TLS_CLIENT_CERT_FILE", "")
+	HealthcheckTLSClientKeyFile  = env.Get("HERALD_HEALTHCHECK_TLS_CLIENT_KEY_FILE", "")
+	TestMode                     = env.GetBool("HERALD_TEST_MODE", false)
 
 	// Audit logging config
 	AuditEnabled         = env.GetBool("AUDIT_ENABLED", true)
@@ -263,6 +268,8 @@ func Initialize(l *logger.Logger) error {
 			IdempotencySecret = HMACSecret
 		case APIKey != "":
 			IdempotencySecret = APIKey
+		case len(hmacKeysMap) > 0 && Env == EnvProduction:
+			return fmt.Errorf("HERALD_IDEMPOTENCY_SECRET must be set in production when only HERALD_HMAC_KEYS is configured")
 		default:
 			IdempotencySecret = "herald-idempotency-fallback"
 		}
@@ -295,7 +302,6 @@ func Initialize(l *logger.Logger) error {
 		Dur("challenge_expiry", ChallengeExpiry).
 		Int("max_attempts", MaxAttempts).
 		Int("code_length", CodeLength).
-		Bool("session_storage", SessionStorageEnabled).
 		Msg("Configuration initialized")
 
 	// Fail-closed validation. In production, misconfiguration must prevent
@@ -378,6 +384,7 @@ func Validate() error {
 	}
 
 	// Production-only fail-closed checks.
+	problems = append(problems, validateProductionSecretMaterial()...)
 	if !authConfigured() {
 		problems = append(problems, "no service-to-service authentication configured (set API_KEY, HMAC_SECRET, or HERALD_HMAC_KEYS)")
 	}
@@ -466,6 +473,18 @@ func parseHMACKeys() error {
 			hmacKeysMap = nil
 			parseErr = fmt.Errorf("HERALD_HMAC_KEYS contains no keys")
 			return
+		}
+		for keyID, secret := range hmacKeysMap {
+			if strings.TrimSpace(keyID) == "" {
+				hmacKeysMap = nil
+				parseErr = fmt.Errorf("HERALD_HMAC_KEYS contains an empty key ID")
+				return
+			}
+			if strings.TrimSpace(secret) == "" {
+				hmacKeysMap = nil
+				parseErr = fmt.Errorf("HERALD_HMAC_KEYS key %q has an empty secret", keyID)
+				return
+			}
 		}
 
 		// Choose the default key id. Prefer an explicitly configured

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"flag"
 	"fmt"
 	"net"
@@ -66,8 +68,11 @@ func runHealthcheck() int {
 	if _, p, err := net.SplitHostPort(port); err == nil && p != "" {
 		host = "127.0.0.1:" + p
 	}
-	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(fmt.Sprintf("http://%s/livez", host))
+	scheme, client, err := newHealthcheckClient()
+	if err != nil {
+		return 1
+	}
+	resp, err := client.Get(fmt.Sprintf("%s://%s/livez", scheme, host))
 	if err != nil {
 		return 1
 	}
@@ -76,6 +81,45 @@ func runHealthcheck() int {
 		return 1
 	}
 	return 0
+}
+
+// newHealthcheckClient mirrors the public listener's TLS mode. Certificate
+// verification remains enabled; operators can provide a private CA and the DNS
+// name present in the server certificate. mTLS deployments can also provide a
+// dedicated client certificate for the loopback probe.
+func newHealthcheckClient() (string, *http.Client, error) {
+	client := &http.Client{Timeout: 2 * time.Second}
+	if config.TLSCertFile == "" || config.TLSKeyFile == "" {
+		return "http", client, nil
+	}
+
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		ServerName: config.HealthcheckTLSServerName,
+	}
+	if config.HealthcheckTLSCAFile != "" {
+		pem, err := os.ReadFile(config.HealthcheckTLSCAFile)
+		if err != nil {
+			return "", nil, fmt.Errorf("read healthcheck TLS CA: %w", err)
+		}
+		roots, err := x509.SystemCertPool()
+		if err != nil || roots == nil {
+			roots = x509.NewCertPool()
+		}
+		if !roots.AppendCertsFromPEM(pem) {
+			return "", nil, fmt.Errorf("parse healthcheck TLS CA")
+		}
+		tlsConfig.RootCAs = roots
+	}
+	if config.HealthcheckTLSClientCertFile != "" {
+		cert, err := tls.LoadX509KeyPair(config.HealthcheckTLSClientCertFile, config.HealthcheckTLSClientKeyFile)
+		if err != nil {
+			return "", nil, fmt.Errorf("load healthcheck client certificate: %w", err)
+		}
+		tlsConfig.Certificates = []tls.Certificate{cert}
+	}
+	client.Transport = &http.Transport{TLSClientConfig: tlsConfig}
+	return "https", client, nil
 }
 
 // run wires up dependencies and blocks until shutdown. Returning an error here
@@ -118,7 +162,10 @@ func run() error {
 		return err
 	}
 
-	routerWithHandlers := router.NewRouterWithClientAndHandlers(redisClient, log)
+	routerWithHandlers, err := router.NewRouterWithClientAndHandlersE(redisClient, log)
+	if err != nil {
+		return err
+	}
 	port := config.GetPort()
 
 	srv, err := server.New(routerWithHandlers.App, server.Config{

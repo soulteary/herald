@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ENVIRONMENT=test` + `HERALD_TEST_MODE=true`. The `/v1/test/code` endpoint is
   now behind dedicated test auth (`HERALD_TEST_API_KEY`) and is not mounted in
   development or production.
-- **HTTP hardening.** Request body cap (default 32 KiB), Read/Write/Idle
+- **HTTP hardening.** Request body cap (default 64 KiB), Read/Write/Idle
   timeouts, strict JSON content-type with rejection of unknown/trailing fields on
   core routes, and CORS disabled by default (wildcard origins refused in
   production).
@@ -76,13 +76,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to avoid high cardinality and PII.
 - Containers: hardened `docker/Dockerfile` (pinned base, non-root fixed
   UID/GID 10001, UPX off by default, no gcc/musl-dev/curl), added `.dockerignore`,
-  and a hardened `docker-compose.yml` (placeholder secrets, Redis not published,
+  and a hardened `docker-compose.yml` (required explicit secrets, Redis not published,
   healthchecks + `depends_on: service_healthy`).
 - CI: pinned tool versions and third-party actions to commit SHAs, least-
   privilege `GITHUB_TOKEN`, go-reportcard no longer auto-commits, and added
   compose smoke / non-root / config-startup-failure checks plus SBOM and
-  container vulnerability scanning. Release verifies checksums and optionally
-  keyless-signs images with cosign.
+  container vulnerability scanning. Release verifies checksums and attempts
+  optional keyless image signing with cosign; signing failures do not currently block publishing.
 
 ### Removed
 

@@ -30,11 +30,23 @@ func validateStrictSettings() error {
 	if !normalizedOneOf(ClientCertMode, "off", "optional", "require") {
 		problems = append(problems, "CLIENT_CERT_MODE must be off, optional, or require")
 	}
+	if (HealthcheckTLSClientCertFile == "") != (HealthcheckTLSClientKeyFile == "") {
+		problems = append(problems, "HERALD_HEALTHCHECK_TLS_CLIENT_CERT_FILE and HERALD_HEALTHCHECK_TLS_CLIENT_KEY_FILE must be set together")
+	}
 	if !normalizedOneOf(ProviderFailurePolicy, "strict", "soft") {
 		problems = append(problems, "PROVIDER_FAILURE_POLICY must be strict or soft")
 	}
 	if !normalizedOneOf(ProviderRedirectPolicy, "deny", "same-origin") {
 		problems = append(problems, "PROVIDER_REDIRECT_POLICY must be deny or same-origin")
+	}
+	if (strings.TrimSpace(TrustedProxyHeader) == "") != (len(TrustedProxies) == 0) {
+		problems = append(problems, "HERALD_TRUSTED_PROXY_HEADER and HERALD_TRUSTED_PROXIES must be configured together")
+	}
+	for _, proxy := range TrustedProxies {
+		if strings.TrimSpace(proxy) == "" {
+			problems = append(problems, "HERALD_TRUSTED_PROXIES must not contain empty entries")
+			break
+		}
 	}
 
 	if MaxBodyBytes <= 0 {
@@ -60,9 +72,6 @@ func validateStrictSettings() error {
 	}
 	if HMACMaxDrift <= 0 {
 		problems = append(problems, "HMAC_MAX_DRIFT must be positive")
-	}
-	if SessionStorageEnabled && SessionDefaultTTL <= 0 {
-		problems = append(problems, "HERALD_SESSION_DEFAULT_TTL must be positive when session storage is enabled")
 	}
 	if AuditEnabled && AuditTTL <= 0 {
 		problems = append(problems, "AUDIT_TTL must be positive when audit logging is enabled")

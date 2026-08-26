@@ -15,7 +15,7 @@
 
 Herald is a production-ready, standalone OTP and verification code service that sends verification codes via email and SMS. It features built-in rate limiting, security controls, and audit logging. Herald is designed to work independently and can be integrated with other services as needed.
 
-The HTTP server uses Fiber v3.4.0 and the matching v2 module lines of the Fiber-facing kit packages. Building from source requires Go 1.26 or later.
+The HTTP server uses Fiber v3.5.0 and the matching v2 module lines of the Fiber-facing kit packages. Building from source requires Go 1.26 or later.
 
 ## Core Features
 
@@ -91,7 +91,7 @@ Herald requires minimal configuration to get started:
 |----------|-------------|---------|----------|
 | `PORT` | Server port | `:8082` | No |
 | `REDIS_ADDR` | Redis address | `localhost:6379` | No |
-| `API_KEY` | API key for authentication | - | Recommended |
+| `API_KEY` | API key for `REQUEST_AUTH_MODE=api_key` | - | Required in production API-key mode |
 
 For email channel via herald-smtp, set `HERALD_SMTP_API_URL` (and optionally `HERALD_SMTP_API_KEY`); see [Deployment Guide](docs/enUS/DEPLOYMENT.md#email-channel-herald-smtp). For DingTalk channel, set `HERALD_DINGTALK_API_URL` (and optionally `HERALD_DINGTALK_API_KEY`); see [Deployment Guide](docs/enUS/DEPLOYMENT.md#dingtalk-channel-herald-dingtalk).
 

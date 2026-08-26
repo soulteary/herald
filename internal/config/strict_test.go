@@ -70,3 +70,21 @@ func TestValidateStrictSettingsRejectsUnsafeBounds(t *testing.T) {
 		t.Fatal("zero rate limit must be rejected")
 	}
 }
+
+func TestValidateStrictSettingsRequiresCompleteTrustedProxyConfig(t *testing.T) {
+	originalHeader, originalProxies := TrustedProxyHeader, TrustedProxies
+	defer func() {
+		TrustedProxyHeader, TrustedProxies = originalHeader, originalProxies
+	}()
+
+	TrustedProxyHeader = "X-Forwarded-For"
+	TrustedProxies = nil
+	if err := validateStrictSettings(); err == nil {
+		t.Fatal("proxy header without an allowlist must be rejected")
+	}
+
+	TrustedProxies = []string{"10.0.0.0/8"}
+	if err := validateStrictSettings(); err != nil {
+		t.Fatalf("complete trusted proxy config should pass: %v", err)
+	}
+}
