@@ -369,6 +369,19 @@ func Validate() error {
 	if !authConfigured() {
 		problems = append(problems, "no service-to-service authentication configured (set API_KEY, HMAC_SECRET, or HERALD_HMAC_KEYS)")
 	}
+	// Validate the credentials required by the selected request-auth mode. Merely
+	// having a credential for a different mode must not let production start in a
+	// permanently unhealthy state where every business request is rejected.
+	switch strings.ToLower(strings.TrimSpace(RequestAuthMode)) {
+	case "api_key", "apikey":
+		if APIKey == "" {
+			problems = append(problems, "REQUEST_AUTH_MODE=api_key requires API_KEY")
+		}
+	case "hmac_v2", "hmac-v2", "hmac":
+		if HMACSecret == "" && len(hmacKeysMap) == 0 {
+			problems = append(problems, "REQUEST_AUTH_MODE=hmac_v2 requires HMAC_SECRET or HERALD_HMAC_KEYS")
+		}
+	}
 	if TestMode {
 		problems = append(problems, "HERALD_TEST_MODE=true is forbidden in production")
 	}

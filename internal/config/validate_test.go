@@ -13,6 +13,7 @@ func withProdEnv(t *testing.T) func() {
 		env                    Environment
 		apiKey, hmac           string
 		hmacKeysJSON           string
+		requestAuthMode        string
 		testMode               bool
 		providerPolicy         string
 		redisPassword          string
@@ -24,7 +25,8 @@ func withProdEnv(t *testing.T) func() {
 		env:            Env,
 		apiKey:         APIKey,
 		hmac:           HMACSecret,
-		hmacKeysJSON:   HMACKeysJSON,
+		hmacKeysJSON:    HMACKeysJSON,
+		requestAuthMode: RequestAuthMode,
 		testMode:       TestMode,
 		providerPolicy: ProviderFailurePolicy,
 		redisPassword:  RedisPassword,
@@ -39,6 +41,7 @@ func withProdEnv(t *testing.T) func() {
 	Env = EnvProduction
 	APIKey = "prod-api-key"
 	HMACSecret = ""
+	RequestAuthMode = "api_key"
 	HMACKeysJSON = ""
 	hmacKeysMap = nil
 	TestMode = false
@@ -57,6 +60,7 @@ func withProdEnv(t *testing.T) func() {
 		APIKey = orig.apiKey
 		HMACSecret = orig.hmac
 		HMACKeysJSON = orig.hmacKeysJSON
+		RequestAuthMode = orig.requestAuthMode
 		TestMode = orig.testMode
 		ProviderFailurePolicy = orig.providerPolicy
 		RedisPassword = orig.redisPassword
@@ -84,6 +88,39 @@ func TestValidate_ProductionRefusesNoAuth(t *testing.T) {
 	if err := Validate(); err == nil {
 		t.Fatal("production with no auth must fail Validate()")
 	}
+}
+
+func TestValidate_ProductionRequiresCredentialForSelectedAuthMode(t *testing.T) {
+	t.Run("api_key mode requires API_KEY", func(t *testing.T) {
+		defer withProdEnv(t)()
+		RequestAuthMode = "api_key"
+		APIKey = ""
+		HMACSecret = "configured-but-unused"
+		if err := Validate(); err == nil {
+			t.Fatal("api_key mode without API_KEY must fail even when HMAC is configured")
+		}
+	})
+
+	t.Run("hmac_v2 mode requires HMAC credential", func(t *testing.T) {
+		defer withProdEnv(t)()
+		RequestAuthMode = "hmac_v2"
+		APIKey = "configured-but-unused"
+		HMACSecret = ""
+		hmacKeysMap = nil
+		if err := Validate(); err == nil {
+			t.Fatal("hmac_v2 mode without an HMAC credential must fail even when API_KEY is configured")
+		}
+	})
+
+	t.Run("hmac_v2 accepts a single secret", func(t *testing.T) {
+		defer withProdEnv(t)()
+		RequestAuthMode = "hmac_v2"
+		APIKey = ""
+		HMACSecret = "prod-hmac-secret"
+		if err := Validate(); err != nil {
+			t.Fatalf("hmac_v2 with HMAC_SECRET should pass: %v", err)
+		}
+	})
 }
 
 func TestValidate_ProductionRefusesTestMode(t *testing.T) {
