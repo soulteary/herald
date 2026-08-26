@@ -53,6 +53,28 @@ func TestNewRouterWithClient(t *testing.T) {
 	}
 }
 
+
+func TestRouter_FrameworkErrorsAreJSON(t *testing.T) {
+	redisClient, _ := testutil.NewTestRedisClient()
+	defer func() { _ = redisClient.Close() }()
+
+	app := NewRouterWithClient(redisClient, testLogger())
+	resp, err := app.Test(httptest.NewRequest("GET", "/does-not-exist", nil))
+	if err != nil {
+		t.Fatalf("app.Test: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != fiber.StatusNotFound {
+		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Content-Type"); !strings.Contains(got, "application/json") {
+		t.Fatalf("Content-Type = %q, want JSON", got)
+	}
+	if !strings.Contains(string(body), `"reason":"not_found"`) {
+		t.Fatalf("body = %s, want stable not_found reason", body)
+	}
+}
+
 func TestHealthz_Returns200(t *testing.T) {
 	redisClient, _ := testutil.NewTestRedisClient()
 	defer func() { _ = redisClient.Close() }()
