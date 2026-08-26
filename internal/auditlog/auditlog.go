@@ -99,7 +99,7 @@ func InitWithError(redisClient *redis.Client) error {
 					return
 				}
 				if currentLog != nil {
-					log.Warn().Err(err).Msg("Failed to initialize audit storage, using no-op storage")
+					currentLog.Warn().Err(err).Msg("Failed to initialize audit storage, using no-op storage")
 				}
 				storage = audit.NewNoopStorage()
 			}
