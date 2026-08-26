@@ -11,6 +11,8 @@ export HERALD_API_KEY="$(openssl rand -hex 32)"
 docker compose up -d
 ```
 
+The checked-in Compose service sets `PROVIDER_FAILURE_POLICY=strict`, which is required for production startup.
+
 ### Manual Deployment
 
 ```bash
