@@ -96,6 +96,13 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 		ReadTimeout:  config.ReadTimeout,
 		WriteTimeout: config.WriteTimeout,
 		IdleTimeout:  config.IdleTimeout,
+		// Fiber only reads the proxy header when the immediate peer matches the
+		// explicit proxy allowlist, preventing direct header spoofing.
+		ProxyHeader: config.TrustedProxyHeader,
+		TrustProxy:  len(config.TrustedProxies) > 0,
+		TrustProxyConfig: fiber.TrustProxyConfig{
+			Proxies: config.TrustedProxies,
+		},
 	})
 
 	// Middleware
