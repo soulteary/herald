@@ -35,7 +35,7 @@ key_id
 sha256_hex_of_raw_body
 ```
 
-Compute the lowercase hexadecimal HMAC-SHA256 of that value. The default timestamp drift is 60 seconds (`HMAC_MAX_DRIFT`), and each valid nonce is consumed once in Redis. With multiple `HERALD_HMAC_KEYS`, set `HERALD_HMAC_DEFAULT_KEY_ID` or send `X-Key-Id`; Herald never selects the first Go map entry. Legacy v1 is disabled unless `HMAC_V1_ENABLED=true`.
+The `key_id` line is the literal `X-Key-Id` header value. When the header is omitted because a configured or implicit default selects the secret, sign an empty `key_id` line—not the default key ID. Compute the lowercase hexadecimal HMAC-SHA256 of that value. The default timestamp drift is 60 seconds (`HMAC_MAX_DRIFT`), and each valid nonce is consumed once in Redis. With multiple `HERALD_HMAC_KEYS`, set `HERALD_HMAC_DEFAULT_KEY_ID` or send `X-Key-Id`; Herald never selects the first Go map entry. Legacy v1 is disabled unless `HMAC_V1_ENABLED=true`.
 
 ### API key
 
