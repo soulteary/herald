@@ -25,7 +25,7 @@ permissions:
 env:
   DOCKER_BUILDKIT: 1
   # Pinned tool versions (do not use "latest" so runs are reproducible).
-  GOLANGCI_LINT_VERSION: v2.12.2
+  GOLANGCI_LINT_VERSION: v2.13.0
   GOVULNCHECK_VERSION: v1.1.4
 
 jobs:

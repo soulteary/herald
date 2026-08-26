@@ -13,6 +13,21 @@ import (
 	"github.com/soulteary/herald/internal/testutil"
 )
 
+var (
+	testLoggerOnce     sync.Once
+	testLoggerInstance *logger.Logger
+)
+
+// testLogger returns a shared logger for testing. logger.New configures
+// zerolog package globals, so constructing a new logger while the asynchronous
+// audit writer is emitting an event causes a data race under go test -race.
+func testLogger() *logger.Logger {
+	testLoggerOnce.Do(func() {
+		testLoggerInstance = logger.New(logger.Config{Level: logger.ErrorLevel, Format: logger.FormatJSON})
+	})
+	return testLoggerInstance
+}
+
 func TestAuditLogFunctions(t *testing.T) {
 	// Reset logger for testing
 	auditLogger = nil
@@ -119,7 +134,7 @@ func TestInit_WithRedisClient(t *testing.T) {
 	}
 	defer func() { _ = redisClient.Close() }()
 
-	SetLogger(logger.New(logger.Config{Level: logger.ErrorLevel, Format: logger.FormatJSON}))
+	SetLogger(testLogger())
 	Init(redisClient)
 	l := GetLogger()
 	assert.NotNil(t, l)
@@ -140,14 +155,14 @@ func TestInit_StorageErrorFallback(t *testing.T) {
 	config.AuditStorageType = "database"
 	config.AuditDatabaseURL = ""
 
-	SetLogger(logger.New(logger.Config{Level: logger.ErrorLevel, Format: logger.FormatJSON}))
+	SetLogger(testLogger())
 	Init(nil)
 	l := GetLogger()
 	assert.NotNil(t, l)
 }
 
 func TestSetLoggerConcurrent(t *testing.T) {
-	shared := logger.New(logger.Config{Level: logger.ErrorLevel, Format: logger.FormatJSON})
+	shared := testLogger()
 	var wg sync.WaitGroup
 	for i := 0; i < 100; i++ {
 		wg.Add(1)
