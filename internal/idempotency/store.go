@@ -3,6 +3,7 @@ package idempotency
 import (
 	"context"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -37,6 +38,9 @@ var (
 	// ErrBackendUnavailable indicates the Redis backend failed; callers must
 	// fail closed rather than proceeding without idempotency protection.
 	ErrBackendUnavailable = errors.New("idempotency: backend unavailable")
+	// ErrOwnershipLost indicates that a pending record expired or was replaced
+	// before its original handler attempted to complete it.
+	ErrOwnershipLost = errors.New("idempotency: pending ownership lost")
 )
 
 // Record is the persisted idempotency record. The Response is opaque JSON that
@@ -44,6 +48,7 @@ var (
 type Record struct {
 	State       State           `json:"state"`
 	Fingerprint string          `json:"fingerprint"`
+	Owner       string          `json:"owner,omitempty"`
 	Response    json.RawMessage `json:"response,omitempty"`
 	CreatedAt   int64           `json:"created_at"`
 }
@@ -95,26 +100,31 @@ func Fingerprint(parts ...string) string {
 
 // Begin attempts to claim the pending slot for (principal, clientKey,
 // fingerprint). Outcomes:
-//   - nil, nil, nil            -> caller owns the slot and must proceed, then
+//   - nil, owner, nil          -> caller owns the slot and must proceed, then
 //     call Succeed or Fail.
-//   - replayResp, nil, nil     -> a prior success exists; caller replays it
+//   - replayResp, "", nil      -> a prior success exists; caller replays it
 //     (replayResp non-nil).
-//   - nil, nil, ErrInFlight    -> a concurrent request holds the slot.
-//   - nil, nil, ErrConflict    -> key reused with a different fingerprint.
-//   - nil, nil, ErrBackendUnavailable -> Redis failure; caller fails closed.
-func (s *Store) Begin(ctx context.Context, principal, clientKey, fingerprint string) (replay json.RawMessage, owned bool, err error) {
+//   - nil, "", ErrInFlight    -> a concurrent request holds the slot.
+//   - nil, "", ErrConflict    -> key reused with a different fingerprint.
+//   - nil, "", ErrBackendUnavailable -> Redis failure; caller fails closed.
+func (s *Store) Begin(ctx context.Context, principal, clientKey, fingerprint string) (replay json.RawMessage, owner string, err error) {
 	key := s.redisKey(principal, clientKey)
+	ownerBytes := make([]byte, 16)
+	if _, err := rand.Read(ownerBytes); err != nil {
+		return nil, "", ErrBackendUnavailable
+	}
+	owner = hex.EncodeToString(ownerBytes)
 
-	pending := Record{State: StatePending, Fingerprint: fingerprint, CreatedAt: time.Now().Unix()}
+	pending := Record{State: StatePending, Fingerprint: fingerprint, Owner: owner, CreatedAt: time.Now().Unix()}
 	pendingJSON, _ := json.Marshal(pending)
 
 	// Atomic claim: only the first caller sets the pending placeholder.
 	set, serr := s.client.SetNX(ctx, key, pendingJSON, s.ttl).Result()
 	if serr != nil {
-		return nil, false, ErrBackendUnavailable
+		return nil, "", ErrBackendUnavailable
 	}
 	if set {
-		return nil, true, nil
+		return nil, owner, nil
 	}
 
 	// Slot already exists: read and classify.
@@ -123,54 +133,90 @@ func (s *Store) Begin(ctx context.Context, principal, clientKey, fingerprint str
 		if errors.Is(gerr, redis.Nil) {
 			// Race: it expired between SetNX and Get. Treat as in-flight; caller
 			// should retry rather than double-send.
-			return nil, false, ErrInFlight
+			return nil, "", ErrInFlight
 		}
-		return nil, false, ErrBackendUnavailable
+		return nil, "", ErrBackendUnavailable
 	}
 	var existing Record
 	if json.Unmarshal(raw, &existing) != nil {
-		return nil, false, ErrBackendUnavailable
+		return nil, "", ErrBackendUnavailable
 	}
 	if existing.Fingerprint != fingerprint {
-		return nil, false, ErrConflict
+		return nil, "", ErrConflict
 	}
 	switch existing.State {
 	case StateSucceeded:
-		return existing.Response, false, nil
+		return existing.Response, "", nil
 	case StateFailed:
-		// Allow a retry: clear and re-claim.
-		if delErr := s.client.Del(ctx, key).Err(); delErr != nil {
-			return nil, false, ErrBackendUnavailable
-		}
-		set2, serr2 := s.client.SetNX(ctx, key, pendingJSON, s.ttl).Result()
-		if serr2 != nil {
-			return nil, false, ErrBackendUnavailable
-		}
-		if set2 {
-			return nil, true, nil
-		}
-		return nil, false, ErrInFlight
+		return nil, "", ErrInFlight
 	default:
-		return nil, false, ErrInFlight
+		return nil, "", ErrInFlight
 	}
 }
 
 // Succeed stores the terminal success response so future duplicates replay it.
-func (s *Store) Succeed(ctx context.Context, principal, clientKey, fingerprint string, response json.RawMessage) error {
+func (s *Store) Succeed(ctx context.Context, principal, clientKey, fingerprint, owner string, response json.RawMessage) error {
 	key := s.redisKey(principal, clientKey)
-	rec := Record{State: StateSucceeded, Fingerprint: fingerprint, Response: response, CreatedAt: time.Now().Unix()}
-	recJSON, _ := json.Marshal(rec)
-	if err := s.client.Set(ctx, key, recJSON, s.ttl).Err(); err != nil {
-		return ErrBackendUnavailable
-	}
-	return nil
+	return s.mutateOwned(ctx, key, fingerprint, owner, func(tx *redis.Tx) error {
+		rec := Record{State: StateSucceeded, Fingerprint: fingerprint, Response: response, CreatedAt: time.Now().Unix()}
+		recJSON, _ := json.Marshal(rec)
+		_, err := tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+			pipe.Set(ctx, key, recJSON, s.ttl)
+			return nil
+		})
+		return err
+	})
 }
 
 // Fail clears the pending slot so a subsequent retry with the same key can
 // proceed. A terminal failure does not cache a poisoned response.
-func (s *Store) Fail(ctx context.Context, principal, clientKey string) error {
+func (s *Store) Fail(ctx context.Context, principal, clientKey, fingerprint, owner string) error {
 	key := s.redisKey(principal, clientKey)
-	if err := s.client.Del(ctx, key).Err(); err != nil {
+	return s.mutateOwned(ctx, key, fingerprint, owner, func(tx *redis.Tx) error {
+		_, err := tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+			pipe.Del(ctx, key)
+			return nil
+		})
+		return err
+	})
+}
+
+// Refresh verifies that the caller still owns a pending record and renews its
+// TTL. Handlers call this immediately before activation so an expired, stale
+// request cannot mutate challenge state owned by a replacement request.
+func (s *Store) Refresh(ctx context.Context, principal, clientKey, fingerprint, owner string) error {
+	key := s.redisKey(principal, clientKey)
+	return s.mutateOwned(ctx, key, fingerprint, owner, func(tx *redis.Tx) error {
+		_, err := tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+			pipe.Expire(ctx, key, s.ttl)
+			return nil
+		})
+		return err
+	})
+}
+
+func (s *Store) mutateOwned(ctx context.Context, key, fingerprint, owner string, mutate func(*redis.Tx) error) error {
+	err := s.client.Watch(ctx, func(tx *redis.Tx) error {
+		raw, err := tx.Get(ctx, key).Bytes()
+		if errors.Is(err, redis.Nil) {
+			return ErrOwnershipLost
+		}
+		if err != nil {
+			return err
+		}
+		var current Record
+		if err := json.Unmarshal(raw, &current); err != nil {
+			return err
+		}
+		if current.State != StatePending || current.Fingerprint != fingerprint || current.Owner != owner || owner == "" {
+			return ErrOwnershipLost
+		}
+		return mutate(tx)
+	}, key)
+	if errors.Is(err, ErrOwnershipLost) || errors.Is(err, redis.TxFailedErr) {
+		return ErrOwnershipLost
+	}
+	if err != nil {
 		return ErrBackendUnavailable
 	}
 	return nil
