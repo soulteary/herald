@@ -2,8 +2,8 @@ package router
 
 import (
 	"context"
-	"errors"
 	"crypto/subtle"
+	"errors"
 	"strings"
 	"time"
 
@@ -23,7 +23,6 @@ import (
 	"github.com/soulteary/herald/internal/metrics"
 	"github.com/soulteary/herald/internal/tracing"
 )
-
 
 func jsonErrorHandler(c fiber.Ctx, err error) error {
 	status := fiber.StatusInternalServerError
