@@ -268,6 +268,8 @@ func Initialize(l *logger.Logger) error {
 			IdempotencySecret = HMACSecret
 		case APIKey != "":
 			IdempotencySecret = APIKey
+		case len(hmacKeysMap) > 0 && Env == EnvProduction:
+			return fmt.Errorf("HERALD_IDEMPOTENCY_SECRET must be set in production when only HERALD_HMAC_KEYS is configured")
 		default:
 			IdempotencySecret = "herald-idempotency-fallback"
 		}
@@ -383,6 +385,7 @@ func Validate() error {
 	}
 
 	// Production-only fail-closed checks.
+	problems = append(problems, validateProductionSecretMaterial()...)
 	if !authConfigured() {
 		problems = append(problems, "no service-to-service authentication configured (set API_KEY, HMAC_SECRET, or HERALD_HMAC_KEYS)")
 	}
@@ -471,6 +474,18 @@ func parseHMACKeys() error {
 			hmacKeysMap = nil
 			parseErr = fmt.Errorf("HERALD_HMAC_KEYS contains no keys")
 			return
+		}
+		for keyID, secret := range hmacKeysMap {
+			if strings.TrimSpace(keyID) == "" {
+				hmacKeysMap = nil
+				parseErr = fmt.Errorf("HERALD_HMAC_KEYS contains an empty key ID")
+				return
+			}
+			if strings.TrimSpace(secret) == "" {
+				hmacKeysMap = nil
+				parseErr = fmt.Errorf("HERALD_HMAC_KEYS key %q has an empty secret", keyID)
+				return
+			}
 		}
 
 		// Choose the default key id. Prefer an explicitly configured
