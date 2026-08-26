@@ -340,13 +340,14 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 	// key with a different body we return 409; on a concurrent in-flight request
 	// we return 409 (retryable); on backend failure we fail closed.
 	principal := idempotencyPrincipal(c)
+	var idempotencyOwner string
 	fingerprint := idempotency.Fingerprint(
 		req.UserID, strings.ToLower(req.Channel), destination.Normalize(req.Channel, req.Destination), req.Purpose, req.Locale,
 	)
 	if idempotencyKey != "" {
-		replay, owned, err := h.idempotencyStore.Begin(spanCtx, principal, idempotencyKey, fingerprint)
+		replay, owner, err := h.idempotencyStore.Begin(spanCtx, principal, idempotencyKey, fingerprint)
 		switch {
-		case err == nil && !owned && replay != nil:
+		case err == nil && owner == "" && replay != nil:
 			metrics.RecordIdempotency("replay")
 			c.Set("Content-Type", "application/json")
 			return c.Status(fiber.StatusOK).Send(replay)
@@ -362,14 +363,16 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 		case err != nil:
 			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "backend_unavailable"})
 		}
-		// owned == true: we hold the pending slot and must Succeed/Fail below.
+		idempotencyOwner = owner
+		// A non-empty owner token proves this handler holds the pending slot and
+		// must be supplied to Succeed/Fail below.
 	}
 
 	// failIdem clears the pending slot on a terminal failure so a retry can
 	// proceed. It is a no-op when there is no idempotency key.
 	failIdem := func() {
 		if idempotencyKey != "" {
-			_ = h.idempotencyStore.Fail(spanCtx, principal, idempotencyKey)
+			_ = h.idempotencyStore.Fail(spanCtx, principal, idempotencyKey, fingerprint, idempotencyOwner)
 		}
 	}
 
@@ -380,6 +383,11 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 	)
 	if err != nil {
 		h.log.Error().Err(err).Msg("Rate limit check failed")
+		failIdem()
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "backend_unavailable",
+		})
 	}
 	if !allowed {
 		metrics.RecordRateLimitHit("user")
@@ -396,6 +404,11 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 	)
 	if err != nil {
 		h.log.Error().Err(err).Msg("Rate limit check failed")
+		failIdem()
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "backend_unavailable",
+		})
 	}
 	if !allowed {
 		metrics.RecordRateLimitHit("ip")
@@ -412,6 +425,11 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 	)
 	if err != nil {
 		h.log.Error().Err(err).Msg("Rate limit check failed")
+		failIdem()
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "backend_unavailable",
+		})
 	}
 	if !allowed {
 		metrics.RecordRateLimitHit("destination")
@@ -427,6 +445,11 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 	allowed, _, err = h.rateLimitManager.CheckResendCooldown(spanCtx, cooldownKey, config.ResendCooldown)
 	if err != nil {
 		h.log.Error().Err(err).Msg("Cooldown check failed")
+		failIdem()
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "backend_unavailable",
+		})
 	}
 	if !allowed {
 		metrics.RecordRateLimitHit("resend_cooldown")
@@ -611,6 +634,26 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 	// previously active challenge so an older, still-live code cannot be
 	// redeemed. A backend error here must not leave a redeemable-but-unindexed
 	// code, so on failure we revoke this pending challenge and fail closed.
+	// Renew and re-check the idempotency lease immediately before activation. A
+	// slow handler whose lease expired must not replace or revoke the challenge
+	// created by the request that acquired the key afterwards.
+	if idempotencyKey != "" {
+		if err := h.idempotencyStore.Refresh(spanCtx, principal, idempotencyKey, fingerprint, idempotencyOwner); err != nil {
+			_ = h.challengeManager.RevokePending(spanCtx, ch.ID)
+			if errors.Is(err, idempotency.ErrOwnershipLost) {
+				metrics.RecordIdempotency("ownership_lost")
+				return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+					"ok":     false,
+					"reason": "idempotency_ownership_lost",
+				})
+			}
+			h.log.Error().Err(err).Msg("Failed to refresh idempotency ownership")
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+				"ok":     false,
+				"reason": "backend_unavailable",
+			})
+		}
+	}
 	prevID, actErr := h.challengeManager.SwapActive(spanCtx, ch)
 	if actErr != nil {
 		h.log.Error().Err(actErr).Str("challenge_id", ch.ID).Msg("Failed to activate challenge")
@@ -647,7 +690,7 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 	// replay this exact response instead of sending another code.
 	if idempotencyKey != "" {
 		if payload, mErr := json.Marshal(response); mErr == nil {
-			if err := h.idempotencyStore.Succeed(spanCtx, principal, idempotencyKey, fingerprint, payload); err != nil {
+			if err := h.idempotencyStore.Succeed(spanCtx, principal, idempotencyKey, fingerprint, idempotencyOwner, payload); err != nil {
 				h.log.Warn().Err(err).Msg("Failed to persist idempotency success record")
 			}
 		}

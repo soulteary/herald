@@ -265,6 +265,42 @@ func TestHandlers_CreateChallenge_Success(t *testing.T) {
 	}
 }
 
+func TestHandlers_CreateChallenge_RateLimitBackendFailureReturns503(t *testing.T) {
+	redisClient := testRedisClient(t)
+	handlers := NewHandlers(redisClient, testLogger())
+	if err := redisClient.Close(); err != nil {
+		t.Fatalf("close Redis client: %v", err)
+	}
+
+	app := fiber.New()
+	app.Post("/challenge", handlers.CreateChallenge)
+	bodyBytes, _ := json.Marshal(CreateChallengeRequest{
+		UserID:      "user-backend-down",
+		Channel:     "email",
+		Destination: "backend-down@example.com",
+		Purpose:     "login",
+		Locale:      "en",
+	})
+	req := httptest.NewRequest("POST", "/challenge", bytes.NewBuffer(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusServiceUnavailable {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 503, body=%s", resp.StatusCode, string(body))
+	}
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result["reason"] != "backend_unavailable" {
+		t.Errorf("reason = %v, want backend_unavailable", result["reason"])
+	}
+}
+
 func TestHandlers_CreateChallenge_TestMode_ReturnsDebugCode(t *testing.T) {
 	originalTestMode := config.TestMode
 	originalEnv := config.Env
