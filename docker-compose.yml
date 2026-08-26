@@ -21,6 +21,7 @@ services:
       # Herald outside this minimal example.
       - REQUEST_AUTH_MODE=api_key
       - API_KEY=${HERALD_API_KEY:?set HERALD_API_KEY}
+      - PROVIDER_FAILURE_POLICY=strict
     depends_on:
       redis:
         condition: service_healthy
