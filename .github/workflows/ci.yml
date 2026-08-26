@@ -26,7 +26,9 @@ env:
   DOCKER_BUILDKIT: 1
   # Pinned tool versions (do not use "latest" so runs are reproducible).
   GOLANGCI_LINT_VERSION: v2.13.0
-  GOVULNCHECK_VERSION: v1.1.4
+  # v1.1.4 pins golang.org/x/tools@v0.29.0 whose SSA builder panics on Go 1.27
+  # AST nodes ("unexpected expr: *ast.KeyValueExpr"). v1.7.0 supports Go 1.27.
+  GOVULNCHECK_VERSION: v1.7.0
 
 jobs:
   fmt:
