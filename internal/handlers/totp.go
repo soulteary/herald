@@ -64,11 +64,8 @@ func (h *Handlers) TOTPVerify(c fiber.Ctx) error {
 		})
 	}
 	var req heraldtotp.VerifyRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "invalid_request",
-		})
+	if err := parseStrictJSON(c, &req); err != nil {
+		return writeStrictBodyError(c, err)
 	}
 	if req.Subject == "" || req.Code == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -107,12 +104,8 @@ func (h *Handlers) TOTPEnrollStart(c fiber.Ctx) error {
 		})
 	}
 	var req heraldtotp.EnrollStartRequest
-	if err := c.Bind().Body(&req); err != nil {
-		// Never echo the enroll body/error: it may contain a label or subject.
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "invalid_request",
-		})
+	if err := parseStrictJSON(c, &req); err != nil {
+		return writeStrictBodyError(c, err)
 	}
 	if req.Subject == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -148,11 +141,8 @@ func (h *Handlers) TOTPEnrollConfirm(c fiber.Ctx) error {
 		})
 	}
 	var req heraldtotp.EnrollConfirmRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "invalid_request",
-		})
+	if err := parseStrictJSON(c, &req); err != nil {
+		return writeStrictBodyError(c, err)
 	}
 	if req.EnrollID == "" || req.Code == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -172,9 +162,9 @@ func (h *Handlers) TOTPEnrollConfirm(c fiber.Ctx) error {
 		// enroll_id is a random opaque token (not PII) so it is safe to log; the
 		// upstream error is not echoed to avoid leaking response bodies.
 		h.log.Warn().Str("enroll_id", req.EnrollID).Msg("TOTP enroll/confirm proxy failed")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{
 			"ok":     false,
-			"reason": "invalid",
+			"reason": "proxy_failed",
 		})
 	}
 	return c.JSON(resp)
@@ -191,11 +181,8 @@ func (h *Handlers) TOTPRevoke(c fiber.Ctx) error {
 	var req struct {
 		Subject string `json:"subject"`
 	}
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "invalid_request",
-		})
+	if err := parseStrictJSON(c, &req); err != nil {
+		return writeStrictBodyError(c, err)
 	}
 	if req.Subject == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
