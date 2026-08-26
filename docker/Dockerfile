@@ -2,7 +2,7 @@
 
 # Pin the builder base image by digest so the build is reproducible and cannot
 # be silently swapped by a moved tag. Update deliberately when bumping Go.
-FROM golang:1.26.6-alpine3.23 AS builder
+FROM golang:1.26.6-alpine3.23@sha256:e57c41c1d5864341031181b0db34b9a537bb5773eb6428e4e5bdaea0f9135406 AS builder
 
 # Only the packages actually needed to build a CGO_ENABLED=0 static binary.
 # git is used by the Go toolchain for VCS stamping; ca-certificates lets module
@@ -48,7 +48,7 @@ RUN if [ "$USE_UPX" = "1" ]; then \
 # Runtime stage: distroless-style minimal Alpine. No curl/shell tools are added;
 # the container runs as a fixed non-root UID/GID and the healthcheck is defined
 # in docker-compose (or orchestrator) against the app's own /livez endpoint.
-FROM alpine:3.23
+FROM alpine:3.23@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40
 
 # Create a dedicated non-root user with a fixed, well-known UID/GID so file
 # ownership and PodSecurity policies are predictable across environments.
