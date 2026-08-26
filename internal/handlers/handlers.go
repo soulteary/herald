@@ -131,6 +131,7 @@ func NewHandlersWithError(redisClient *redis.Client, log *logger.Logger) (*Handl
 			Password:    config.SMTPPassword,
 			From:        config.SMTPFrom,
 			UseStartTLS: true,
+			Timeout:     config.ProviderTimeout,
 		}
 		smtpProvider, err := provider.NewSMTPProvider(smtpConfig)
 		if err != nil {
@@ -556,8 +557,6 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 		providerName = req.Channel
 	}
 
-	// Record send duration
-	sendStart := time.Now()
 	softDeliveryFailed := false
 
 	// Start span for provider send
@@ -588,6 +587,9 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 			})
 		}
 	}
+
+	// Record only provider latency; lease-refresh time belongs to Redis, not the provider.
+	sendStart := time.Now()
 
 	// Send using provider-kit Registry (returns *SendResult, error)
 	sendResult, err := h.providerRegistry.Send(providerCtx, channel, msg)
