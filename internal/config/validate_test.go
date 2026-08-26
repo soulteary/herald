@@ -22,20 +22,20 @@ func withProdEnv(t *testing.T) func() {
 		tlsCert, tlsKey, tlsCA string
 		smtpURL                string
 	}{
-		env:            Env,
-		apiKey:         APIKey,
-		hmac:           HMACSecret,
+		env:             Env,
+		apiKey:          APIKey,
+		hmac:            HMACSecret,
 		hmacKeysJSON:    HMACKeysJSON,
 		requestAuthMode: RequestAuthMode,
-		testMode:       TestMode,
-		providerPolicy: ProviderFailurePolicy,
-		redisPassword:  RedisPassword,
-		riskAck:        RiskAckPasswordlessRedis,
-		cors:           CORSAllowOrigins,
-		tlsCert:        TLSCertFile,
-		tlsKey:         TLSKeyFile,
-		tlsCA:          TLSCACertFile,
-		smtpURL:        HeraldSMTPAPIURL,
+		testMode:        TestMode,
+		providerPolicy:  ProviderFailurePolicy,
+		redisPassword:   RedisPassword,
+		riskAck:         RiskAckPasswordlessRedis,
+		cors:            CORSAllowOrigins,
+		tlsCert:         TLSCertFile,
+		tlsKey:          TLSKeyFile,
+		tlsCA:           TLSCACertFile,
+		smtpURL:         HeraldSMTPAPIURL,
 	}
 	// Baseline: a valid production config.
 	Env = EnvProduction

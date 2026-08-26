@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/subtle"
 	"strings"
 	"time"
@@ -181,7 +182,7 @@ func verifyHMACV2(c fiber.Ctx, cfg Config) error {
 	if cfg.NonceStore == nil {
 		return deny(c, "unauthorized")
 	}
-	fresh, err := cfg.NonceStore.Consume(c.Context(), service, lookupKeyID, nonce)
+	fresh, err := cfg.NonceStore.Consume(context.Background(), service, lookupKeyID, nonce)
 	if err != nil {
 		// Backend failure: fail closed in production, otherwise allow (dev).
 		if cfg.FailClosed {

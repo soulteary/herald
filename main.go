@@ -126,7 +126,6 @@ func run() error {
 		TLSCertFile:     config.TLSCertFile,
 		TLSKeyFile:      config.TLSKeyFile,
 		TLSClientCAFile: config.TLSCACertFile,
-		ClientCertMode:  config.ClientCertMode,
 		Logger:          log,
 	})
 	if err != nil {
@@ -153,19 +152,6 @@ func run() error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-
-	if routerWithHandlers.TestApp != nil {
-		testSrv, err := server.New(routerWithHandlers.TestApp, server.Config{
-			Addr:         config.TestListenerAddr,
-			LoopbackOnly: true,
-			Logger:       log,
-		})
-		if err != nil {
-			return fmt.Errorf("test listener: %w", err)
-		}
-		log.Warn().Str("addr", config.TestListenerAddr).Msg("Test-only listener starting")
-		return server.RunAll(ctx, srv, testSrv)
-	}
 
 	return srv.Run(ctx)
 }

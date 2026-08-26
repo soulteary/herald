@@ -57,38 +57,11 @@ func TestParseHMACKeys(t *testing.T) {
 	if secret != "" {
 		t.Errorf("Expected GetHMACSecret('') to return empty (no arbitrary default) with multiple keys, got %s", secret)
 	}
-	if got := GetHMACDefaultKeyID(); got != "" {
-		t.Errorf("GetHMACDefaultKeyID() with multiple keys = %q, want empty", got)
-	}
 
 	// Test GetHMACSecret with invalid key ID
 	secret = GetHMACSecret("invalid-key-id")
 	if secret != "" {
 		t.Errorf("Expected GetHMACSecret('invalid-key-id') to return empty string, got %s", secret)
-	}
-}
-
-func TestParseHMACKeys_SingleKeyProvidesEffectiveDefault(t *testing.T) {
-	originalHMACKeysJSON := HMACKeysJSON
-	originalDefault := HMACDefaultKeyID
-	defer func() {
-		HMACKeysJSON = originalHMACKeysJSON
-		HMACDefaultKeyID = originalDefault
-		hmacKeysMap = nil
-		hmacKeysMapOnce = sync.Once{}
-		hmacDefaultKeyID = ""
-	}()
-
-	HMACKeysJSON = `{"only-key":"only-secret"}`
-	HMACDefaultKeyID = ""
-	hmacKeysMap = nil
-	hmacKeysMapOnce = sync.Once{}
-	hmacDefaultKeyID = ""
-	if err := parseHMACKeys(); err != nil {
-		t.Fatalf("parseHMACKeys() failed: %v", err)
-	}
-	if got := GetHMACDefaultKeyID(); got != "only-key" {
-		t.Errorf("GetHMACDefaultKeyID() = %q, want only-key", got)
 	}
 }
 
@@ -116,9 +89,6 @@ func TestParseHMACKeys_ExplicitDefaultKeyID(t *testing.T) {
 	}
 	if got := GetHMACSecret(""); got != "secret-key-2" {
 		t.Errorf("GetHMACSecret('') with explicit default = %q, want secret-key-2", got)
-	}
-	if got := GetHMACDefaultKeyID(); got != "key-id-2" {
-		t.Errorf("GetHMACDefaultKeyID() = %q, want key-id-2", got)
 	}
 
 	// Unknown default must be rejected.

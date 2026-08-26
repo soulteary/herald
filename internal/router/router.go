@@ -65,7 +65,6 @@ func NewRouter(log *logger.Logger) *fiber.App {
 // RouterWithHandlers wraps the router and handlers for graceful shutdown
 type RouterWithHandlers struct {
 	App      *fiber.App
-	TestApp  *fiber.App
 	Handlers *handlers.Handlers
 }
 
@@ -153,21 +152,17 @@ func NewRouterWithClientAndHandlers(redisClient *redis.Client, log *logger.Logge
 	// Prometheus metrics endpoint
 	app.Get("/metrics", metricskit.FiberHandlerFor(metrics.Registry))
 
-	// Test mode endpoint: build a separate app so the route can only be exposed
-	// on the dedicated loopback/admin listener. It is never part of the public
-	// application, even in the test environment.
-	var testApp *fiber.App
+	// Test mode endpoint: only mounted when the combined test-environment +
+	// test-mode switch is on, and always guarded by a dedicated test API key
+	// (HERALD_TEST_API_KEY). It is never reachable in development or production,
+	// nor without the test key. Operators should additionally bind this on a
+	// loopback/admin listener (see config.TestListenerAddr).
 	if config.TestCodeExposureEnabled() {
 		if config.TestAPIKey == "" {
 			log.Error().Msg("Test-code endpoint requested but HERALD_TEST_API_KEY is empty; refusing to mount it")
 		} else {
-			testApp = fiber.New(fiber.Config{BodyLimit: config.MaxBodyBytes})
-			testApp.Use(recover.New())
-			testApp.Get("/livez", func(c fiber.Ctx) error {
-				return c.JSON(fiber.Map{"ok": true, "status": "live"})
-			})
-			testApp.Get("/v1/test/code/:challenge_id", testAuthMiddleware(config.TestAPIKey), h.GetTestCode)
-			log.Warn().Str("addr", config.TestListenerAddr).Msg("Test-code endpoint enabled on dedicated listener")
+			app.Get("/v1/test/code/:challenge_id", testAuthMiddleware(config.TestAPIKey), h.GetTestCode)
+			log.Warn().Msg("Test-code endpoint mounted (test environment only, guarded by HERALD_TEST_API_KEY)")
 		}
 	}
 
@@ -195,9 +190,9 @@ func NewRouterWithClientAndHandlers(redisClient *redis.Client, log *logger.Logge
 
 	// Determine the effective default key id. With a single HMAC_SECRET (no
 	// multi-key map) an explicit X-Key-Id is not required, so we supply a
-	// stable implicit default. With a parsed key map, use the effective default
-	// selected by config (empty => X-Key-Id mandatory for a multi-key map).
-	defaultKeyID := config.GetHMACDefaultKeyID()
+	// stable implicit default. With a multi-key map, config.HMACDefaultKeyID
+	// governs (empty => X-Key-Id mandatory).
+	defaultKeyID := config.HMACDefaultKeyID
 	if defaultKeyID == "" && !config.HasHMACKeys() && config.HMACSecret != "" {
 		defaultKeyID = "default"
 	}
@@ -238,7 +233,6 @@ func NewRouterWithClientAndHandlers(redisClient *redis.Client, log *logger.Logge
 
 	return &RouterWithHandlers{
 		App:      app,
-		TestApp:  testApp,
 		Handlers: h,
 	}
 }

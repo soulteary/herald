@@ -28,9 +28,6 @@ type ShutdownHook func(ctx context.Context) error
 type Config struct {
 	// Addr is the listen address (e.g. ":8080").
 	Addr string
-	// LoopbackOnly rejects wildcard and non-loopback addresses. It is intended
-	// for administrative listeners that must never be publicly reachable.
-	LoopbackOnly bool
 
 	// TLSCertFile / TLSKeyFile enable TLS when both are set.
 	TLSCertFile string
@@ -38,9 +35,6 @@ type Config struct {
 	// TLSClientCAFile enables mTLS (client certificate verification) when set.
 	// It requires TLSCertFile/TLSKeyFile.
 	TLSClientCAFile string
-	// ClientCertMode controls client certificate negotiation independently from
-	// request authentication: off, optional, or require.
-	ClientCertMode string
 
 	// ShutdownTimeout bounds the graceful drain window.
 	ShutdownTimeout time.Duration
@@ -64,30 +58,11 @@ func New(app *fiber.App, cfg Config) (*Server, error) {
 	if cfg.Addr == "" {
 		return nil, errors.New("server: empty listen address")
 	}
-	if cfg.LoopbackOnly {
-		host, _, err := net.SplitHostPort(cfg.Addr)
-		ip := net.ParseIP(host)
-		if err != nil || (host != "localhost" && (ip == nil || !ip.IsLoopback())) {
-			return nil, fmt.Errorf("server: listen address %q is not loopback-only", cfg.Addr)
-		}
-	}
 	if (cfg.TLSCertFile == "") != (cfg.TLSKeyFile == "") {
 		return nil, errors.New("server: half-configured TLS (cert without key or vice versa)")
 	}
 	if cfg.TLSClientCAFile != "" && (cfg.TLSCertFile == "" || cfg.TLSKeyFile == "") {
 		return nil, errors.New("server: client CA configured without server certificate/key")
-	}
-	switch cfg.ClientCertMode {
-	case "", "off":
-		if cfg.TLSClientCAFile != "" {
-			return nil, errors.New("server: client CA configured while client certificate mode is off")
-		}
-	case "optional", "require":
-		if cfg.TLSClientCAFile == "" {
-			return nil, fmt.Errorf("server: client certificate mode %q requires a client CA", cfg.ClientCertMode)
-		}
-	default:
-		return nil, fmt.Errorf("server: invalid client certificate mode %q", cfg.ClientCertMode)
 	}
 	if cfg.ShutdownTimeout <= 0 {
 		cfg.ShutdownTimeout = 15 * time.Second
@@ -137,52 +112,13 @@ func (s *Server) listener() (net.Listener, error) {
 			return nil, errors.New("server: failed to parse client CA certificate")
 		}
 		tlsCfg.ClientCAs = pool
-		tlsCfg.ClientAuth = clientAuthType(s.cfg.ClientCertMode)
+		tlsCfg.ClientAuth = tls.RequireAndVerifyClientCert
 	}
 	ln, err := tls.Listen("tcp", s.cfg.Addr, tlsCfg)
 	if err != nil {
 		return nil, fmt.Errorf("server: TLS listen %s: %w", s.cfg.Addr, err)
 	}
 	return ln, nil
-}
-
-func clientAuthType(mode string) tls.ClientAuthType {
-	if mode == "optional" {
-		return tls.VerifyClientCertIfGiven
-	}
-	if mode == "require" {
-		return tls.RequireAndVerifyClientCert
-	}
-	return tls.NoClientCert
-}
-
-// RunAll starts each server with a shared cancellation scope. If any listener
-// exits, the others are shut down and drained before RunAll returns.
-func RunAll(ctx context.Context, servers ...*Server) error {
-	if len(servers) == 0 {
-		return errors.New("server: no servers to run")
-	}
-	runCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	for _, srv := range servers {
-		if srv == nil {
-			return errors.New("server: nil server in group")
-		}
-	}
-	results := make(chan error, len(servers))
-	for _, srv := range servers {
-		go func(s *Server) { results <- s.Run(runCtx) }(srv)
-	}
-
-	firstErr := <-results
-	cancel()
-	for range len(servers) - 1 {
-		if err := <-results; firstErr == nil && err != nil {
-			firstErr = err
-		}
-	}
-	return firstErr
 }
 
 // Run starts the server and blocks until ctx is cancelled or the server exits

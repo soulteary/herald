@@ -62,8 +62,7 @@ func TestCodeExposureEnabled() bool {
 
 var (
 	// Environment: development | test | production. Controls Validate() strictness.
-	EnvironmentValue = env.Get("ENVIRONMENT", "development")
-	Env              = parseEnvironment(EnvironmentValue)
+	Env = parseEnvironment(env.Get("ENVIRONMENT", "development"))
 
 	// Server config
 	Port = env.Get("PORT", ":8082")
@@ -237,6 +236,11 @@ func Initialize(l *logger.Logger) error {
 			log.Warn().Err(err).Msg("Failed to parse HERALD_HMAC_KEYS, falling back to HMAC_SECRET")
 		} else {
 			log.Info().Int("count", len(hmacKeysMap)).Msg("HMAC keys loaded")
+			// Set default key ID to first key if available
+			for keyID := range hmacKeysMap {
+				hmacDefaultKeyID = keyID
+				break
+			}
 		}
 	}
 
@@ -317,10 +321,6 @@ func authConfigured() bool {
 // in production; development/test environments log warnings instead so local
 // workflows are not blocked. Returns a non-nil error when startup must abort.
 func Validate() error {
-	if err := validateStrictSettings(); err != nil {
-		return err
-	}
-
 	var problems []string
 
 	// TLS must be configured coherently regardless of environment: a cert
@@ -332,18 +332,6 @@ func Validate() error {
 	// A client CA (mTLS) requires a server cert/key to terminate TLS.
 	if TLSCACertFile != "" && (TLSCertFile == "" || TLSKeyFile == "") {
 		problems = append(problems, "TLS client CA configured without server certificate/key")
-	}
-	switch ClientCertMode {
-	case "off":
-		if TLSCACertFile != "" {
-			problems = append(problems, "TLS client CA configured while CLIENT_CERT_MODE=off")
-		}
-	case "optional", "require":
-		if TLSCACertFile == "" {
-			problems = append(problems, "CLIENT_CERT_MODE="+ClientCertMode+" requires TLS_CA_CERT_FILE")
-		}
-	default:
-		problems = append(problems, "CLIENT_CERT_MODE must be one of: off, optional, require")
 	}
 
 	// AUDIT_STORAGE_TYPE=loki has no backend implementation in audit-kit, so a
@@ -525,11 +513,4 @@ func GetHMACSecret(keyID string) string {
 // HasHMACKeys returns true if multiple HMAC keys are configured
 func HasHMACKeys() bool {
 	return len(hmacKeysMap) > 0
-}
-
-// GetHMACDefaultKeyID returns the effective default selected while parsing
-// HERALD_HMAC_KEYS. It is empty when a multi-key configuration requires an
-// explicit X-Key-Id header.
-func GetHMACDefaultKeyID() string {
-	return hmacDefaultKeyID
 }

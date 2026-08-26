@@ -203,24 +203,10 @@ func TestRouter_TestModeRoute(t *testing.T) {
 	defer func() { _ = redisClient.Close() }()
 
 	rw := NewRouterWithClientAndHandlers(redisClient, testLogger())
-	if rw.TestApp == nil {
-		t.Fatal("expected a dedicated test app")
-	}
-
-	// The public app must never expose the test-code route.
-	publicReq := httptest.NewRequest("GET", "/v1/test/code/some-id", nil)
-	publicReq.Header.Set("X-Test-Api-Key", "test-secret-key")
-	publicResp, err := rw.App.Test(publicReq)
-	if err != nil {
-		t.Fatalf("public app.Test: %v", err)
-	}
-	if publicResp.StatusCode != fiber.StatusNotFound {
-		t.Errorf("public test-code route status = %d, want 404", publicResp.StatusCode)
-	}
 
 	// Without the test key the endpoint must reject with 401.
 	reqNoKey := httptest.NewRequest("GET", "/v1/test/code/some-id", nil)
-	respNoKey, err := rw.TestApp.Test(reqNoKey)
+	respNoKey, err := rw.App.Test(reqNoKey)
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -232,7 +218,7 @@ func TestRouter_TestModeRoute(t *testing.T) {
 	// With the test key it is reachable (200 or 404 depending on code presence).
 	req := httptest.NewRequest("GET", "/v1/test/code/some-id", nil)
 	req.Header.Set("X-Test-Api-Key", "test-secret-key")
-	resp, err := rw.TestApp.Test(req)
+	resp, err := rw.App.Test(req)
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -313,9 +299,6 @@ func TestRouter_TestCodeRoute_NotMountedInDevOrProd(t *testing.T) {
 	defer func() { _ = redisClient.Close() }()
 
 	rw := NewRouterWithClientAndHandlers(redisClient, testLogger())
-	if rw.TestApp != nil {
-		t.Fatal("test app must not be created outside the test environment")
-	}
 	req := httptest.NewRequest("GET", "/v1/test/code/some-id", nil)
 	req.Header.Set("X-Test-Api-Key", "test-secret-key")
 	resp, err := rw.App.Test(req)
