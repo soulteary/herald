@@ -118,7 +118,10 @@ func run() error {
 		return err
 	}
 
-	routerWithHandlers := router.NewRouterWithClientAndHandlers(redisClient, log)
+	routerWithHandlers, err := router.NewRouterWithClientAndHandlersE(redisClient, log)
+	if err != nil {
+		return err
+	}
 	port := config.GetPort()
 
 	srv, err := server.New(routerWithHandlers.App, server.Config{
