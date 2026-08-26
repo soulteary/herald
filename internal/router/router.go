@@ -36,8 +36,6 @@ func jsonErrorHandler(c fiber.Ctx, err error) error {
 		reason = "not_found"
 	case fiber.StatusMethodNotAllowed:
 		reason = "method_not_allowed"
-	case fiber.StatusRequestEntityTooLarge:
-		reason = "payload_too_large"
 	default:
 		if status < fiber.StatusInternalServerError {
 			reason = "request_error"
