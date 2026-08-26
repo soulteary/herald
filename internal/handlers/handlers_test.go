@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http/httptest"
@@ -795,6 +796,58 @@ func TestHandlers_VerifyChallenge_InvalidRequest(t *testing.T) {
 				t.Errorf("VerifyChallenge() status = %d, want %d", resp.StatusCode, tt.wantCode)
 			}
 		})
+	}
+}
+
+func TestVerificationFailureStatus(t *testing.T) {
+	tests := []struct {
+		name   string
+		reason string
+		err    error
+		want   int
+	}{
+		{name: "invalid code", reason: "invalid", want: fiber.StatusUnauthorized},
+		{name: "expired", reason: "expired", want: fiber.StatusUnauthorized},
+		{name: "context mismatch", reason: "context_mismatch", want: fiber.StatusConflict},
+		{name: "contention", reason: "verification_contention", want: fiber.StatusConflict},
+		{name: "backend", reason: "backend_unavailable", want: fiber.StatusServiceUnavailable},
+		{name: "deadline", reason: "verification_failed", err: context.DeadlineExceeded, want: fiber.StatusServiceUnavailable},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := verificationFailureStatus(tt.reason, tt.err); got != tt.want {
+				t.Errorf("verificationFailureStatus(%q, %v) = %d, want %d", tt.reason, tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestVerificationReasonFromError(t *testing.T) {
+	tests := []struct {
+		err  error
+		want string
+	}{
+		{err: errors.New("challenge expired"), want: "expired"},
+		{err: errors.New("invalid code"), want: "invalid"},
+		{err: errors.New("WRONGPASS invalid username-password pair"), want: "backend_unavailable"},
+		{err: errors.New("dial tcp: connection refused"), want: "backend_unavailable"},
+	}
+	for _, tt := range tests {
+		if got := verificationReasonFromError(tt.err); got != tt.want {
+			t.Errorf("verificationReasonFromError(%v) = %q, want %q", tt.err, got, tt.want)
+		}
+	}
+}
+
+func TestVerificationFailureRetryable(t *testing.T) {
+	if verificationFailureRetryable("context_mismatch", fiber.StatusConflict) {
+		t.Error("context mismatch must not be retryable")
+	}
+	if !verificationFailureRetryable("contended", fiber.StatusConflict) {
+		t.Error("contention should be retryable")
+	}
+	if !verificationFailureRetryable("backend_unavailable", fiber.StatusServiceUnavailable) {
+		t.Error("backend failure should be retryable")
 	}
 }
 

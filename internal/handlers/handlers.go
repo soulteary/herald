@@ -775,22 +775,23 @@ func (h *Handlers) VerifyChallenge(c fiber.Ctx) error {
 	defer verifySpan.End()
 
 	verifySpan.SetAttributes(attribute.String("challenge_id", req.ChallengeID))
+	peerIP := c.IP()
+	if req.ClientIP != "" && req.ClientIP != peerIP {
+		h.log.Debug().
+			Str("reported_client_ip_digest", h.digester.Digest(req.ClientIP)).
+			Msg("verification client_ip differs from trusted peer IP (advisory only)")
+	}
 
 	// Verify challenge
-	result, err := h.challengeManager.Verify(verifyCtx, req.ChallengeID, req.Code, req.ClientIP)
-	if err != nil || !result.OK {
+	result, err := h.challengeManager.Verify(verifyCtx, req.ChallengeID, req.Code, peerIP)
+	if err != nil || result == nil || !result.OK {
 		reason := "verification_failed"
 		if result != nil && result.Reason != "" {
 			reason = result.Reason
 		} else if err != nil {
-			errStr := err.Error()
-			if contains(errStr, "expired") {
-				reason = "expired"
-			} else if contains(errStr, "locked") {
-				reason = "locked"
-			} else if contains(errStr, "invalid") {
-				reason = "invalid"
-			}
+			reason = verificationReasonFromError(err)
+		} else if result == nil {
+			reason = "backend_unavailable"
 		}
 
 		tracing.RecordError(verifySpan, err)
@@ -809,7 +810,7 @@ func (h *Handlers) VerifyChallenge(c fiber.Ctx) error {
 		}
 
 		// Audit: verification failed
-		auditlog.LogVerificationFailed(verifyCtx, req.ChallengeID, reason, req.ClientIP)
+		auditlog.LogVerificationFailed(verifyCtx, req.ChallengeID, reason, peerIP)
 
 		response := fiber.Map{
 			"ok":     false,
@@ -819,7 +820,11 @@ func (h *Handlers) VerifyChallenge(c fiber.Ctx) error {
 			response["remaining_attempts"] = *result.RemainingAttempts
 		}
 
-		return c.Status(fiber.StatusUnauthorized).JSON(response)
+		status := verificationFailureStatus(reason, err)
+		if verificationFailureRetryable(reason, status) {
+			c.Set("Retry-After", "1")
+		}
+		return c.Status(status).JSON(response)
 	}
 
 	// Set span attributes for success
@@ -836,7 +841,7 @@ func (h *Handlers) VerifyChallenge(c fiber.Ctx) error {
 	metrics.RecordVerificationContention("acquired")
 
 	// Audit: challenge verified
-	auditlog.LogVerificationSuccess(verifyCtx, ch.ID, ch.UserID, string(ch.Channel), ch.Destination, ch.Purpose, req.ClientIP)
+	auditlog.LogVerificationSuccess(verifyCtx, ch.ID, ch.UserID, string(ch.Channel), ch.Destination, ch.Purpose, peerIP)
 
 	// Generate AMR based on channel (use string to avoid depending on challengekit.ChannelDingTalk in v1.0.0)
 	amr := []string{"otp"}
@@ -908,6 +913,12 @@ func (h *Handlers) VerifyChallengeV2(c fiber.Ctx) error {
 	verifyCtx, verifySpan := tracing.StartSpan(spanCtx, "otp.verify")
 	defer verifySpan.End()
 	verifySpan.SetAttributes(attribute.String("challenge_id", req.ChallengeID))
+	peerIP := c.IP()
+	if req.ClientIP != "" && req.ClientIP != peerIP {
+		h.log.Debug().
+			Str("reported_client_ip_digest", h.digester.Digest(req.ClientIP)).
+			Msg("verification client_ip differs from trusted peer IP (advisory only)")
+	}
 
 	opts := challengekit.VerifyOptions{
 		ExpectedUserID:  req.ExpectedUserID,
@@ -915,11 +926,13 @@ func (h *Handlers) VerifyChallengeV2(c fiber.Ctx) error {
 		ExpectedChannel: challengekit.Channel(req.ExpectedChannel),
 	}
 
-	result, err := h.challengeManager.VerifyWithOptions(verifyCtx, req.ChallengeID, req.Code, req.ClientIP, opts)
+	result, err := h.challengeManager.VerifyWithOptions(verifyCtx, req.ChallengeID, req.Code, peerIP, opts)
 	if err != nil || result == nil || !result.OK {
 		reason := "verification_failed"
 		if result != nil && result.Reason != "" {
 			reason = result.Reason
+		} else if err != nil || result == nil {
+			reason = "backend_unavailable"
 		}
 		tracing.RecordError(verifySpan, err)
 		h.log.Debug().Err(err).Msg("Challenge verification (v2) failed")
@@ -928,17 +941,15 @@ func (h *Handlers) VerifyChallengeV2(c fiber.Ctx) error {
 			attribute.String("reason", reason),
 		)
 		metrics.RecordVerification("failure", reason)
-		auditlog.LogVerificationFailed(verifyCtx, req.ChallengeID, reason, req.ClientIP)
+		auditlog.LogVerificationFailed(verifyCtx, req.ChallengeID, reason, peerIP)
 
 		response := fiber.Map{"ok": false, "reason": reason}
 		if result != nil && result.RemainingAttempts != nil {
 			response["remaining_attempts"] = *result.RemainingAttempts
 		}
-		// A context mismatch is a client error (wrong expectations), not an auth
-		// failure of the code itself.
-		status := fiber.StatusUnauthorized
-		if reason == "context_mismatch" {
-			status = fiber.StatusConflict
+		status := verificationFailureStatus(reason, err)
+		if verificationFailureRetryable(reason, status) {
+			c.Set("Retry-After", "1")
 		}
 		return c.Status(status).JSON(response)
 	}
@@ -951,7 +962,7 @@ func (h *Handlers) VerifyChallengeV2(c fiber.Ctx) error {
 		attribute.String("purpose", ch.Purpose),
 	)
 	metrics.RecordVerification("success", "")
-	auditlog.LogVerificationSuccess(verifyCtx, ch.ID, ch.UserID, string(ch.Channel), ch.Destination, ch.Purpose, req.ClientIP)
+	auditlog.LogVerificationSuccess(verifyCtx, ch.ID, ch.UserID, string(ch.Channel), ch.Destination, ch.Purpose, peerIP)
 
 	amr := []string{"otp"}
 	switch string(ch.Channel) {
@@ -1041,6 +1052,52 @@ func (h *Handlers) GetTestCode(c fiber.Ctx) error {
 		"challenge_id": challengeID,
 		"code":         code,
 	})
+}
+
+func verificationFailureStatus(reason string, err error) int {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return fiber.StatusServiceUnavailable
+	}
+	normalized := strings.ToLower(reason)
+	if normalized == "backend_unavailable" || normalized == "internal_error" ||
+		contains(normalized, "storage_error") || contains(normalized, "unavailable") {
+		return fiber.StatusServiceUnavailable
+	}
+	if normalized == "context_mismatch" || normalized == "contended" ||
+		contains(normalized, "contention") || contains(normalized, "try_again") {
+		return fiber.StatusConflict
+	}
+	return fiber.StatusUnauthorized
+}
+
+func verificationReasonFromError(err error) string {
+	if err == nil {
+		return "verification_failed"
+	}
+	normalized := strings.ToLower(strings.TrimSpace(err.Error()))
+	switch {
+	case normalized == "expired" || contains(normalized, "challenge expired"):
+		return "expired"
+	case normalized == "locked" || contains(normalized, "challenge locked") || contains(normalized, "user locked"):
+		return "locked"
+	case normalized == "invalid" || contains(normalized, "invalid code"):
+		return "invalid"
+	case normalized == "not_found" || contains(normalized, "challenge not found"):
+		return "not_found"
+	default:
+		// Unknown errors are infrastructure failures. In particular, do not
+		// classify Redis errors such as WRONGPASS (which contains "invalid") as
+		// a bad verification code.
+		return "backend_unavailable"
+	}
+}
+
+func verificationFailureRetryable(reason string, status int) bool {
+	if status == fiber.StatusServiceUnavailable {
+		return true
+	}
+	normalized := strings.ToLower(reason)
+	return normalized == "contended" || contains(normalized, "contention") || contains(normalized, "try_again")
 }
 
 // Helper function
