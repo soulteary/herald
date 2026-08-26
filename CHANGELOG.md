@@ -81,8 +81,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI: pinned tool versions and third-party actions to commit SHAs, least-
   privilege `GITHUB_TOKEN`, go-reportcard no longer auto-commits, and added
   compose smoke / non-root / config-startup-failure checks plus SBOM and
-  container vulnerability scanning. Release verifies checksums and requires
-  keyless image signing with cosign.
+  container vulnerability scanning. Release verifies checksums and attempts
+  optional keyless image signing with cosign; signing failures do not currently block publishing.
 
 ### Removed
 
