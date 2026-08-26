@@ -333,6 +333,18 @@ func Validate() error {
 	if TLSCACertFile != "" && (TLSCertFile == "" || TLSKeyFile == "") {
 		problems = append(problems, "TLS client CA configured without server certificate/key")
 	}
+	switch ClientCertMode {
+	case "off":
+		if TLSCACertFile != "" {
+			problems = append(problems, "TLS client CA configured while CLIENT_CERT_MODE=off")
+		}
+	case "optional", "require":
+		if TLSCACertFile == "" {
+			problems = append(problems, "CLIENT_CERT_MODE="+ClientCertMode+" requires TLS_CA_CERT_FILE")
+		}
+	default:
+		problems = append(problems, "CLIENT_CERT_MODE must be one of: off, optional, require")
+	}
 
 	// AUDIT_STORAGE_TYPE=loki has no backend implementation in audit-kit, so a
 	// request for it would silently degrade to no-op storage. Flag it explicitly
