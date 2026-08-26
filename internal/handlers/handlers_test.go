@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -20,12 +21,22 @@ import (
 	"github.com/soulteary/herald/internal/testutil"
 )
 
-// testLogger returns a logger for testing (disabled output)
+var (
+	testLoggerOnce     sync.Once
+	testLoggerInstance *logger.Logger
+)
+
+// testLogger returns a shared logger for testing. logger.New configures
+// zerolog package globals, so constructing a new logger while the asynchronous
+// audit writer is emitting an event causes a data race under go test -race.
 func testLogger() *logger.Logger {
-	return logger.New(logger.Config{
-		Level:  logger.ErrorLevel, // Only log errors during tests
-		Format: logger.FormatJSON,
+	testLoggerOnce.Do(func() {
+		testLoggerInstance = logger.New(logger.Config{
+			Level:  logger.ErrorLevel, // Only log errors during tests
+			Format: logger.FormatJSON,
+		})
 	})
+	return testLoggerInstance
 }
 
 // testRedisClient returns a mock Redis client for testing
