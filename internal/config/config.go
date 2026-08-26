@@ -236,11 +236,6 @@ func Initialize(l *logger.Logger) error {
 			log.Warn().Err(err).Msg("Failed to parse HERALD_HMAC_KEYS, falling back to HMAC_SECRET")
 		} else {
 			log.Info().Int("count", len(hmacKeysMap)).Msg("HMAC keys loaded")
-			// Set default key ID to first key if available
-			for keyID := range hmacKeysMap {
-				hmacDefaultKeyID = keyID
-				break
-			}
 		}
 	}
 
@@ -500,4 +495,11 @@ func GetHMACSecret(keyID string) string {
 // HasHMACKeys returns true if multiple HMAC keys are configured
 func HasHMACKeys() bool {
 	return len(hmacKeysMap) > 0
+}
+
+// GetHMACDefaultKeyID returns the effective default selected while parsing
+// HERALD_HMAC_KEYS. It is empty when a multi-key configuration requires an
+// explicit X-Key-Id header.
+func GetHMACDefaultKeyID() string {
+	return hmacDefaultKeyID
 }

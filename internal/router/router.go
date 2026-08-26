@@ -190,9 +190,9 @@ func NewRouterWithClientAndHandlers(redisClient *redis.Client, log *logger.Logge
 
 	// Determine the effective default key id. With a single HMAC_SECRET (no
 	// multi-key map) an explicit X-Key-Id is not required, so we supply a
-	// stable implicit default. With a multi-key map, config.HMACDefaultKeyID
-	// governs (empty => X-Key-Id mandatory).
-	defaultKeyID := config.HMACDefaultKeyID
+	// stable implicit default. With a parsed key map, use the effective default
+	// selected by config (empty => X-Key-Id mandatory for a multi-key map).
+	defaultKeyID := config.GetHMACDefaultKeyID()
 	if defaultKeyID == "" && !config.HasHMACKeys() && config.HMACSecret != "" {
 		defaultKeyID = "default"
 	}
