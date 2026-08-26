@@ -47,6 +47,8 @@ The following match the implementation in `internal/config/config.go`.
 | `REDIS_DB` | Redis database index | `0` | No |
 | `LOG_LEVEL` | Log level | `info` | No |
 | `SERVICE_NAME` | Service identifier (HMAC, logging, health) | `herald` | No |
+| `HERALD_TRUSTED_PROXY_HEADER` | Forwarded client-IP header; only read from trusted proxies | (empty) | With trusted proxies |
+| `HERALD_TRUSTED_PROXIES` | Comma-separated trusted proxy IP/CIDR allowlist | (empty) | With proxy header |
 
 #### Service-to-service authentication
 
@@ -141,6 +143,10 @@ When enabled, Herald proxies TOTP (Authenticator) requests to [herald-totp](http
 | `TLS_CA_CERT_FILE` | Client CA cert for mTLS verification | (empty) | optional/require mode |
 | `TLS_CLIENT_CA_FILE` | Alias for `TLS_CA_CERT_FILE` | (empty) | Optional |
 | `CLIENT_CERT_MODE` | Client cert policy: `off`, `optional`, or `require` | `off` | No |
+| `HERALD_HEALTHCHECK_TLS_CA_FILE` | CA used by the binary loopback HTTPS probe | (empty) | Private server CA |
+| `HERALD_HEALTHCHECK_TLS_SERVER_NAME` | Server name verified by the loopback HTTPS probe | `localhost` | No |
+| `HERALD_HEALTHCHECK_TLS_CLIENT_CERT_FILE` | Client certificate for the loopback probe | (empty) | Client cert required |
+| `HERALD_HEALTHCHECK_TLS_CLIENT_KEY_FILE` | Client key for the loopback probe; must accompany its certificate | (empty) | Client cert required |
 
 #### Audit logging
 
