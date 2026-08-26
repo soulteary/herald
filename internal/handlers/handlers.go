@@ -130,6 +130,7 @@ func NewHandlersWithError(redisClient *redis.Client, log *logger.Logger) (*Handl
 			Password:    config.SMTPPassword,
 			From:        config.SMTPFrom,
 			UseStartTLS: true,
+			Timeout:     config.ProviderTimeout,
 		}
 		smtpProvider, err := provider.NewSMTPProvider(smtpConfig)
 		if err != nil {
@@ -553,16 +554,38 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 		providerName = req.Channel
 	}
 
-	// Record send duration
-	sendStart := time.Now()
 	softDeliveryFailed := false
 
-	// Start span for provider send
+	// Renew ownership immediately before the external side effect. Combined
+	// with the config invariant that the lease outlives ProviderTimeout, this
+	// prevents a retry from acquiring the key while this request is sending.
+	if idempotencyKey != "" {
+		if err := h.idempotencyStore.Refresh(spanCtx, principal, idempotencyKey, fingerprint, idempotencyOwner); err != nil {
+			_ = h.challengeManager.RevokePending(spanCtx, ch.ID)
+			if errors.Is(err, idempotency.ErrOwnershipLost) {
+				metrics.RecordIdempotency("ownership_lost")
+				return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+					"ok":     false,
+					"reason": "idempotency_ownership_lost",
+				})
+			}
+			h.log.Error().Err(err).Msg("Failed to refresh idempotency ownership before provider send")
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+				"ok":     false,
+				"reason": "backend_unavailable",
+			})
+		}
+	}
+
+	// Start provider observability only after the Redis lease refresh succeeds.
 	providerCtx, providerSpan := tracing.StartSpan(spanCtx, "otp.provider.send")
 	providerSpan.SetAttributes(
 		attribute.String("channel", req.Channel),
 		attribute.String("provider", providerName),
 	)
+
+	// Record only provider latency; lease-refresh time belongs to Redis, not the provider.
+	sendStart := time.Now()
 
 	// Send using provider-kit Registry (returns *SendResult, error)
 	sendResult, err := h.providerRegistry.Send(providerCtx, channel, msg)
