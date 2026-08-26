@@ -6,20 +6,21 @@ services:
     image: herald:local
     ports:
       # Main service port: host 8082 -> container 8082.
-      - "8082:8082"
+      - "127.0.0.1:8082:8082"
     environment:
       - PORT=:8082
       - ENVIRONMENT=production
       - REDIS_ADDR=redis:6379
-      # Provide a real password via a .env file or your secret manager; the
-      # value below is an obvious placeholder, NOT a usable credential.
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-CHANGE_ME_redis_password}
+      # Compose refuses to start until a Redis password is supplied via the
+      # environment or a .env file. Never fall back to a repository-known secret.
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?set REDIS_PASSWORD}
       - REDIS_DB=0
       - LOG_LEVEL=info
-      # REQUIRED: set a strong API key / HMAC secret out-of-band. These are
-      # placeholders so the stack does not ship with usable secrets.
-      - API_KEY=${HERALD_API_KEY:-CHANGE_ME_api_key}
-      - HMAC_SECRET=${HERALD_HMAC_SECRET:-CHANGE_ME_hmac_secret}
+      # The quick-start stack uses API-key mode and refuses repository-known
+      # placeholder credentials. Production HMAC deployments should configure
+      # Herald outside this minimal example.
+      - REQUEST_AUTH_MODE=api_key
+      - API_KEY=${HERALD_API_KEY:?set HERALD_API_KEY}
     depends_on:
       redis:
         condition: service_healthy
@@ -44,7 +45,7 @@ services:
     # reach it from outside the compose network, and protect it with a password.
     # ports:
     #   - "127.0.0.1:6379:6379"
-    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-CHANGE_ME_redis_password}"]
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD}"]
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-CHANGE_ME_redis_password}", "ping"]
       interval: 10s
