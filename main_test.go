@@ -1,7 +1,10 @@
 package main
 
 import (
+	"net/http"
 	"testing"
+
+	"github.com/soulteary/herald/internal/config"
 
 	logger "github.com/soulteary/logger-kit/v2"
 )
@@ -75,5 +78,36 @@ func TestLoggerKitParseLevelFromEnv(t *testing.T) {
 				t.Errorf("ParseLevel(%q) = %v, want %v", tt.level, parsed, tt.expected)
 			}
 		})
+	}
+}
+
+func TestNewHealthcheckClientMatchesListenerTLSMode(t *testing.T) {
+	origCert, origKey := config.TLSCertFile, config.TLSKeyFile
+	origCA, origName := config.HealthcheckTLSCAFile, config.HealthcheckTLSServerName
+	origClientCert, origClientKey := config.HealthcheckTLSClientCertFile, config.HealthcheckTLSClientKeyFile
+	defer func() {
+		config.TLSCertFile, config.TLSKeyFile = origCert, origKey
+		config.HealthcheckTLSCAFile, config.HealthcheckTLSServerName = origCA, origName
+		config.HealthcheckTLSClientCertFile, config.HealthcheckTLSClientKeyFile = origClientCert, origClientKey
+	}()
+
+	config.TLSCertFile, config.TLSKeyFile = "", ""
+	scheme, client, err := newHealthcheckClient()
+	if err != nil || scheme != "http" {
+		t.Fatalf("plaintext healthcheck = %q, %v", scheme, err)
+	}
+	if client.Transport != nil {
+		t.Fatal("plaintext healthcheck should use the default transport")
+	}
+
+	config.TLSCertFile, config.TLSKeyFile = "server.crt", "server.key"
+	config.HealthcheckTLSServerName = "herald.internal"
+	scheme, client, err = newHealthcheckClient()
+	if err != nil || scheme != "https" {
+		t.Fatalf("TLS healthcheck = %q, %v", scheme, err)
+	}
+	transport, ok := client.Transport.(*http.Transport)
+	if !ok || transport.TLSClientConfig.ServerName != "herald.internal" {
+		t.Fatal("TLS healthcheck did not configure verified server name")
 	}
 }

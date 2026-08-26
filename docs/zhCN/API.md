@@ -10,32 +10,36 @@ http://localhost:8082
 
 ## 认证
 
-Herald 支持三种认证方法，按以下优先级顺序：
+请求认证与客户端证书策略彼此独立：
 
-1. **mTLS**（最安全）：使用客户端证书验证的相互 TLS（最高优先级）
-2. **HMAC 签名**（安全）：设置 `X-Signature`、`X-Timestamp` 和 `X-Service` 请求头
-3. **API 密钥**（简单）：设置 `X-API-Key` 请求头（最低优先级）
+- `REQUEST_AUTH_MODE=hmac_v2`（默认）要求使用防重放 HMAC v2。
+- `REQUEST_AUTH_MODE=api_key` 要求 `X-API-Key` 或 `Authorization: Bearer …`。
+- `REQUEST_AUTH_MODE=none` 仅供开发使用，生产环境会拒绝启动。
+- `CLIENT_CERT_MODE=off|optional|require` 控制 TLS 客户端证书。客户端证书校验通过也不会绕过所选的请求认证模式。
 
-### mTLS 认证
+### HMAC v2
 
-当使用 HTTPS 并带有已验证的客户端证书时，Herald 将自动通过 mTLS 对请求进行认证。这是最安全的方法，优先于其他认证方法。
+发送 `X-Signature-Version: v2`、`X-Signature`、`X-Timestamp`、`X-Nonce`、`X-Service`；多密钥且未配置默认密钥时还必须发送 `X-Key-Id`。
 
-### HMAC 签名
+签名的规范字符串以换行符分隔：
 
-HMAC 签名的计算方式为：
+```text
+HERALD-HMAC-V2
+METHOD
+/path
+raw=query
+unix_timestamp
+single_use_nonce
+service_name
+key_id
+sha256_hex_of_raw_body
 ```
-HMAC-SHA256(timestamp:service:body, secret)
-```
 
-其中：
-- `timestamp`：Unix 时间戳（秒）
-- `service`：服务标识符（例如，"my-service"、"api-gateway"）
-- `body`：请求体（JSON 字符串）
-- `secret`：HMAC 密钥
+`key_id` 行必须使用 `X-Key-Id` 请求头的原始值。如果因已配置或隐式默认密钥而省略该请求头，签名时此行必须为空，不能填入默认密钥 ID。对上述内容计算小写十六进制 HMAC-SHA256。默认时间偏差窗口为 60 秒（`HMAC_MAX_DRIFT`），每个有效 nonce 只能在 Redis 中消费一次。使用多个 `HERALD_HMAC_KEYS` 时，请设置 `HERALD_HMAC_DEFAULT_KEY_ID` 或发送 `X-Key-Id`；Herald 不会使用 Go map 中的“第一个”密钥。旧版 v1 仅在 `HMAC_V1_ENABLED=true` 时启用。
 
-**注意**：时间戳必须在服务器时间的 5 分钟（300 秒）内，以防止重放攻击。时间戳窗口可配置，但默认为 5 分钟。
+### API Key
 
-**注意**：`X-Key-Id` 请求头已支持密钥轮换。当使用 `HERALD_HMAC_KEYS` 配置多个密钥时，可以通过 `X-Key-Id` 请求头指定使用哪个密钥。如果未提供，将使用默认密钥（映射中的第一个密钥）。
+使用 `REQUEST_AUTH_MODE=api_key` 时，发送 `X-API-Key: <key>` 或 `Authorization: Bearer <key>`。
 
 ## 端点
 
@@ -339,11 +343,15 @@ Herald 实现多维速率限制：
 - `invalid_code_format`：验证码格式无效
 
 ### 认证错误
-- `authentication_required`：未提供有效的认证
-- `invalid_timestamp`：无效的时间戳格式
-- `timestamp_expired`：时间戳超出允许的窗口（5 分钟）
+HMAC/API Key 失败会返回 JSON `reason`：
+- `signature_version_required`：HMAC v2 要求 `X-Signature-Version: v2`
+- `missing_auth_headers`：缺少一个或多个 HMAC v2 请求头
+- `key_id_required` / `invalid_key_id`：未提供可用的 HMAC 密钥 ID
+- `timestamp_out_of_range`：时间戳超出配置的偏差窗口
 - `invalid_signature`：HMAC 签名验证失败
-- `unauthorized`：认证失败（通用认证错误）
+- `replayed_nonce`：nonce 已被消费
+- `nonce_store_unavailable`：故障关闭模式下 Redis nonce 存储失败
+- `unauthorized`：认证失败
 
 ### 挑战错误
 - `expired`：挑战已过期

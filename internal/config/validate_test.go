@@ -12,6 +12,7 @@ func withProdEnv(t *testing.T) func() {
 	orig := struct {
 		env                    Environment
 		apiKey, hmac           string
+		idempotency, piiPepper string
 		hmacKeysJSON           string
 		requestAuthMode        string
 		testMode               bool
@@ -25,6 +26,8 @@ func withProdEnv(t *testing.T) func() {
 		env:             Env,
 		apiKey:          APIKey,
 		hmac:            HMACSecret,
+		idempotency:     IdempotencySecret,
+		piiPepper:       PIIPepper,
 		hmacKeysJSON:    HMACKeysJSON,
 		requestAuthMode: RequestAuthMode,
 		testMode:        TestMode,
@@ -39,8 +42,10 @@ func withProdEnv(t *testing.T) func() {
 	}
 	// Baseline: a valid production config.
 	Env = EnvProduction
-	APIKey = "prod-api-key"
+	APIKey = "prod-api-key-01234567890123456789"
 	HMACSecret = ""
+	IdempotencySecret = "prod-idempotency-012345678901234"
+	PIIPepper = "prod-pii-pepper-012345678901234567"
 	RequestAuthMode = "api_key"
 	HMACKeysJSON = ""
 	hmacKeysMap = nil
@@ -59,6 +64,8 @@ func withProdEnv(t *testing.T) func() {
 		Env = orig.env
 		APIKey = orig.apiKey
 		HMACSecret = orig.hmac
+		IdempotencySecret = orig.idempotency
+		PIIPepper = orig.piiPepper
 		HMACKeysJSON = orig.hmacKeysJSON
 		RequestAuthMode = orig.requestAuthMode
 		TestMode = orig.testMode
@@ -116,7 +123,7 @@ func TestValidate_ProductionRequiresCredentialForSelectedAuthMode(t *testing.T) 
 		defer withProdEnv(t)()
 		RequestAuthMode = "hmac_v2"
 		APIKey = ""
-		HMACSecret = "prod-hmac-secret"
+		HMACSecret = "prod-hmac-secret-01234567890123456"
 		if err := Validate(); err != nil {
 			t.Fatalf("hmac_v2 with HMAC_SECRET should pass: %v", err)
 		}

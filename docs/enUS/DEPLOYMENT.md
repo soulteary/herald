@@ -6,8 +6,12 @@
 
 ```bash
 cd herald
-docker-compose up -d
+export REDIS_PASSWORD="$(openssl rand -hex 32)"
+export HERALD_API_KEY="$(openssl rand -hex 32)"
+docker compose up -d
 ```
+
+The checked-in Compose service sets `PROVIDER_FAILURE_POLICY=strict`, which is required for production startup.
 
 ### Manual Deployment
 
@@ -24,7 +28,7 @@ go build -o herald main.go
 ### Configuration Naming Convention
 
 **Note**: While the specification recommends using `HERALD_*` prefix for all configuration variables, the current implementation uses a mix of naming conventions:
-- Some variables use `HERALD_*` prefix (e.g., `HERALD_TEST_MODE`, `HERALD_SESSION_STORAGE_ENABLED`)
+- Some variables use `HERALD_*` prefix (e.g., `HERALD_TEST_MODE`, `HERALD_HMAC_KEYS`)
 - Some variables use shorter names (e.g., `REDIS_ADDR`, `API_KEY`, `HMAC_SECRET`)
 
 For consistency and future compatibility, consider using `HERALD_*` prefix when possible. The service supports both naming conventions.
@@ -43,14 +47,22 @@ The following match the implementation in `internal/config/config.go`.
 | `REDIS_DB` | Redis database index | `0` | No |
 | `LOG_LEVEL` | Log level | `info` | No |
 | `SERVICE_NAME` | Service identifier (HMAC, logging, health) | `herald` | No |
+| `HERALD_TRUSTED_PROXY_HEADER` | Forwarded client-IP header; only read from trusted proxies | (empty) | With trusted proxies |
+| `HERALD_TRUSTED_PROXIES` | Comma-separated trusted proxy IP/CIDR allowlist | (empty) | With proxy header |
 
 #### Service-to-service authentication
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
-| `API_KEY` | Simple API key auth (via header) | (empty) | One recommended |
-| `HMAC_SECRET` | Single HMAC secret for request signing | (empty) | One recommended |
-| `HERALD_HMAC_KEYS` | Multiple HMAC keys, JSON: `{"key-id-1":"secret-1","key-id-2":"secret-2"}`; supports key rotation | (empty) | One recommended |
+| `REQUEST_AUTH_MODE` | Request auth: `hmac_v2`, `api_key`, or `none` (dev only) | `hmac_v2` | Yes in production |
+| `API_KEY` | API key for `api_key` mode; at least 32 bytes in production | (empty) | API-key mode |
+| `HMAC_SECRET` | Single HMAC secret; at least 32 bytes in production | (empty) | HMAC single-key mode |
+| `HERALD_HMAC_KEYS` | HMAC key map; IDs/secrets must be non-empty and production secrets at least 32 bytes | (empty) | HMAC multi-key mode |
+| `HERALD_HMAC_DEFAULT_KEY_ID` | Explicit default key ID; otherwise multi-key requests must send `X-Key-Id` | (empty) | Optional |
+| `HMAC_MAX_DRIFT` | Accepted HMAC v2 timestamp drift | `60s` | No |
+| `HMAC_V1_ENABLED` | Temporarily enable legacy HMAC v1 | `false` | No |
+| `HERALD_IDEMPOTENCY_SECRET` | Key for opaque idempotency records; required for production multi-key-only auth | (empty) | Conditional |
+| `HERALD_PII_PEPPER` | Pepper for PII-derived Redis/metric keys; at least 32 bytes in production | (empty) | Recommended |
 
 If none are set, the service logs a warning and allows unauthenticated requests (dev/test only).
 
@@ -128,16 +140,13 @@ When enabled, Herald proxies TOTP (Authenticator) requests to [herald-totp](http
 |----------|-------------|---------|----------|
 | `TLS_CERT_FILE` | Server certificate path | (empty) | When TLS enabled |
 | `TLS_KEY_FILE` | Server private key path | (empty) | When TLS enabled |
-| `TLS_CA_CERT_FILE` | Client CA cert for mTLS verification | (empty) | Optional |
+| `TLS_CA_CERT_FILE` | Client CA cert for mTLS verification | (empty) | optional/require mode |
 | `TLS_CLIENT_CA_FILE` | Alias for `TLS_CA_CERT_FILE` | (empty) | Optional |
-
-#### Session storage (optional)
-
-| Variable | Description | Default | Required |
-|----------|-------------|---------|----------|
-| `HERALD_SESSION_STORAGE_ENABLED` | Enable Redis session storage | `false` | No |
-| `HERALD_SESSION_DEFAULT_TTL` | Default session TTL (e.g. `1h`) | `1h` | No |
-| `HERALD_SESSION_KEY_PREFIX` | Redis session key prefix | `session:` | No |
+| `CLIENT_CERT_MODE` | Client cert policy: `off`, `optional`, or `require` | `off` | No |
+| `HERALD_HEALTHCHECK_TLS_CA_FILE` | CA used by the binary loopback HTTPS probe | (empty) | Private server CA |
+| `HERALD_HEALTHCHECK_TLS_SERVER_NAME` | Server name verified by the loopback HTTPS probe | `localhost` | No |
+| `HERALD_HEALTHCHECK_TLS_CLIENT_CERT_FILE` | Client certificate for the loopback probe | (empty) | Client cert required |
+| `HERALD_HEALTHCHECK_TLS_CLIENT_KEY_FILE` | Client key for the loopback probe; must accompany its certificate | (empty) | Client cert required |
 
 #### Audit logging
 
@@ -146,7 +155,7 @@ When enabled, Herald proxies TOTP (Authenticator) requests to [herald-totp](http
 | `AUDIT_ENABLED` | Enable audit | `true` | No |
 | `AUDIT_MASK_DESTINATION` | Mask destination in audit | `false` | No |
 | `AUDIT_TTL` | Audit record TTL in Redis (e.g. `168h` = 7 days) | `168h` | No |
-| `AUDIT_STORAGE_TYPE` | Persistent storage: `database`, `file`, `loki`, or comma-separated | (empty) | No |
+| `AUDIT_STORAGE_TYPE` | Persistent storage: `database`, `file`, `redis`, or comma-separated | (empty) | No |
 | `AUDIT_DATABASE_URL` | DB URL when `AUDIT_STORAGE_TYPE` includes database | (empty) | No |
 | `AUDIT_TABLE_NAME` | Audit table name | `audit_logs` | No |
 | `AUDIT_FILE_PATH` | Audit file path when using file | (empty) | No |
@@ -165,7 +174,9 @@ When enabled, Herald proxies TOTP (Authenticator) requests to [herald-totp](http
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
-| `HERALD_TEST_MODE` | When `true`, store code in Redis for `GET /v1/test/code/:id` and optional `debug_code` in create response; **must be false in production** | `false` | No |
+| `HERALD_TEST_MODE` | Enable test code exposure only with `ENVIRONMENT=test`; forbidden in production | `false` | No |
+| `HERALD_TEST_API_KEY` | Dedicated key for the test-code listener | (empty) | Test mode |
+| `HERALD_TEST_LISTENER_ADDR` | Separate loopback-only test listener | `127.0.0.1:0` | No |
 
 ### Test mode and debugging
 

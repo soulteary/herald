@@ -10,32 +10,36 @@ http://localhost:8082
 
 ## Authentication
 
-Herald supports three authentication methods with the following priority order:
+Request authentication and client-certificate policy are independent:
 
-1. **mTLS** (Most Secure): Mutual TLS with client certificate verification (highest priority)
-2. **HMAC Signature** (Secure): Set `X-Signature`, `X-Timestamp`, and `X-Service` headers
-3. **API Key** (Simple): Set `X-API-Key` header (lowest priority)
+- `REQUEST_AUTH_MODE=hmac_v2` (default) requires replay-resistant HMAC v2.
+- `REQUEST_AUTH_MODE=api_key` requires `X-API-Key` or `Authorization: Bearer …`.
+- `REQUEST_AUTH_MODE=none` is for development only and is rejected in production.
+- `CLIENT_CERT_MODE=off|optional|require` controls TLS client certificates. A verified certificate does not bypass the selected request-auth mode.
 
-### mTLS Authentication
+### HMAC v2
 
-When using HTTPS with a verified client certificate, Herald will automatically authenticate the request via mTLS. This is the most secure method and takes priority over other authentication methods.
+Send `X-Signature-Version: v2`, `X-Signature`, `X-Timestamp`, `X-Nonce`, `X-Service`, and, for multi-key configurations without a configured default, `X-Key-Id`.
 
-### HMAC Signature
+The signed canonical value is newline-delimited:
 
-The HMAC signature is computed as:
+```text
+HERALD-HMAC-V2
+METHOD
+/path
+raw=query
+unix_timestamp
+single_use_nonce
+service_name
+key_id
+sha256_hex_of_raw_body
 ```
-HMAC-SHA256(timestamp:service:body, secret)
-```
 
-Where:
-- `timestamp`: Unix timestamp (seconds)
-- `service`: Service identifier (e.g., "my-service", "api-gateway")
-- `body`: Request body (JSON string)
-- `secret`: HMAC secret key
+The `key_id` line is the literal `X-Key-Id` header value. When the header is omitted because a configured or implicit default selects the secret, sign an empty `key_id` line—not the default key ID. Compute the lowercase hexadecimal HMAC-SHA256 of that value. The default timestamp drift is 60 seconds (`HMAC_MAX_DRIFT`), and each valid nonce is consumed once in Redis. With multiple `HERALD_HMAC_KEYS`, set `HERALD_HMAC_DEFAULT_KEY_ID` or send `X-Key-Id`; Herald never selects the first Go map entry. Legacy v1 is disabled unless `HMAC_V1_ENABLED=true`.
 
-**Note**: The timestamp must be within 5 minutes (300 seconds) of the server time to prevent replay attacks. The timestamp window is configurable but defaults to 5 minutes.
+### API key
 
-**Note**: `X-Key-Id` header is supported for key rotation. When using `HERALD_HMAC_KEYS` with multiple keys, you can specify which key to use via the `X-Key-Id` header. If not provided, the default key (first key in the map) will be used.
+For `REQUEST_AUTH_MODE=api_key`, send `X-API-Key: <key>` or `Authorization: Bearer <key>`.
 
 ## Endpoints
 
@@ -339,11 +343,15 @@ This section lists all possible error codes returned by the API.
 - `invalid_code_format`: Verification code format is invalid
 
 ### Authentication Errors
-- `authentication_required`: No valid authentication provided
-- `invalid_timestamp`: Invalid timestamp format
-- `timestamp_expired`: Timestamp is outside the allowed window (5 minutes)
+HMAC/API-key failures use a JSON `reason` value:
+- `signature_version_required`: HMAC v2 requires `X-Signature-Version: v2`
+- `missing_auth_headers`: One or more HMAC v2 headers are missing
+- `key_id_required` / `invalid_key_id`: A usable HMAC key ID was not supplied
+- `timestamp_out_of_range`: Timestamp is outside the configured drift window
 - `invalid_signature`: HMAC signature verification failed
-- `unauthorized`: Authentication failed (generic authentication error)
+- `replayed_nonce`: The nonce was already consumed
+- `nonce_store_unavailable`: Redis nonce storage failed in fail-closed mode
+- `unauthorized`: Authentication failed
 
 ### Challenge Errors
 - `expired`: Challenge has expired
