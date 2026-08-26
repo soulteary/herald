@@ -10,21 +10,21 @@ require (
 	github.com/pterm/pterm v0.12.83
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/rs/zerolog v1.35.1
-	github.com/soulteary/audit-kit v1.4.1
-	github.com/soulteary/challenge-kit v1.3.1
+	github.com/soulteary/audit-kit v1.5.1
+	github.com/soulteary/challenge-kit v1.5.0
 	github.com/soulteary/cli-kit v1.7.0
-	github.com/soulteary/health-kit/v2 v2.0.0-20260825184657-5abf6d7d57aa
+	github.com/soulteary/health-kit/v2 v2.0.0
 	github.com/soulteary/herald-totp v0.6.0
-	github.com/soulteary/http-kit v1.2.0
-	github.com/soulteary/i18n-kit/v2 v2.0.0-20260825190833-61c6480faff7
-	github.com/soulteary/logger-kit/v2 v2.0.0-20260825184349-8667e28f7f2a
-	github.com/soulteary/metrics-kit/v2 v2.0.0-20260825190213-a45f1f3040f0
-	github.com/soulteary/middleware-kit/v2 v2.0.0-20260825190703-ab8d8cfae74a
+	github.com/soulteary/http-kit v1.3.0
+	github.com/soulteary/i18n-kit/v2 v2.0.0
+	github.com/soulteary/logger-kit/v2 v2.0.0
+	github.com/soulteary/metrics-kit/v2 v2.0.0
+	github.com/soulteary/middleware-kit/v2 v2.0.0
 	github.com/soulteary/provider-kit v1.5.0
-	github.com/soulteary/redis-kit v1.3.0
+	github.com/soulteary/redis-kit v1.4.0
 	github.com/soulteary/secure-kit v1.4.0
-	github.com/soulteary/tracing-kit v1.2.0
-	github.com/soulteary/version-kit/v2 v2.0.0-20260825185013-b8322bc21a84
+	github.com/soulteary/tracing-kit v1.3.0
+	github.com/soulteary/version-kit/v2 v2.0.0
 	github.com/stretchr/testify v1.12.1
 	go.opentelemetry.io/otel v1.46.0
 	go.opentelemetry.io/otel/trace v1.46.0
