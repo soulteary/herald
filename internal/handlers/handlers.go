@@ -746,16 +746,7 @@ func (h *Handlers) VerifyChallenge(c fiber.Ctx) error {
 		if result != nil && result.Reason != "" {
 			reason = result.Reason
 		} else if err != nil {
-			errStr := err.Error()
-			if contains(errStr, "expired") {
-				reason = "expired"
-			} else if contains(errStr, "locked") {
-				reason = "locked"
-			} else if contains(errStr, "invalid") {
-				reason = "invalid"
-			} else {
-				reason = "backend_unavailable"
-			}
+			reason = verificationReasonFromError(err)
 		} else if result == nil {
 			reason = "backend_unavailable"
 		}
@@ -787,7 +778,7 @@ func (h *Handlers) VerifyChallenge(c fiber.Ctx) error {
 		}
 
 		status := verificationFailureStatus(reason, err)
-		if status == fiber.StatusConflict || status == fiber.StatusServiceUnavailable {
+		if verificationFailureRetryable(reason, status) {
 			c.Set("Retry-After", "1")
 		}
 		return c.Status(status).JSON(response)
@@ -914,7 +905,7 @@ func (h *Handlers) VerifyChallengeV2(c fiber.Ctx) error {
 			response["remaining_attempts"] = *result.RemainingAttempts
 		}
 		status := verificationFailureStatus(reason, err)
-		if status == fiber.StatusConflict || status == fiber.StatusServiceUnavailable {
+		if verificationFailureRetryable(reason, status) {
 			c.Set("Retry-After", "1")
 		}
 		return c.Status(status).JSON(response)
@@ -1034,6 +1025,36 @@ func verificationFailureStatus(reason string, err error) int {
 		return fiber.StatusConflict
 	}
 	return fiber.StatusUnauthorized
+}
+
+func verificationReasonFromError(err error) string {
+	if err == nil {
+		return "verification_failed"
+	}
+	normalized := strings.ToLower(strings.TrimSpace(err.Error()))
+	switch {
+	case normalized == "expired" || contains(normalized, "challenge expired"):
+		return "expired"
+	case normalized == "locked" || contains(normalized, "challenge locked") || contains(normalized, "user locked"):
+		return "locked"
+	case normalized == "invalid" || contains(normalized, "invalid code"):
+		return "invalid"
+	case normalized == "not_found" || contains(normalized, "challenge not found"):
+		return "not_found"
+	default:
+		// Unknown errors are infrastructure failures. In particular, do not
+		// classify Redis errors such as WRONGPASS (which contains "invalid") as
+		// a bad verification code.
+		return "backend_unavailable"
+	}
+}
+
+func verificationFailureRetryable(reason string, status int) bool {
+	if status == fiber.StatusServiceUnavailable {
+		return true
+	}
+	normalized := strings.ToLower(reason)
+	return normalized == "contended" || contains(normalized, "contention") || contains(normalized, "try_again")
 }
 
 // Helper function

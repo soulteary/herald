@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http/httptest"
@@ -782,6 +783,35 @@ func TestVerificationFailureStatus(t *testing.T) {
 				t.Errorf("verificationFailureStatus(%q, %v) = %d, want %d", tt.reason, tt.err, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestVerificationReasonFromError(t *testing.T) {
+	tests := []struct {
+		err  error
+		want string
+	}{
+		{err: errors.New("challenge expired"), want: "expired"},
+		{err: errors.New("invalid code"), want: "invalid"},
+		{err: errors.New("WRONGPASS invalid username-password pair"), want: "backend_unavailable"},
+		{err: errors.New("dial tcp: connection refused"), want: "backend_unavailable"},
+	}
+	for _, tt := range tests {
+		if got := verificationReasonFromError(tt.err); got != tt.want {
+			t.Errorf("verificationReasonFromError(%v) = %q, want %q", tt.err, got, tt.want)
+		}
+	}
+}
+
+func TestVerificationFailureRetryable(t *testing.T) {
+	if verificationFailureRetryable("context_mismatch", fiber.StatusConflict) {
+		t.Error("context mismatch must not be retryable")
+	}
+	if !verificationFailureRetryable("contended", fiber.StatusConflict) {
+		t.Error("contention should be retryable")
+	}
+	if !verificationFailureRetryable("backend_unavailable", fiber.StatusServiceUnavailable) {
+		t.Error("backend failure should be retryable")
 	}
 }
 
