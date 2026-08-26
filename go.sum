@@ -118,8 +118,8 @@ github.com/soulteary/cli-kit v1.7.0 h1:kOkSDv6aUGpr0rllmGLs6wTpQ0FtvCWcQoti7pM6I
 github.com/soulteary/cli-kit v1.7.0/go.mod h1:O7jG7L41pI4tTjTb8yWnI/pQl6L9Zl9waKEqRir5qXo=
 github.com/soulteary/health-kit/v2 v2.0.0 h1:i3SZsFTiiRsKFkbuAE8cY4877VojE3b6v/Z8GLzoJfs=
 github.com/soulteary/health-kit/v2 v2.0.0/go.mod h1:OfSD52DUlA6HpDLN1ELAyqQk0xaycosbXlCsEpafZCQ=
-github.com/soulteary/herald-totp v0.6.0 h1:WL61xQtKYHNyrsAW9wxCKcN9DNF+CfeExjv9kRF1qxg=
-github.com/soulteary/herald-totp v0.6.0/go.mod h1:x2CZDDme4JAkGc/89BNggEGkwZUlZ6WQMWwa08PAFio=
+github.com/soulteary/herald-totp v1.0.0 h1:15RD74rbDvoZDD6Yux2HCMZIixebM//ZWVAHOrhBz08=
+github.com/soulteary/herald-totp v1.0.0/go.mod h1:FHFL0ZUPUdFHscdXziefQbDcbAGNU1QtsV1ARuacr2M=
 github.com/soulteary/http-kit v1.3.0 h1:3X35xu48Xqee6o6CRRZozDXMRmDNl8OvOhozfpkGeTg=
 github.com/soulteary/http-kit v1.3.0/go.mod h1:yElWZr6kCSNmU6X1y1x5MZ5LUj2MNbU4+CZ1EPVbWW4=
 github.com/soulteary/i18n-kit/v2 v2.0.0 h1:7DPsRUFEbhRlYoja80msKrqac3UT62y/RPW2Mi7bAj4=
