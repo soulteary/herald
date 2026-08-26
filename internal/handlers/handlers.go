@@ -38,7 +38,6 @@ type Handlers struct {
 	templateManager  *template.Manager
 	redis            *redis.Client
 	testCodeCache    rediskitcache.Cache // For test mode code storage
-	idempotencyCache rediskitcache.Cache // For idempotency key storage (legacy replay cache)
 	idempotencyStore *idempotency.Store  // Atomic, principal-namespaced idempotency store
 	totpClient       *heraldtotp.Client  // Optional: nil when TOTP is not enabled
 	digester         *security.Digester  // Peppered digester for privacy-preserving keys
@@ -171,7 +170,6 @@ func NewHandlersWithError(redisClient *redis.Client, log *logger.Logger) (*Handl
 	testCodeCache := rediskitcache.NewCache(redisClient, "otp:test:code:")
 
 	// Create idempotency cache
-	idempotencyCache := rediskitcache.NewCache(redisClient, "otp:idem:")
 
 	// Atomic idempotency store (Phase 3): principal-namespaced, fingerprinted,
 	// SET NX pending placeholder.
@@ -205,7 +203,6 @@ func NewHandlersWithError(redisClient *redis.Client, log *logger.Logger) (*Handl
 		templateManager:  templateMgr,
 		redis:            redisClient,
 		testCodeCache:    testCodeCache,
-		idempotencyCache: idempotencyCache,
 		idempotencyStore: idempotencyStore,
 		totpClient:       totpClient,
 		digester:         security.NewDigester([]byte(config.PIIPepper)),

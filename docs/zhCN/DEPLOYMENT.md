@@ -6,8 +6,12 @@
 
 ```bash
 cd herald
-docker-compose up -d
+export REDIS_PASSWORD="$(openssl rand -hex 32)"
+export HERALD_API_KEY="$(openssl rand -hex 32)"
+docker compose up -d
 ```
+
+仓库中的 Compose 服务已设置生产启动所必需的 `PROVIDER_FAILURE_POLICY=strict`。
 
 ### 手动部署
 
@@ -24,7 +28,7 @@ go build -o herald main.go
 ### 配置项命名约定
 
 **注意**：虽然规范建议所有配置变量使用 `HERALD_*` 前缀，但当前实现使用了混合命名约定：
-- 部分变量使用 `HERALD_*` 前缀（例如：`HERALD_TEST_MODE`、`HERALD_SESSION_STORAGE_ENABLED`）
+- 部分变量使用 `HERALD_*` 前缀（例如：`HERALD_TEST_MODE`、`HERALD_HMAC_KEYS`）
 - 部分变量使用较短名称（例如：`REDIS_ADDR`、`API_KEY`、`HMAC_SECRET`）
 
 为保持一致性并确保未来兼容性，建议尽可能使用 `HERALD_*` 前缀。服务支持两种命名约定。
@@ -59,9 +63,15 @@ go build -o herald main.go
 
 | 变量 | 描述 | 默认值 | 必需 |
 |------|------|--------|------|
-| `API_KEY` | 简单 API Key 认证（请求头携带） | （空） | 推荐其一 |
-| `HMAC_SECRET` | 单密钥 HMAC 签名认证 | （空） | 推荐其一 |
-| `HERALD_HMAC_KEYS` | 多密钥 HMAC，JSON 格式：`{"key-id-1":"secret-1","key-id-2":"secret-2"}`，支持密钥轮换 | （空） | 推荐其一 |
+| `REQUEST_AUTH_MODE` | 请求认证：`hmac_v2`、`api_key` 或 `none`（仅开发） | `hmac_v2` | 生产必需 |
+| `API_KEY` | `api_key` 模式密钥；生产至少 32 字节 | （空） | API Key 模式 |
+| `HMAC_SECRET` | 单 HMAC 密钥；生产至少 32 字节 | （空） | HMAC 单密钥模式 |
+| `HERALD_HMAC_KEYS` | HMAC 密钥映射；ID/密钥不得为空，生产密钥至少 32 字节 | （空） | HMAC 多密钥模式 |
+| `HERALD_HMAC_DEFAULT_KEY_ID` | 显式默认密钥 ID；否则多密钥请求必须发送 `X-Key-Id` | （空） | 可选 |
+| `HMAC_MAX_DRIFT` | HMAC v2 时间戳允许偏差 | `60s` | 否 |
+| `HMAC_V1_ENABLED` | 临时启用旧版 HMAC v1 | `false` | 否 |
+| `HERALD_IDEMPOTENCY_SECRET` | 幂等记录密钥；生产仅配置多 HMAC 密钥时必需 | （空） | 条件必需 |
+| `HERALD_PII_PEPPER` | PII 派生 Redis/指标键的 pepper；生产至少 32 字节 | （空） | 建议 |
 
 未设置任一认证时，服务会记录警告并允许未认证请求（仅适合开发/测试）。
 
@@ -139,16 +149,9 @@ go build -o herald main.go
 |------|------|--------|------|
 | `TLS_CERT_FILE` | 服务端证书文件路径 | （空） | 启用 TLS 时 |
 | `TLS_KEY_FILE` | 服务端私钥文件路径 | （空） | 启用 TLS 时 |
-| `TLS_CA_CERT_FILE` | 客户端 CA 证书（mTLS 校验用） | （空） | 可选 |
+| `TLS_CA_CERT_FILE` | 客户端 CA 证书（mTLS 校验用） | （空） | optional/require 模式 |
 | `TLS_CLIENT_CA_FILE` | 与 `TLS_CA_CERT_FILE` 同义 | （空） | 可选 |
-
-#### 会话存储（可选）
-
-| 变量 | 描述 | 默认值 | 必需 |
-|------|------|--------|------|
-| `HERALD_SESSION_STORAGE_ENABLED` | 是否启用 Redis 会话存储 | `false` | 否 |
-| `HERALD_SESSION_DEFAULT_TTL` | 会话默认 TTL（如 `1h`） | `1h` | 否 |
-| `HERALD_SESSION_KEY_PREFIX` | Redis 会话键前缀 | `session:` | 否 |
+| `CLIENT_CERT_MODE` | 客户端证书策略：`off`、`optional` 或 `require` | `off` | 否 |
 
 #### 审计日志
 
@@ -157,7 +160,7 @@ go build -o herald main.go
 | `AUDIT_ENABLED` | 是否启用审计 | `true` | 否 |
 | `AUDIT_MASK_DESTINATION` | 是否对 destination 脱敏 | `false` | 否 |
 | `AUDIT_TTL` | 审计记录在 Redis 中的 TTL（如 `168h` 即 7 天） | `168h` | 否 |
-| `AUDIT_STORAGE_TYPE` | 持久化类型：`database`、`file`、`loki` 或逗号分隔多类型 | （空） | 否 |
+| `AUDIT_STORAGE_TYPE` | 持久化类型：`database`、`file`、`redis` 或逗号分隔多类型 | （空） | 否 |
 | `AUDIT_DATABASE_URL` | 数据库连接串（当 `AUDIT_STORAGE_TYPE` 含 database） | （空） | 否 |
 | `AUDIT_TABLE_NAME` | 审计表名 | `audit_logs` | 否 |
 | `AUDIT_FILE_PATH` | 审计文件路径（当含 file） | （空） | 否 |
@@ -176,7 +179,9 @@ go build -o herald main.go
 
 | 变量 | 描述 | 默认值 | 必需 |
 |------|------|--------|------|
-| `HERALD_TEST_MODE` | 为 `true` 时写入 Redis 可查码、创建 challenge 响应可含 `debug_code`；**生产必须为 false** | `false` | 否 |
+| `HERALD_TEST_MODE` | 仅在 `ENVIRONMENT=test` 时启用测试码暴露；生产禁止 | `false` | 否 |
+| `HERALD_TEST_API_KEY` | 测试码监听器专用密钥 | （空） | 测试模式 |
+| `HERALD_TEST_LISTENER_ADDR` | 独立、仅回环地址的测试监听器 | `127.0.0.1:0` | 否 |
 
 ### 测试模式与调试
 

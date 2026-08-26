@@ -15,7 +15,7 @@
 
 Herald 是一个生产就绪的独立 OTP 和验证码服务，可通过电子邮件和 SMS 发送验证码。它具有内置的速率限制、安全控制和审计日志记录功能。Herald 设计为可独立工作，也可以根据需要与其他服务集成。
 
-HTTP 服务使用 Fiber v3.4.0 及与之匹配的 Fiber 相关 kit v2 模块版本。从源码构建需要 Go 1.26 或更高版本。
+HTTP 服务使用 Fiber v3.5.0 及与之匹配的 Fiber 相关 kit v2 模块版本。从源码构建需要 Go 1.26 或更高版本。
 
 ## 核心特性
 
@@ -91,7 +91,7 @@ Herald 需要最少的配置即可开始使用：
 |----------|-------------|---------|----------|
 | `PORT` | Server port | `:8082` | No |
 | `REDIS_ADDR` | Redis address | `localhost:6379` | No |
-| `API_KEY` | API key for authentication | - | Recommended |
+| `API_KEY` | `REQUEST_AUTH_MODE=api_key` 使用的 API Key | - | 生产 API Key 模式必需 |
 
 使用 herald-smtp 发邮件时，请设置 `HERALD_SMTP_API_URL`（可选 `HERALD_SMTP_API_KEY`）；参见 [部署指南](docs/zhCN/DEPLOYMENT.md#email-通道herald-smtp)。使用 DingTalk 通道时，请设置 `HERALD_DINGTALK_API_URL`（可选 `HERALD_DINGTALK_API_KEY`）；参见 [部署指南](docs/zhCN/DEPLOYMENT.md#dingtalk-通道herald-dingtalk)。
 
