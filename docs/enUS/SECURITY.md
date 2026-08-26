@@ -22,16 +22,23 @@ This document explains Herald's security features, security configuration, and b
 ### 1. Production Environment Configuration
 
 **Required Configuration**:
-- Must set `API_KEY` and/or `HERALD_HMAC_KEYS` (or `HMAC_SECRET`) for service authentication (recommended for production)
-- Set `HERALD_TEST_MODE=false` in production (test mode must not be used in production)
-- Configure Redis with password protection using `REDIS_PASSWORD` when needed
-- Use strong, unique secrets for HMAC keys
+- Set `ENVIRONMENT=production`; production validation fails closed on unsafe combinations
+- Select `REQUEST_AUTH_MODE=hmac_v2` (recommended) or `api_key`, and configure credentials for that mode
+- Keep `HERALD_TEST_MODE=false`; test mode is rejected in production
+- Set `PROVIDER_FAILURE_POLICY=strict` and use HTTPS provider URLs
+- Protect Redis with `REDIS_PASSWORD` (or explicitly acknowledge the risk with `HERALD_RISK_ACK_PASSWORDLESS_REDIS=true`)
+- Use strong, unique HMAC secrets and rotate keys with explicit key IDs
 
 **Configuration Example**:
 ```bash
-export API_KEY="your-strong-api-key-here"
+export ENVIRONMENT=production
+export REQUEST_AUTH_MODE=hmac_v2
 export HERALD_HMAC_KEYS='{"key-id-1":"secret-key-1","key-id-2":"secret-key-2"}'
+export HERALD_HMAC_DEFAULT_KEY_ID=key-id-1
+export HMAC_MAX_DRIFT=60s
+export HMAC_V1_ENABLED=false
 export HERALD_TEST_MODE=false
+export PROVIDER_FAILURE_POLICY=strict
 export REDIS_PASSWORD="your-redis-password"
 export REDIS_ADDR="redis:6379"
 ```
@@ -77,9 +84,9 @@ Herald implements multi-dimensional rate limiting to prevent abuse:
 **Configuration Example**:
 ```bash
 # Rate limits (requests per hour)
-export HERALD_RATE_LIMIT_USER=10      # Per user_id
-export HERALD_RATE_LIMIT_DESTINATION=5 # Per email/phone
-export HERALD_RATE_LIMIT_IP=20        # Per IP address
+export RATE_LIMIT_PER_USER=10         # Per user_id, per hour
+export RATE_LIMIT_PER_DESTINATION=10  # Per email/phone, per hour
+export RATE_LIMIT_PER_IP=5            # Per IP address, per minute
 ```
 
 ### 5. Challenge Security
@@ -91,67 +98,74 @@ export HERALD_RATE_LIMIT_IP=20        # Per IP address
 
 **Configuration Example**:
 ```bash
-export HERALD_CHALLENGE_TTL_SECONDS=300
-export HERALD_MAX_ATTEMPTS=5
-export HERALD_RESEND_COOLDOWN_SECONDS=60
+export CHALLENGE_EXPIRY=5m
+export MAX_ATTEMPTS=5
+export RESEND_COOLDOWN=60s
 ```
 
 ## API Security
 
-### Authentication Methods
+### Independent Security Layers
 
-Herald supports three authentication methods with the following priority:
+Herald configures transport authentication and request authentication independently:
 
-1. **mTLS** (Most Secure - Recommended for Production)
-   - Mutual TLS with client certificate verification
-   - Highest security level
-   - Requires TLS certificate configuration
+1. **Transport layer (optional mTLS)**
+   - `CLIENT_CERT_MODE=off|optional|require`
+   - `require` is recommended when every caller has a trusted client certificate
+   - mTLS does not replace request-body integrity checks
 
-2. **HMAC Signature** (Secure - Recommended for Production)
-   - HMAC-SHA256 signature verification
-   - Timestamp-based replay protection (5-minute window)
-   - Service identifier for multi-tenant scenarios
+2. **Request layer**
+   - `REQUEST_AUTH_MODE=hmac_v2` (recommended): replay-resistant HMAC-SHA256
+   - `REQUEST_AUTH_MODE=api_key`: API key from `X-API-Key` or `Authorization: Bearer ...`
+   - `REQUEST_AUTH_MODE=none`: development only; rejected in production
 
-3. **API Key** (Simple - Development Only)
-   - Basic API key authentication via `X-API-Key` header
-   - Suitable for development and testing
-   - Not recommended for production inter-service communication
+### HMAC v2 Authentication
 
-### HMAC Signature Authentication
+HMAC v2 signs the full request shape and body digest:
 
-**Signature Algorithm**:
+```text
+HERALD-HMAC-V2
+METHOD
+PATH
+QUERY
+TIMESTAMP
+NONCE
+SERVICE
+KEY_ID
+SHA256_HEX(RAW_BODY)
 ```
-signature = HMAC-SHA256(timestamp:service:body, secret)
-```
 
-**Request Headers**:
-- `X-Signature`: HMAC signature value
-- `X-Timestamp`: Unix timestamp (seconds)
-- `X-Service`: Service identifier (optional)
-- `X-Key-Id`: Key ID for key rotation (optional, required when using `HERALD_HMAC_KEYS` with multiple keys)
+**Required request headers**:
+- `X-Signature-Version: v2`
+- `X-Signature`: lowercase hexadecimal HMAC-SHA256 of the canonical string
+- `X-Timestamp`: Unix timestamp in seconds
+- `X-Nonce`: unique value for this request
+- `X-Service`: caller service identifier
+- `X-Key-Id`: key ID; it may be omitted only when `HERALD_HMAC_DEFAULT_KEY_ID` is configured
 
-**Configuration**:
+**Server configuration**:
 ```bash
+export REQUEST_AUTH_MODE=hmac_v2
 export HERALD_HMAC_KEYS='{"key-id-1":"secret-key-1","key-id-2":"secret-key-2"}'
-export HERALD_HMAC_TIMESTAMP_TOLERANCE=300  # 5 minutes in seconds
+export HERALD_HMAC_DEFAULT_KEY_ID=key-id-1
+export HMAC_MAX_DRIFT=60s
+export HMAC_V1_ENABLED=false
 ```
 
-**Security Notes**:
-- Timestamp must be within tolerance window (default: 5 minutes) to prevent replay attacks
-- Use strong, unique secrets for each service
-- Rotate HMAC keys regularly
+Herald verifies the signature before atomically consuming the nonce in Redis. Reusing a nonce is rejected. The default timestamp drift is 60 seconds. Legacy v1 is disabled by default and should only be enabled temporarily during migration with `HMAC_V1_ENABLED=true`.
 
-### mTLS Authentication
+### mTLS
 
-For the highest security, use mutual TLS:
+To require trusted client certificates:
 
-**Configuration**:
 ```bash
-export HERALD_TLS_CERT=/path/to/herald.crt
-export HERALD_TLS_KEY=/path/to/herald.key
-export HERALD_TLS_CA=/path/to/ca.crt
-export HERALD_TLS_REQUIRE_CLIENT_CERT=true
+export TLS_CERT_FILE=/path/to/herald.crt
+export TLS_KEY_FILE=/path/to/herald.key
+export TLS_CA_CERT_FILE=/path/to/client-ca.crt
+export CLIENT_CERT_MODE=require
 ```
+
+`TLS_CLIENT_CA_FILE` is accepted as an alias for `TLS_CA_CERT_FILE`. When TLS is enabled in the container, configure the loopback health probe with the relevant `HERALD_HEALTHCHECK_TLS_*` variables.
 
 ## Data Security
 
@@ -221,22 +235,22 @@ Herald implements multiple layers of rate limiting:
 ### Configuration
 
 ```bash
-# Rate limits (per hour)
-export HERALD_RATE_LIMIT_USER=10
-export HERALD_RATE_LIMIT_DESTINATION=5
-export HERALD_RATE_LIMIT_IP=20
+# Rate limits
+export RATE_LIMIT_PER_USER=10         # per hour
+export RATE_LIMIT_PER_DESTINATION=10  # per hour
+export RATE_LIMIT_PER_IP=5            # per minute
 
 # Challenge settings
-export HERALD_CHALLENGE_TTL_SECONDS=300
-export HERALD_MAX_ATTEMPTS=5
-export HERALD_RESEND_COOLDOWN_SECONDS=60
+export CHALLENGE_EXPIRY=5m
+export MAX_ATTEMPTS=5
+export RESEND_COOLDOWN=60s
 ```
 
 ## Error Handling
 
 ### Production Mode
 
-In production (with `HERALD_TEST_MODE=false`):
+In production (with `ENVIRONMENT=production`; `HERALD_TEST_MODE=true` is rejected):
 
 - Hide detailed error information to prevent information leakage
 - Return generic error messages
