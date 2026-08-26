@@ -36,8 +36,8 @@ func TestStore_ConcurrentBeginSingleOwner(t *testing.T) {
 	for i := 0; i < n; i++ {
 		go func() {
 			defer wg.Done()
-			_, owned, err := s.Begin(ctx, "p1", "k1", "fp1")
-			if err == nil && owned {
+			_, owner, err := s.Begin(ctx, "p1", "k1", "fp1")
+			if err == nil && owner != "" {
 				atomic.AddInt64(&owners, 1)
 			}
 		}()
@@ -51,8 +51,8 @@ func TestStore_ConcurrentBeginSingleOwner(t *testing.T) {
 func TestStore_ConflictOnDifferentFingerprint(t *testing.T) {
 	s := newStore(t)
 	ctx := context.Background()
-	if _, owned, err := s.Begin(ctx, "p1", "k1", "fpA"); err != nil || !owned {
-		t.Fatalf("first begin owned=%v err=%v", owned, err)
+	if _, owner, err := s.Begin(ctx, "p1", "k1", "fpA"); err != nil || owner == "" {
+		t.Fatalf("first begin owner=%q err=%v", owner, err)
 	}
 	if _, _, err := s.Begin(ctx, "p1", "k1", "fpB"); err != ErrConflict {
 		t.Fatalf("second begin err = %v, want ErrConflict", err)
@@ -62,17 +62,17 @@ func TestStore_ConflictOnDifferentFingerprint(t *testing.T) {
 func TestStore_ReplayAfterSucceed(t *testing.T) {
 	s := newStore(t)
 	ctx := context.Background()
-	_, owned, err := s.Begin(ctx, "p1", "k1", "fp1")
-	if err != nil || !owned {
-		t.Fatalf("begin owned=%v err=%v", owned, err)
+	_, owner, err := s.Begin(ctx, "p1", "k1", "fp1")
+	if err != nil || owner == "" {
+		t.Fatalf("begin owner=%q err=%v", owner, err)
 	}
 	resp := json.RawMessage(`{"challenge_id":"abc"}`)
-	if err := s.Succeed(ctx, "p1", "k1", "fp1", resp); err != nil {
+	if err := s.Succeed(ctx, "p1", "k1", "fp1", owner, resp); err != nil {
 		t.Fatalf("succeed: %v", err)
 	}
-	replay, owned2, err := s.Begin(ctx, "p1", "k1", "fp1")
-	if err != nil || owned2 {
-		t.Fatalf("replay begin owned=%v err=%v", owned2, err)
+	replay, owner2, err := s.Begin(ctx, "p1", "k1", "fp1")
+	if err != nil || owner2 != "" {
+		t.Fatalf("replay begin owner=%q err=%v", owner2, err)
 	}
 	if string(replay) != string(resp) {
 		t.Fatalf("replay = %s, want %s", string(replay), string(resp))
@@ -82,24 +82,51 @@ func TestStore_ReplayAfterSucceed(t *testing.T) {
 func TestStore_RetryAfterFail(t *testing.T) {
 	s := newStore(t)
 	ctx := context.Background()
-	if _, owned, err := s.Begin(ctx, "p1", "k1", "fp1"); err != nil || !owned {
-		t.Fatalf("begin owned=%v err=%v", owned, err)
-	}
-	if err := s.Fail(ctx, "p1", "k1"); err != nil {
+	if _, owner, err := s.Begin(ctx, "p1", "k1", "fp1"); err != nil || owner == "" {
+		t.Fatalf("begin owner=%q err=%v", owner, err)
+	} else if err := s.Fail(ctx, "p1", "k1", "fp1", owner); err != nil {
 		t.Fatalf("fail: %v", err)
 	}
-	if _, owned, err := s.Begin(ctx, "p1", "k1", "fp1"); err != nil || !owned {
-		t.Fatalf("retry begin owned=%v err=%v, want owned after fail", owned, err)
+	if _, owner, err := s.Begin(ctx, "p1", "k1", "fp1"); err != nil || owner == "" {
+		t.Fatalf("retry begin owner=%q err=%v, want owner after fail", owner, err)
 	}
 }
 
 func TestStore_DifferentPrincipalsNoCollision(t *testing.T) {
 	s := newStore(t)
 	ctx := context.Background()
-	if _, owned, err := s.Begin(ctx, "pA", "shared", "fp1"); err != nil || !owned {
-		t.Fatalf("pA begin owned=%v err=%v", owned, err)
+	if _, owner, err := s.Begin(ctx, "pA", "shared", "fp1"); err != nil || owner == "" {
+		t.Fatalf("pA begin owner=%q err=%v", owner, err)
 	}
-	if _, owned, err := s.Begin(ctx, "pB", "shared", "fp1"); err != nil || !owned {
-		t.Fatalf("pB begin owned=%v err=%v (must not collide with pA)", owned, err)
+	if _, owner, err := s.Begin(ctx, "pB", "shared", "fp1"); err != nil || owner == "" {
+		t.Fatalf("pB begin owner=%q err=%v (must not collide with pA)", owner, err)
+	}
+}
+
+func TestStore_StaleOwnerCannotMutateReplacement(t *testing.T) {
+	s := newStore(t)
+	ctx := context.Background()
+	_, staleOwner, err := s.Begin(ctx, "p1", "k1", "fp1")
+	if err != nil || staleOwner == "" {
+		t.Fatalf("first begin owner=%q err=%v", staleOwner, err)
+	}
+
+	key := s.redisKey("p1", "k1")
+	if err := s.client.Del(ctx, key).Err(); err != nil {
+		t.Fatalf("expire pending record: %v", err)
+	}
+	_, replacementOwner, err := s.Begin(ctx, "p1", "k1", "fp1")
+	if err != nil || replacementOwner == "" || replacementOwner == staleOwner {
+		t.Fatalf("replacement owner=%q stale=%q err=%v", replacementOwner, staleOwner, err)
+	}
+
+	if err := s.Fail(ctx, "p1", "k1", "fp1", staleOwner); err != ErrOwnershipLost {
+		t.Fatalf("stale Fail error = %v, want ErrOwnershipLost", err)
+	}
+	if err := s.Succeed(ctx, "p1", "k1", "fp1", staleOwner, json.RawMessage(`{"stale":true}`)); err != ErrOwnershipLost {
+		t.Fatalf("stale Succeed error = %v, want ErrOwnershipLost", err)
+	}
+	if err := s.Succeed(ctx, "p1", "k1", "fp1", replacementOwner, json.RawMessage(`{"fresh":true}`)); err != nil {
+		t.Fatalf("replacement Succeed: %v", err)
 	}
 }
