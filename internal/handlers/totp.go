@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 
@@ -64,11 +65,8 @@ func (h *Handlers) TOTPVerify(c fiber.Ctx) error {
 		})
 	}
 	var req heraldtotp.VerifyRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "invalid_request",
-		})
+	if err := parseStrictJSON(c, &req); err != nil {
+		return writeStrictBodyError(c, err)
 	}
 	if req.Subject == "" || req.Code == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -107,12 +105,8 @@ func (h *Handlers) TOTPEnrollStart(c fiber.Ctx) error {
 		})
 	}
 	var req heraldtotp.EnrollStartRequest
-	if err := c.Bind().Body(&req); err != nil {
-		// Never echo the enroll body/error: it may contain a label or subject.
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "invalid_request",
-		})
+	if err := parseStrictJSON(c, &req); err != nil {
+		return writeStrictBodyError(c, err)
 	}
 	if req.Subject == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -139,6 +133,16 @@ func (h *Handlers) TOTPEnrollStart(c fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
+// classifyEnrollConfirmError preserves herald-totp's explicit 400 contract.
+// herald-totp v1.0.0 exposes upstream status only in this stable error prefix;
+// all other failures (transport, malformed response, or 5xx) are proxy failures.
+func classifyEnrollConfirmError(err error) (int, string) {
+	if err != nil && strings.HasPrefix(err.Error(), "enroll/confirm returned 400:") {
+		return fiber.StatusBadRequest, "invalid"
+	}
+	return fiber.StatusBadGateway, "proxy_failed"
+}
+
 // TOTPEnrollConfirm proxies POST /v1/totp/enroll/confirm to herald-totp.
 func (h *Handlers) TOTPEnrollConfirm(c fiber.Ctx) error {
 	if h.totpClient == nil {
@@ -148,11 +152,8 @@ func (h *Handlers) TOTPEnrollConfirm(c fiber.Ctx) error {
 		})
 	}
 	var req heraldtotp.EnrollConfirmRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "invalid_request",
-		})
+	if err := parseStrictJSON(c, &req); err != nil {
+		return writeStrictBodyError(c, err)
 	}
 	if req.EnrollID == "" || req.Code == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -171,10 +172,11 @@ func (h *Handlers) TOTPEnrollConfirm(c fiber.Ctx) error {
 	if err != nil {
 		// enroll_id is a random opaque token (not PII) so it is safe to log; the
 		// upstream error is not echoed to avoid leaking response bodies.
-		h.log.Warn().Str("enroll_id", req.EnrollID).Msg("TOTP enroll/confirm proxy failed")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+		status, reason := classifyEnrollConfirmError(err)
+		h.log.Warn().Str("enroll_id", req.EnrollID).Int("response_status", status).Msg("TOTP enroll/confirm proxy failed")
+		return c.Status(status).JSON(fiber.Map{
 			"ok":     false,
-			"reason": "invalid",
+			"reason": reason,
 		})
 	}
 	return c.JSON(resp)
@@ -191,11 +193,8 @@ func (h *Handlers) TOTPRevoke(c fiber.Ctx) error {
 	var req struct {
 		Subject string `json:"subject"`
 	}
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "invalid_request",
-		})
+	if err := parseStrictJSON(c, &req); err != nil {
+		return writeStrictBodyError(c, err)
 	}
 	if req.Subject == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
