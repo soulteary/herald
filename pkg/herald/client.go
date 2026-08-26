@@ -8,8 +8,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -36,6 +38,8 @@ type Client struct {
 	// now and newNonce are injectable for deterministic tests.
 	now      func() time.Time
 	newNonce func() string
+
+	maxResponseBytes int64
 }
 
 // Signature scheme identifiers.
@@ -65,7 +69,15 @@ type Options struct {
 	// KeyID is sent as X-Key-Id and bound into the v2 signature. Empty means the
 	// server's configured default key id is used.
 	KeyID string
+	// MaxResponseBytes caps every response body read by the SDK. Zero uses the
+	// default 1 MiB limit.
+	MaxResponseBytes int64
 }
+
+const defaultMaxResponseBytes int64 = 1 << 20
+
+// ErrResponseTooLarge marks responses that exceed the configured SDK limit.
+var ErrResponseTooLarge = errors.New("herald: response too large")
 
 // DefaultOptions returns default options
 func DefaultOptions() *Options {
@@ -73,6 +85,7 @@ func DefaultOptions() *Options {
 		Timeout:          10 * time.Second,
 		Service:          "stargate",
 		SignatureVersion: SignatureV2,
+		MaxResponseBytes: defaultMaxResponseBytes,
 	}
 }
 
@@ -143,10 +156,32 @@ func (o *Options) WithKeyID(id string) *Options {
 	return o
 }
 
+// WithMaxResponseBytes sets the maximum response body size accepted by the SDK.
+func (o *Options) WithMaxResponseBytes(limit int64) *Options {
+	o.MaxResponseBytes = limit
+	return o
+}
+
 // Validate validates the options
 func (o *Options) Validate() error {
 	if o.BaseURL == "" {
 		return fmt.Errorf("base URL is required")
+	}
+	parsed, err := url.Parse(o.BaseURL)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return fmt.Errorf("base URL must be an absolute http or https URL")
+	}
+	if o.Timeout < 0 {
+		return fmt.Errorf("timeout must not be negative")
+	}
+	if o.MaxResponseBytes < 0 {
+		return fmt.Errorf("max response bytes must not be negative")
+	}
+	if (o.TLSClientCert == "") != (o.TLSClientKey == "") {
+		return fmt.Errorf("TLS client certificate and key must be configured together")
+	}
+	if o.SignatureVersion != "" && o.SignatureVersion != SignatureV1 && o.SignatureVersion != SignatureV2 {
+		return fmt.Errorf("signature version must be v1 or v2")
 	}
 	return nil
 }
@@ -191,9 +226,17 @@ func NewClient(opts *Options) (*Client, error) {
 		return nil, err
 	}
 
+	timeout := opts.Timeout
+	if timeout == 0 {
+		timeout = 10 * time.Second
+	}
+	maxResponseBytes := opts.MaxResponseBytes
+	if maxResponseBytes == 0 {
+		maxResponseBytes = defaultMaxResponseBytes
+	}
 	clientOpts := &httpkit.Options{
-		BaseURL:            opts.BaseURL,
-		Timeout:            opts.Timeout,
+		BaseURL:            strings.TrimRight(opts.BaseURL, "/"),
+		Timeout:            timeout,
 		TLSCACertFile:      opts.TLSCACertFile,
 		TLSClientCert:      opts.TLSClientCert,
 		TLSClientKey:       opts.TLSClientKey,
@@ -207,15 +250,16 @@ func NewClient(opts *Options) (*Client, error) {
 	}
 
 	client := &Client{
-		httpClient: httpClient,
-		baseURL:    opts.BaseURL,
-		apiKey:     opts.APIKey,
-		hmacSecret: opts.HMACSecret,
-		service:    opts.Service,
-		sigVersion: opts.SignatureVersion,
-		keyID:      opts.KeyID,
-		now:        time.Now,
-		newNonce:   defaultNonce,
+		httpClient:       httpClient,
+		baseURL:          strings.TrimRight(opts.BaseURL, "/"),
+		apiKey:           opts.APIKey,
+		hmacSecret:       opts.HMACSecret,
+		service:          opts.Service,
+		sigVersion:       opts.SignatureVersion,
+		keyID:            opts.KeyID,
+		now:              time.Now,
+		newNonce:         defaultNonce,
+		maxResponseBytes: maxResponseBytes,
 	}
 	if client.sigVersion == "" {
 		client.sigVersion = SignatureV2
@@ -248,9 +292,10 @@ type CreateChallengeRequest struct {
 
 // CreateChallengeResponse represents the response from creating a challenge
 type CreateChallengeResponse struct {
-	ChallengeID  string `json:"challenge_id"`
-	ExpiresIn    int    `json:"expires_in"`
-	NextResendIn int    `json:"next_resend_in"`
+	ChallengeID    string `json:"challenge_id"`
+	ExpiresIn      int    `json:"expires_in"`
+	NextResendIn   int    `json:"next_resend_in"`
+	DeliveryStatus string `json:"delivery_status,omitempty"`
 	// DebugCode is set by Herald only when HERALD_TEST_MODE=true (for debugging)
 	DebugCode string `json:"debug_code,omitempty"`
 }
@@ -271,6 +316,37 @@ type VerifyChallengeResponse struct {
 	Reason            string   `json:"reason,omitempty"`
 	RemainingAttempts *int     `json:"remaining_attempts,omitempty"` // Number of remaining attempts
 	NextResendIn      *int     `json:"next_resend_in,omitempty"`     // Seconds until next resend is allowed
+}
+
+// VerifyChallengeV2Request binds verification to the expected challenge
+// context, preventing a valid code from being used for a different flow.
+type VerifyChallengeV2Request struct {
+	ChallengeID     string `json:"challenge_id"`
+	Code            string `json:"code"`
+	ClientIP        string `json:"client_ip,omitempty"`
+	ExpectedUserID  string `json:"expected_user_id,omitempty"`
+	ExpectedPurpose string `json:"expected_purpose,omitempty"`
+	ExpectedChannel string `json:"expected_channel,omitempty"`
+}
+
+// VerifyChallengeV2Response is returned by /v2/otp/verifications.
+type VerifyChallengeV2Response struct {
+	OK                bool     `json:"ok"`
+	UserID            string   `json:"user_id,omitempty"`
+	Purpose           string   `json:"purpose,omitempty"`
+	Channel           string   `json:"channel,omitempty"`
+	ChallengeID       string   `json:"challenge_id,omitempty"`
+	AMR               []string `json:"amr,omitempty"`
+	VerifiedAt        int64    `json:"verified_at,omitempty"`
+	IssuedAt          int64    `json:"issued_at,omitempty"`
+	Reason            string   `json:"reason,omitempty"`
+	RemainingAttempts *int     `json:"remaining_attempts,omitempty"`
+}
+
+// RevokeChallengeResponse is returned after revoking a challenge.
+type RevokeChallengeResponse struct {
+	OK     bool   `json:"ok"`
+	Reason string `json:"reason,omitempty"`
 }
 
 // IdempotencyKeyContextKey is the context key for passing Idempotency-Key to CreateChallenge.
@@ -315,9 +391,12 @@ func (c *Client) CreateChallenge(ctx context.Context, req *CreateChallengeReques
 	defer func() {
 		_ = resp.Body.Close()
 	}()
+	bodyBytes, readErr := c.readResponseBody(resp)
+	if readErr != nil {
+		return nil, responseReadError(resp.StatusCode, readErr)
+	}
 
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
 		var errorResp struct {
 			OK     bool   `json:"ok"`
 			Reason string `json:"reason"`
@@ -331,7 +410,7 @@ func (c *Client) CreateChallenge(ctx context.Context, req *CreateChallengeReques
 	}
 
 	var challengeResp CreateChallengeResponse
-	if err := json.NewDecoder(resp.Body).Decode(&challengeResp); err != nil {
+	if err := json.Unmarshal(bodyBytes, &challengeResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
@@ -370,9 +449,13 @@ func (c *Client) VerifyChallenge(ctx context.Context, req *VerifyChallengeReques
 	defer func() {
 		_ = resp.Body.Close()
 	}()
+	respBody, readErr := c.readResponseBody(resp)
+	if readErr != nil {
+		return nil, responseReadError(resp.StatusCode, readErr)
+	}
 
 	var verifyResp VerifyChallengeResponse
-	if err := json.NewDecoder(resp.Body).Decode(&verifyResp); err != nil {
+	if err := json.Unmarshal(respBody, &verifyResp); err != nil {
 		return nil, &HeraldError{
 			StatusCode: resp.StatusCode,
 			Reason:     "invalid_response",
@@ -389,6 +472,99 @@ func (c *Client) VerifyChallenge(ctx context.Context, req *VerifyChallengeReques
 	}
 
 	return &verifyResp, nil
+}
+
+// VerifyChallengeV2 performs context-bound verification using the v2 endpoint.
+func (c *Client) VerifyChallengeV2(ctx context.Context, req *VerifyChallengeV2Request) (*VerifyChallengeV2Response, error) {
+	endpoint := fmt.Sprintf("%s/v2/otp/verifications", c.baseURL)
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	c.httpClient.InjectTraceContext(ctx, httpReq)
+	c.addAuthHeaders(httpReq, body)
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, &HeraldError{StatusCode: 0, Reason: "connection_failed", Message: err.Error()}
+	}
+	defer func() { _ = resp.Body.Close() }()
+	respBody, err := c.readResponseBody(resp)
+	if err != nil {
+		return nil, responseReadError(resp.StatusCode, err)
+	}
+	var out VerifyChallengeV2Response
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		return nil, &HeraldError{StatusCode: resp.StatusCode, Reason: "invalid_response", Message: err.Error()}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return &out, &HeraldError{StatusCode: resp.StatusCode, Reason: out.Reason, Message: string(respBody)}
+	}
+	return &out, nil
+}
+
+// RevokeChallenge revokes a challenge by id.
+func (c *Client) RevokeChallenge(ctx context.Context, challengeID string) (*RevokeChallengeResponse, error) {
+	if challengeID == "" {
+		return nil, fmt.Errorf("challenge ID is required")
+	}
+	endpoint := fmt.Sprintf("%s/v1/otp/challenges/%s/revoke", c.baseURL, url.PathEscape(challengeID))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	c.httpClient.InjectTraceContext(ctx, httpReq)
+	c.addAuthHeaders(httpReq, nil)
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, &HeraldError{StatusCode: 0, Reason: "connection_failed", Message: err.Error()}
+	}
+	defer func() { _ = resp.Body.Close() }()
+	respBody, err := c.readResponseBody(resp)
+	if err != nil {
+		return nil, responseReadError(resp.StatusCode, err)
+	}
+	var out RevokeChallengeResponse
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		return nil, &HeraldError{StatusCode: resp.StatusCode, Reason: "invalid_response", Message: err.Error()}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return &out, &HeraldError{StatusCode: resp.StatusCode, Reason: out.Reason, Message: string(respBody)}
+	}
+	return &out, nil
+}
+
+func (c *Client) readResponseBody(resp *http.Response) ([]byte, error) {
+	limit := c.maxResponseBytes
+	if limit <= 0 {
+		limit = defaultMaxResponseBytes
+	}
+	var reader io.Reader = resp.Body
+	// Avoid overflowing the one-byte sentinel when callers intentionally use
+	// MaxInt64 as an effectively unlimited cap.
+	if limit < math.MaxInt64 {
+		reader = io.LimitReader(resp.Body, limit+1)
+	}
+	body, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+	if int64(len(body)) > limit {
+		return nil, fmt.Errorf("%w: response exceeds %d byte limit", ErrResponseTooLarge, limit)
+	}
+	return body, nil
+}
+
+func responseReadError(status int, err error) *HeraldError {
+	reason := "response_read_failed"
+	if errors.Is(err, ErrResponseTooLarge) {
+		reason = "response_too_large"
+	}
+	return &HeraldError{StatusCode: status, Reason: reason, Message: err.Error()}
 }
 
 // --- TOTP (proxied by Herald to herald-totp) ---
@@ -458,7 +634,10 @@ func (c *Client) TOTPStatus(ctx context.Context, subject string) (*TOTPStatusRes
 		return nil, &HeraldError{StatusCode: 0, Reason: "connection_failed", Message: err.Error()}
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(resp.Body)
+	body, err := c.readResponseBody(resp)
+	if err != nil {
+		return nil, responseReadError(resp.StatusCode, err)
+	}
 	var out TOTPStatusResponse
 	if err := json.Unmarshal(body, &out); err != nil {
 		return nil, &HeraldError{StatusCode: resp.StatusCode, Reason: "invalid_response", Message: string(body)}
@@ -488,7 +667,10 @@ func (c *Client) TOTPVerify(ctx context.Context, req *TOTPVerifyRequest) (*TOTPV
 		return nil, &HeraldError{StatusCode: 0, Reason: "connection_failed", Message: err.Error()}
 	}
 	defer func() { _ = resp.Body.Close() }()
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, err := c.readResponseBody(resp)
+	if err != nil {
+		return nil, responseReadError(resp.StatusCode, err)
+	}
 	var out TOTPVerifyResponse
 	_ = json.Unmarshal(respBody, &out)
 	if resp.StatusCode != http.StatusOK {
@@ -516,7 +698,10 @@ func (c *Client) TOTPEnrollStart(ctx context.Context, req *TOTPEnrollStartReques
 		return nil, &HeraldError{StatusCode: 0, Reason: "connection_failed", Message: err.Error()}
 	}
 	defer func() { _ = resp.Body.Close() }()
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, err := c.readResponseBody(resp)
+	if err != nil {
+		return nil, responseReadError(resp.StatusCode, err)
+	}
 	var out TOTPEnrollStartResponse
 	if err := json.Unmarshal(respBody, &out); err != nil {
 		return nil, &HeraldError{StatusCode: resp.StatusCode, Reason: "invalid_response", Message: string(respBody)}
@@ -546,7 +731,10 @@ func (c *Client) TOTPEnrollConfirm(ctx context.Context, req *TOTPEnrollConfirmRe
 		return nil, &HeraldError{StatusCode: 0, Reason: "connection_failed", Message: err.Error()}
 	}
 	defer func() { _ = resp.Body.Close() }()
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, err := c.readResponseBody(resp)
+	if err != nil {
+		return nil, responseReadError(resp.StatusCode, err)
+	}
 	var out TOTPEnrollConfirmResponse
 	if err := json.Unmarshal(respBody, &out); err != nil {
 		return nil, &HeraldError{StatusCode: resp.StatusCode, Reason: "invalid_response", Message: string(respBody)}
@@ -578,7 +766,10 @@ func (c *Client) TOTPRevoke(ctx context.Context, subject string) (*TOTPRevokeRes
 		return nil, &HeraldError{StatusCode: 0, Reason: "connection_failed", Message: err.Error()}
 	}
 	defer func() { _ = resp.Body.Close() }()
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, err := c.readResponseBody(resp)
+	if err != nil {
+		return nil, responseReadError(resp.StatusCode, err)
+	}
 	var out TOTPRevokeResponse
 	if err := json.Unmarshal(respBody, &out); err != nil {
 		return nil, &HeraldError{StatusCode: resp.StatusCode, Reason: "invalid_response", Message: string(respBody)}
