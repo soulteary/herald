@@ -159,7 +159,7 @@ jobs:
         with:
           image-ref: herald:test
           format: table
-          exit-code: '0'          # report-only for now; flip to '1' to gate merges
+          exit-code: '1'          # block HIGH/CRITICAL vulnerabilities
           ignore-unfixed: true
           severity: HIGH,CRITICAL
           # Pin a Trivy version whose release assets exist. The action's own
@@ -177,6 +177,9 @@ jobs:
     name: Compose Smoke + Config Startup Failure
     runs-on: ubuntu-latest
     needs: [docker-build]
+    env:
+      REDIS_PASSWORD: ci_redis_password_0123456789012345
+      HERALD_API_KEY: ci_api_key_012345678901234567890123
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - name: Validate compose config
@@ -195,7 +198,7 @@ jobs:
       - name: Compose smoke test (bring up, probe /livez, tear down)
         run: |
           export REDIS_PASSWORD=ci_redis_pw
-          export HERALD_API_KEY=ci_api_key
+          export HERALD_API_KEY=ci_api_key_012345678901234567890123
           export HERALD_HMAC_SECRET=ci_hmac_secret_value
           docker compose up -d
           # Wait for the herald container to become healthy.
