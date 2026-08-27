@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: '手动发布/覆盖的已存在 v* tag（例如 v1.2.3）'
+        required: true
+        type: string
 
 env:
   REGISTRY: ghcr.io
@@ -24,6 +30,29 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref }}
+
+      - name: Resolve release ref
+        id: release
+        env:
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            TAG="${INPUT_RELEASE_TAG}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          if ! printf '%s' "${TAG}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$'; then
+            echo "::error::release_tag 必须是形如 vX.Y.Z 的语义化 tag，实际为 '${TAG}'"
+            exit 1
+          fi
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            git rev-parse --verify "refs/tags/${TAG}^{commit}" >/dev/null
+            test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/${TAG}^{commit}")"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "manual=${{ github.event_name == 'workflow_dispatch' }}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Go environment
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
@@ -39,12 +68,12 @@ jobs:
       - name: Extract version information
         id: version
         run: |
-          VERSION=${GITHUB_REF#refs/tags/}
-          VERSION=${VERSION#v}
+          TAG="${{ steps.release.outputs.tag }}"
+          VERSION=${TAG#v}
           COMMIT=$(git rev-parse --short HEAD)
           BUILD_DATE=$(date -u +%FT%T%z)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "commit=$COMMIT" >> $GITHUB_OUTPUT
           echo "build_date=$BUILD_DATE" >> $GITHUB_OUTPUT
 
@@ -100,14 +129,13 @@ jobs:
         uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # 手动触发时 github.ref 为分支，无法从 ref 解析 tag，
+          # 因此统一使用 Resolve release ref 步骤得到的 tag/version 生成别名。
           tags: |
-            type=ref,event=tag
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            # Tag workflows are not on the default branch, so is_default_branch
-            # is always false here. Only stable releases should move latest.
-            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+            type=semver,pattern={{version}},value=${{ steps.release.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.release.outputs.tag }}
+            type=semver,pattern={{major}},value=${{ steps.release.outputs.tag }}
+            type=raw,value=latest,enable=${{ !contains(steps.release.outputs.tag, '-') }}
 
       - name: Build and push Docker image
         id: build
@@ -137,11 +165,21 @@ jobs:
           # Sign by immutable digest, not tag, so the signature binds to exact bytes.
           cosign sign --yes "${REGISTRY}/${IMAGE_NAME}@${DIGEST}"
 
+      - name: Delete existing release for overwrite
+        if: steps.release.outputs.manual == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          # 手动重发：删除同名 Release（保留 git tag），随后重新创建以覆盖。
+          gh release delete "$TAG" --yes --repo "$GITHUB_REPOSITORY" || true
+
       - name: Create Release
         uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2
         with:
           files: |
             dist/*
+          tag_name: ${{ steps.release.outputs.tag }}
           name: Release ${{ steps.version.outputs.tag }}
           body: |
             ## Changes
