@@ -43,9 +43,176 @@ jobs:
           else
             TAG="${GITHUB_REF#refs/tags/}"
           fi
-          if ! printf '%s' "${TAG}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$'; then
-            echo "::error::release_tag 必须是形如 vX.Y.Z 的语义化 tag，实际为 '${TAG}'"
+          SEMVER_RE='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*)|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.((0|[1-9][0-9]*)|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            git rev-parse --verify "refs/tags/${TAG}^{commit}" >/dev/null
+            test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/${TAG}^{commit}")"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "manual=${{ github.event_name == 'workflow_dispatch' }}" >> "$GITHUB_OUTPUT"
+          echo "stable=${STABLE}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Go environment
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: go test -race ./...
+
+      - name: Extract version information
+        id: version
+        run: |
+          TAG="${{ steps.release.outputs.tag }}"
+          VERSION=${TAG#v}
+          COMMIT=$(git rev-parse --short HEAD)
+          BUILD_DATE=$(date -u +%FT%T%z)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "commit=$COMMIT" >> $GITHUB_OUTPUT
+          echo "build_date=$BUILD_DATE" >> $GITHUB_OUTPUT
+
+      - name: Build multi-platform binaries
+        run: |
+          mkdir -p dist
+          VERSION=${{ steps.version.outputs.version }}
+          COMMIT=${{ github.sha }}
+          BUILD_DATE=$(date +%FT%T%z)
+          LDFLAGS="-s -w -X 'github.com/soulteary/version-kit/v2.Version=${VERSION}' -X 'github.com/soulteary/version-kit/v2.Commit=${COMMIT}' -X 'github.com/soulteary/version-kit/v2.BuildDate=${BUILD_DATE}'"
+          
+          # Build for multiple platforms
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o dist/herald-linux-amd64 ./main.go
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o dist/herald-linux-arm64 ./main.go
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o dist/herald-darwin-amd64 ./main.go
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o dist/herald-darwin-arm64 ./main.go
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o dist/herald-windows-amd64.exe ./main.go
+          GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o dist/herald-windows-arm64.exe ./main.go
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          # Exclude checksums.txt itself from the manifest. `sha256sum *` globs
+          # the whole dir; on a re-run (or because the shell creates the redirect
+          # target before globbing) checksums.txt can be swept into its own
+          # manifest, producing a self-referential line whose hash never matches
+          # the final file — which makes a later `sha256sum -c` report
+          # "checksums.txt: FAILED". Hash every artifact EXCEPT the manifest.
+          sha256sum $(ls | grep -v '^checksums.txt$') > checksums.txt
+
+      - name: Verify checksums
+        run: |
+          cd dist
+          # Re-verify every artifact against the freshly generated manifest so a
+          # truncated/corrupt build cannot be published silently. --ignore-missing
+          # tolerates a dir that also holds files not listed in the manifest
+          # (e.g. checksums.txt itself, or later-added SBOM/signature files) so
+          # the check never fails on an unlisted-but-present file.
+          sha256sum -c --ignore-missing checksums.txt
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3
+
+      - name: Login to container registry
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # 手动触发时 github.ref 为分支，无法从 ref 解析 tag，
+          # 因此统一使用 Resolve release ref 步骤得到的 tag/version 生成别名。
+          tags: |
+            type=semver,pattern={{version}},value=${{ steps.release.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.release.outputs.tag }}
+            type=semver,pattern={{major}},value=${{ steps.release.outputs.tag }}
+            type=raw,value=latest,enable=${{ steps.release.outputs.stable == 'true' }}
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@ca877d9245402d1537745e0e356eab47c3520991 # v6
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            COMMIT=${{ steps.version.outputs.commit }}
+            BUILD_DATE=${{ steps.version.outputs.build_date }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@d7d6bc7722e3daa8354c50bcb52f4837da5e9b6a # v3
+
+      - name: Keyless-sign the image (Sigstore/Fulcio via OIDC)
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          # Sign by immutable digest, not tag, so the signature binds to exact bytes.
+          cosign sign --yes "${REGISTRY}/${IMAGE_NAME}@${DIGEST}"
+
+      - name: Delete existing release for overwrite
+        if: steps.release.outputs.manual == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          # 手动重发：删除同名 Release（保留 git tag），随后重新创建以覆盖。
+          gh release delete "$TAG" --yes --repo "$GITHUB_REPOSITORY" || true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2
+        with:
+          files: |
+            dist/*
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: Release ${{ steps.version.outputs.tag }}
+          body: |
+            ## Changes
+            
+            See [CHANGELOG](CHANGELOG.md) for details.
+            
+            ## Downloads
+            
+            ### Docker Image
+            ```bash
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }}
+            ```
+            
+            ### Binaries
+            - Linux AMD64: `herald-linux-amd64`
+            - Linux ARM64: `herald-linux-arm64`
+            - macOS AMD64: `herald-darwin-amd64`
+            - macOS ARM64: `herald-darwin-arm64`
+            - Windows AMD64: `herald-windows-amd64.exe`
+            - Windows ARM64: `herald-windows-arm64.exe`
+            
+            ### Checksums
+            See `checksums.txt` for SHA256 checksums.
+          draft: false
+          prerelease: ${{ steps.release.outputs.stable != 'true' }}
+
+          if ! printf '%s' "${TAG}" | grep -Eq "${SEMVER_RE}"; then
+            echo "::error::release_tag 必须是完整且合法的 v 前缀 SemVer，实际为 '${TAG}'"
             exit 1
+          fi
+          VERSION_WITHOUT_BUILD="${TAG%%+*}"
+          if [[ "${VERSION_WITHOUT_BUILD}" == *-* ]]; then
+            STABLE=false
+          else
+            STABLE=true
           fi
           if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
             git rev-parse --verify "refs/tags/${TAG}^{commit}" >/dev/null
