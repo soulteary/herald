@@ -33,11 +33,14 @@
 ```bash
 export ENVIRONMENT=production
 export REQUEST_AUTH_MODE=hmac_v2
-export HERALD_HMAC_KEYS='{"key-id-1":"replace-with-32-byte-random-secret-a","key-id-2":"replace-with-32-byte-random-secret-b"}'
+HMAC_KEY_1="$(openssl rand -hex 32)"
+HMAC_KEY_2="$(openssl rand -hex 32)"
+export HERALD_HMAC_KEYS="{\"key-id-1\":\"${HMAC_KEY_1}\",\"key-id-2\":\"${HMAC_KEY_2}\"}"
 export HERALD_HMAC_DEFAULT_KEY_ID=key-id-1
-export HERALD_IDEMPOTENCY_SECRET="replace-with-independent-32-byte-random-secret"
+export HERALD_IDEMPOTENCY_SECRET="$(openssl rand -hex 32)"
 export HMAC_MAX_DRIFT=60s
 export HMAC_V1_ENABLED=false
+unset HMAC_KEY_1 HMAC_KEY_2
 export HERALD_TEST_MODE=false
 export PROVIDER_FAILURE_POLICY=strict
 export REDIS_PASSWORD="your-redis-password"
