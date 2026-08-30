@@ -84,21 +84,21 @@ func TestValidateStrictSettingsAcceptsLongOTPCodeLength(t *testing.T) {
 	}
 }
 
-func TestValidateStrictSettingsRequiresCodeToFitVerificationBody(t *testing.T) {
+func TestValidateStrictSettingsRequiresCodeToFitContextBoundV2Body(t *testing.T) {
 	originalCodeLength, originalMaxBodyBytes := CodeLength, MaxBodyBytes
 	defer func() {
 		CodeLength, MaxBodyBytes = originalCodeLength, originalMaxBodyBytes
 	}()
 
 	MaxBodyBytes = 128
-	CodeLength = MaxBodyBytes - verificationRequestEnvelopeBytes + 1
+	CodeLength = MaxBodyBytes - contextBoundVerificationRequestEnvelopeBytes + 1
 	if err := validateStrictSettings(); err == nil {
-		t.Fatal("code that cannot fit in a verification request must be rejected")
+		t.Fatal("code that cannot fit in a context-bound v2 verification request must be rejected")
 	}
 
 	CodeLength--
 	if err := validateStrictSettings(); err != nil {
-		t.Fatalf("largest code that fits the verification request should pass: %v", err)
+		t.Fatalf("largest code that fits the context-bound v2 verification request should pass: %v", err)
 	}
 }
 
