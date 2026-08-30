@@ -119,8 +119,9 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 		ErrorHandler: jsonErrorHandler,
 		// Fiber only reads the proxy header when the immediate peer matches the
 		// explicit proxy allowlist, preventing direct header spoofing.
-		ProxyHeader: config.TrustedProxyHeader,
-		TrustProxy:  len(config.TrustedProxies) > 0,
+		ProxyHeader:        config.TrustedProxyHeader,
+		TrustProxy:         len(config.TrustedProxies) > 0,
+		EnableIPValidation: true,
 		TrustProxyConfig: fiber.TrustProxyConfig{
 			Proxies: config.TrustedProxies,
 		},
