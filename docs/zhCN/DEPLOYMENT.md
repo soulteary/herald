@@ -187,7 +187,7 @@ go build -o herald main.go
 |------|------|--------|------|
 | `HERALD_TEST_MODE` | 仅在 `ENVIRONMENT=test` 时启用测试码暴露；生产禁止 | `false` | 否 |
 | `HERALD_TEST_API_KEY` | 测试码监听器专用密钥 | （空） | 测试模式 |
-| `HERALD_TEST_LISTENER_ADDR` | 独立、仅回环地址的测试监听器 | `127.0.0.1:0` | 否 |
+| `HERALD_TEST_LISTENER_ADDR` | 独立、仅回环地址的测试监听器 | `127.0.0.1:18082` | 否 |
 
 ### 测试模式与调试
 
