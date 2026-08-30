@@ -404,7 +404,7 @@ func Validate() error {
 	if TestMode {
 		problems = append(problems, "HERALD_TEST_MODE=true is forbidden in production")
 	}
-	if ProviderFailurePolicy == "soft" {
+	if NormalizedProviderFailurePolicy() == "soft" {
 		problems = append(problems, "PROVIDER_FAILURE_POLICY=soft is forbidden in production; use strict")
 	}
 	if RedisPassword == "" && !RiskAckPasswordlessRedis {
