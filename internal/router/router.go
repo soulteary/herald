@@ -45,7 +45,6 @@ func jsonErrorHandler(c fiber.Ctx, err error) error {
 	return c.Status(status).JSON(fiber.Map{"ok": false, "reason": reason})
 }
 
-
 // trustedForwardedClientIP walks a proxy-appended chain from right to left and
 // returns the first address outside the configured trusted proxy boundary.
 func trustedForwardedClientIP(raw string, trusted []string) (string, bool) {
