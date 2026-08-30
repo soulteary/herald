@@ -47,6 +47,16 @@ func jsonErrorHandler(c fiber.Ctx, err error) error {
 	return c.Status(status).JSON(fiber.Map{"ok": false, "reason": reason})
 }
 
+const bodyLimitHeadroom = 1 << 20 // 1 MiB parser backstop above the JSON contract limit
+
+func transportBodyLimit(limit int) int {
+	maxInt := int(^uint(0) >> 1)
+	if limit > maxInt-bodyLimitHeadroom {
+		return maxInt
+	}
+	return limit + bodyLimitHeadroom
+}
+
 // stableBodyLimitMiddleware makes oversized responses part of Herald's JSON
 // contract. StreamRequestBody lets this outer middleware run before Fiber's
 // parser emits its own early 413; BodyLimit remains enabled as a hard backstop.
@@ -151,12 +161,12 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 	app := fiber.New(fiber.Config{
 		// Server hardening: cap request body size and enforce timeouts so a slow
 		// or oversized client cannot exhaust resources.
-		BodyLimit:         config.MaxBodyBytes,
+		BodyLimit:         transportBodyLimit(config.MaxBodyBytes),
 		StreamRequestBody: true,
-		ReadTimeout:  config.ReadTimeout,
-		WriteTimeout: config.WriteTimeout,
-		IdleTimeout:  config.IdleTimeout,
-		ErrorHandler: jsonErrorHandler,
+		ReadTimeout:       config.ReadTimeout,
+		WriteTimeout:      config.WriteTimeout,
+		IdleTimeout:       config.IdleTimeout,
+		ErrorHandler:      jsonErrorHandler,
 		// Fiber only reads the proxy header when the immediate peer matches the
 		// explicit proxy allowlist, preventing direct header spoofing.
 		ProxyHeader: config.TrustedProxyHeader,
