@@ -74,7 +74,7 @@ If none are set, the service logs a warning and allows unauthenticated requests 
 | `MAX_ATTEMPTS` | Max verify failures per challenge before lockout | `5` | No |
 | `LOCKOUT_DURATION` | Lockout duration (e.g. `10m`) | `10m` | No |
 | `RESEND_COOLDOWN` | Resend cooldown for same challenge | `60s` | No |
-| `CODE_LENGTH` | Verification code length (digits) | `6` | No |
+| `CODE_LENGTH` | Verification code length (digits, minimum `4`; no application-level maximum) | `6` | No |
 | `IDEMPOTENCY_KEY_TTL` | Idempotency key cache TTL; `0` = use `CHALLENGE_EXPIRY` | `0` | No |
 | `ALLOWED_PURPOSES` | Allowed purposes, comma-separated (e.g. `login,reset,bind,stepup`) | `login` | No |
 
