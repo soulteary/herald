@@ -374,26 +374,19 @@ func TestRouter_TestCodeRoute_NotMountedInDevOrProd(t *testing.T) {
 	}
 }
 
-func TestTrustedProxyChainRejectsSpoofedLeftmostIP(t *testing.T) {
-	app := fiber.New(fiber.Config{
-		ProxyHeader:        fiber.HeaderXForwardedFor,
-		TrustProxy:         true,
-		EnableIPValidation: true,
-		TrustProxyConfig: fiber.TrustProxyConfig{
-			Proxies: []string{"10.0.0.1", "10.0.0.2"},
-		},
-	})
-	app.Get("/", func(c fiber.Ctx) error { return c.SendString(c.IP()) })
-
-	req := httptest.NewRequest("GET", "/", nil)
-	req.RemoteAddr = "10.0.0.2:1234"
-	req.Header.Set(fiber.HeaderXForwardedFor, "203.0.113.250, 198.51.100.7, 10.0.0.1")
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("app.Test: %v", err)
+func TestTrustedForwardedClientIPRejectsSpoofedPrefix(t *testing.T) {
+	trusted := []string{"10.0.0.0/8", "192.168.1.10"}
+	got, ok := trustedForwardedClientIP(
+		"203.0.113.250, 198.51.100.7, 10.0.0.1, 192.168.1.10",
+		trusted,
+	)
+	if !ok || got != "198.51.100.7" {
+		t.Fatalf("trusted client IP = %q, %v; want 198.51.100.7, true", got, ok)
 	}
-	body, _ := io.ReadAll(resp.Body)
-	if got := string(body); got != "198.51.100.7" {
-		t.Fatalf("trusted client IP = %q, want first untrusted hop 198.51.100.7", got)
+}
+
+func TestTrustedForwardedClientIPRejectsMalformedChain(t *testing.T) {
+	if got, ok := trustedForwardedClientIP("198.51.100.7, not-an-ip", []string{"10.0.0.0/8"}); ok {
+		t.Fatalf("malformed chain resolved to %q; want rejection", got)
 	}
 }
