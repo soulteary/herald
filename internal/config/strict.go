@@ -5,10 +5,12 @@ import (
 	"strings"
 )
 
-// verificationRequestEnvelopeBytes reserves the compact JSON field names,
-// punctuation, and a 36-character legacy challenge ID so every generated code
-// can fit in at least the v1 verification request.
-const verificationRequestEnvelopeBytes = 65
+// contextBoundVerificationRequestEnvelopeBytes is the size of the smallest
+// compact v2 verification request that carries a 36-character legacy
+// challenge ID and one non-empty context binding. Keep the JSON literal here
+// so changes to the request envelope are visible instead of hidden in a magic
+// number.
+const contextBoundVerificationRequestEnvelopeBytes = len(`{"challenge_id":"00000000-0000-0000-0000-000000000000","code":"","expected_user_id":"x"}`)
 
 func normalizedOneOf(value string, allowed ...string) bool {
 	v := strings.ToLower(strings.TrimSpace(value))
@@ -66,8 +68,8 @@ func validateStrictSettings() error {
 	if CodeLength < 4 {
 		problems = append(problems, "CODE_LENGTH must be at least 4")
 	}
-	if MaxBodyBytes > 0 && CodeLength > MaxBodyBytes-verificationRequestEnvelopeBytes {
-		problems = append(problems, "CODE_LENGTH plus the verification JSON envelope must not exceed HERALD_MAX_BODY_BYTES")
+	if MaxBodyBytes > 0 && CodeLength > MaxBodyBytes-contextBoundVerificationRequestEnvelopeBytes {
+		problems = append(problems, "CODE_LENGTH plus a context-bound v2 verification JSON envelope must not exceed HERALD_MAX_BODY_BYTES")
 	}
 	if ResendCooldown < 0 || IdempotencyKeyTTL < 0 {
 		problems = append(problems, "RESEND_COOLDOWN and IDEMPOTENCY_KEY_TTL must not be negative")
