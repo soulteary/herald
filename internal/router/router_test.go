@@ -377,7 +377,7 @@ func TestRouter_TestCodeRoute_NotMountedInDevOrProd(t *testing.T) {
 func TestRouter_OversizedBodyReturnsStableJSON(t *testing.T) {
 	const limit = 8
 	app := fiber.New(fiber.Config{
-		BodyLimit:         limit,
+		BodyLimit:         transportBodyLimit(limit),
 		StreamRequestBody: true,
 		ErrorHandler:      jsonErrorHandler,
 	})
