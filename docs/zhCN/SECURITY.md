@@ -33,8 +33,9 @@
 ```bash
 export ENVIRONMENT=production
 export REQUEST_AUTH_MODE=hmac_v2
-export HERALD_HMAC_KEYS='{"key-id-1":"secret-key-1","key-id-2":"secret-key-2"}'
+export HERALD_HMAC_KEYS='{"key-id-1":"replace-with-32-byte-random-secret-a","key-id-2":"replace-with-32-byte-random-secret-b"}'
 export HERALD_HMAC_DEFAULT_KEY_ID=key-id-1
+export HERALD_IDEMPOTENCY_SECRET="replace-with-independent-32-byte-random-secret"
 export HMAC_MAX_DRIFT=60s
 export HMAC_V1_ENABLED=false
 export HERALD_TEST_MODE=false
