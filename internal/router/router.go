@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -36,12 +37,50 @@ func jsonErrorHandler(c fiber.Ctx, err error) error {
 		reason = "not_found"
 	case fiber.StatusMethodNotAllowed:
 		reason = "method_not_allowed"
+	case fiber.StatusRequestEntityTooLarge:
+		reason = "payload_too_large"
 	default:
 		if status < fiber.StatusInternalServerError {
 			reason = "request_error"
 		}
 	}
 	return c.Status(status).JSON(fiber.Map{"ok": false, "reason": reason})
+}
+
+// stableBodyLimitMiddleware makes oversized responses part of Herald's JSON
+// contract. StreamRequestBody lets this outer middleware run before Fiber's
+// parser emits its own early 413; BodyLimit remains enabled as a hard backstop.
+func stableBodyLimitMiddleware(limit int) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if limit <= 0 {
+			return c.Next()
+		}
+		if length := c.Request().Header.ContentLength(); length > limit {
+			return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{
+				"ok": false, "reason": "payload_too_large",
+			})
+		}
+
+		if c.Request().IsBodyStream() {
+			body, err := io.ReadAll(io.LimitReader(c.Request().BodyStream(), int64(limit)+1))
+			if err != nil {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"ok": false, "reason": "request_error",
+				})
+			}
+			if len(body) > limit {
+				return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{
+					"ok": false, "reason": "payload_too_large",
+				})
+			}
+			c.Request().SetBodyRaw(body)
+		} else if len(c.Body()) > limit {
+			return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{
+				"ok": false, "reason": "payload_too_large",
+			})
+		}
+		return c.Next()
+	}
 }
 
 // testAuthMiddleware guards the test-code endpoint with a constant-time
@@ -112,7 +151,8 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 	app := fiber.New(fiber.Config{
 		// Server hardening: cap request body size and enforce timeouts so a slow
 		// or oversized client cannot exhaust resources.
-		BodyLimit:    config.MaxBodyBytes,
+		BodyLimit:         config.MaxBodyBytes,
+		StreamRequestBody: true,
 		ReadTimeout:  config.ReadTimeout,
 		WriteTimeout: config.WriteTimeout,
 		IdleTimeout:  config.IdleTimeout,
@@ -128,6 +168,7 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 
 	// Middleware
 	app.Use(recover.New())
+	app.Use(stableBodyLimitMiddleware(config.MaxBodyBytes))
 
 	// Request logging using logger-kit
 	app.Use(logger.FiberMiddleware(logger.MiddlewareConfig{
