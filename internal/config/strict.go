@@ -58,8 +58,8 @@ func validateStrictSettings() error {
 	if ChallengeExpiry <= 0 || MaxAttempts <= 0 || LockoutDuration <= 0 {
 		problems = append(problems, "CHALLENGE_EXPIRY, MAX_ATTEMPTS, and LOCKOUT_DURATION must be positive")
 	}
-	if CodeLength < 4 || CodeLength > 10 {
-		problems = append(problems, "CODE_LENGTH must be between 4 and 10")
+	if CodeLength < 4 {
+		problems = append(problems, "CODE_LENGTH must be at least 4")
 	}
 	if ResendCooldown < 0 || IdempotencyKeyTTL < 0 {
 		problems = append(problems, "RESEND_COOLDOWN and IDEMPOTENCY_KEY_TTL must not be negative")
