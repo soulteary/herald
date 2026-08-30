@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -42,6 +43,52 @@ func jsonErrorHandler(c fiber.Ctx, err error) error {
 		}
 	}
 	return c.Status(status).JSON(fiber.Map{"ok": false, "reason": reason})
+}
+
+
+// trustedForwardedClientIP walks a proxy-appended chain from right to left and
+// returns the first address outside the configured trusted proxy boundary.
+func trustedForwardedClientIP(raw string, trusted []string) (string, bool) {
+	parts := strings.Split(raw, ",")
+	for i := len(parts) - 1; i >= 0; i-- {
+		ip := net.ParseIP(strings.TrimSpace(parts[i]))
+		if ip == nil {
+			return "", false
+		}
+		if !isTrustedProxyIP(ip, trusted) {
+			return ip.String(), true
+		}
+	}
+	return "", false
+}
+
+func isTrustedProxyIP(ip net.IP, trusted []string) bool {
+	for _, entry := range trusted {
+		entry = strings.TrimSpace(entry)
+		if candidate := net.ParseIP(entry); candidate != nil && candidate.Equal(ip) {
+			return true
+		}
+		if _, network, err := net.ParseCIDR(entry); err == nil && network.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+func sanitizeTrustedForwardedIP(header string, trusted []string) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		raw := c.Get(header)
+		if raw == "" {
+			return c.Next()
+		}
+		if clientIP, ok := trustedForwardedClientIP(raw, trusted); ok {
+			c.Request().Header.Set(header, clientIP)
+		} else {
+			// A malformed or all-proxy chain is not client identity.
+			c.Request().Header.Del(header)
+		}
+		return c.Next()
+	}
 }
 
 // testAuthMiddleware guards the test-code endpoint with a constant-time
@@ -129,6 +176,9 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 
 	// Middleware
 	app.Use(recover.New())
+	if config.TrustedProxyHeader != "" && len(config.TrustedProxies) > 0 {
+		app.Use(sanitizeTrustedForwardedIP(config.TrustedProxyHeader, config.TrustedProxies))
+	}
 
 	// Request logging using logger-kit
 	app.Use(logger.FiberMiddleware(logger.MiddlewareConfig{
