@@ -139,10 +139,14 @@ func TestValidate_ProductionRefusesTestMode(t *testing.T) {
 }
 
 func TestValidate_ProductionRefusesSoftProviderPolicy(t *testing.T) {
-	defer withProdEnv(t)()
-	ProviderFailurePolicy = "soft"
-	if err := Validate(); err == nil {
-		t.Fatal("production with PROVIDER_FAILURE_POLICY=soft must fail Validate()")
+	for _, policy := range []string{"soft", " SOFT "} {
+		t.Run(policy, func(t *testing.T) {
+			defer withProdEnv(t)()
+			ProviderFailurePolicy = policy
+			if err := Validate(); err == nil {
+				t.Fatalf("production with PROVIDER_FAILURE_POLICY=%q must fail Validate()", policy)
+			}
+		})
 	}
 }
 
