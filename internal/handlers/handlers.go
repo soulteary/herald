@@ -616,7 +616,7 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 		auditlog.LogSendFailed(providerCtx, ch.ID, req.UserID, req.Channel, req.Destination, req.Purpose, providerName, errorReason, peerIP)
 
 		// Handle provider failure based on policy
-		if config.ProviderFailurePolicy == "strict" {
+		if config.NormalizedProviderFailurePolicy() == "strict" {
 			// Strict mode: revoke challenge and return error
 			_ = h.challengeManager.Revoke(spanCtx, ch.ID)
 			metrics.RecordChallengeState("revoked")
