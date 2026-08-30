@@ -85,7 +85,7 @@ go build -o herald main.go
 | `MAX_ATTEMPTS` | 单 challenge 最大验证失败次数，超过后锁定 | `5` | 否 |
 | `LOCKOUT_DURATION` | 锁定持续时间（如 `10m`） | `10m` | 否 |
 | `RESEND_COOLDOWN` | 同一 challenge 重发冷却时间 | `60s` | 否 |
-| `CODE_LENGTH` | 验证码位数 | `6` | 否 |
+| `CODE_LENGTH` | 验证码位数（最小 `4`，应用不设上限） | `6` | 否 |
 | `IDEMPOTENCY_KEY_TTL` | 幂等键缓存 TTL；`0` 表示使用 `CHALLENGE_EXPIRY` | `0` | 否 |
 | `ALLOWED_PURPOSES` | 允许的 purpose，逗号分隔，如 `login,reset,bind,stepup` | `login` | 否 |
 
