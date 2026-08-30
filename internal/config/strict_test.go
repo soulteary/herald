@@ -72,12 +72,33 @@ func TestValidateStrictSettingsRejectsUnsafeBounds(t *testing.T) {
 }
 
 func TestValidateStrictSettingsAcceptsLongOTPCodeLength(t *testing.T) {
-	original := CodeLength
-	defer func() { CodeLength = original }()
+	originalCodeLength, originalMaxBodyBytes := CodeLength, MaxBodyBytes
+	defer func() {
+		CodeLength, MaxBodyBytes = originalCodeLength, originalMaxBodyBytes
+	}()
 
 	CodeLength = 64
+	MaxBodyBytes = 65536
 	if err := validateStrictSettings(); err != nil {
 		t.Fatalf("long OTP code lengths should be accepted: %v", err)
+	}
+}
+
+func TestValidateStrictSettingsRequiresCodeToFitVerificationBody(t *testing.T) {
+	originalCodeLength, originalMaxBodyBytes := CodeLength, MaxBodyBytes
+	defer func() {
+		CodeLength, MaxBodyBytes = originalCodeLength, originalMaxBodyBytes
+	}()
+
+	MaxBodyBytes = 128
+	CodeLength = MaxBodyBytes - verificationRequestEnvelopeBytes + 1
+	if err := validateStrictSettings(); err == nil {
+		t.Fatal("code that cannot fit in a verification request must be rejected")
+	}
+
+	CodeLength--
+	if err := validateStrictSettings(); err != nil {
+		t.Fatalf("largest code that fits the verification request should pass: %v", err)
 	}
 }
 
