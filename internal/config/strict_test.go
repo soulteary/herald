@@ -71,6 +71,16 @@ func TestValidateStrictSettingsRejectsUnsafeBounds(t *testing.T) {
 	}
 }
 
+func TestValidateStrictSettingsAcceptsLongOTPCodeLength(t *testing.T) {
+	original := CodeLength
+	defer func() { CodeLength = original }()
+
+	CodeLength = 64
+	if err := validateStrictSettings(); err != nil {
+		t.Fatalf("long OTP code lengths should be accepted: %v", err)
+	}
+}
+
 func TestValidateStrictSettingsRequiresCompleteTrustedProxyConfig(t *testing.T) {
 	originalHeader, originalProxies := TrustedProxyHeader, TrustedProxies
 	defer func() {
