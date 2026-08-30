@@ -143,6 +143,8 @@ SHA256_HEX(RAW_BODY)
 - `X-Service`：调用方服务标识
 - `X-Key-Id`：Key ID；仅当配置 `HERALD_HMAC_DEFAULT_KEY_ID` 时可省略
 
+省略 `X-Key-Id` 时，签名方必须将规范串中的 `KEY_ID` 行保持为空。`HERALD_HMAC_DEFAULT_KEY_ID` 只用于服务端选择验签密钥，不会填充被签名的规范字段。
+
 **服务端配置**:
 ```bash
 export REQUEST_AUTH_MODE=hmac_v2

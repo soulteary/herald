@@ -143,6 +143,8 @@ SHA256_HEX(RAW_BODY)
 - `X-Service`: caller service identifier
 - `X-Key-Id`: key ID; it may be omitted only when `HERALD_HMAC_DEFAULT_KEY_ID` is configured
 
+When `X-Key-Id` is omitted, the signer must keep the `KEY_ID` line in the canonical string empty. `HERALD_HMAC_DEFAULT_KEY_ID` selects the verification key on the server; it does not fill the signed canonical field.
+
 **Server configuration**:
 ```bash
 export REQUEST_AUTH_MODE=hmac_v2
