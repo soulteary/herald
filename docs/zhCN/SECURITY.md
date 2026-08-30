@@ -33,14 +33,20 @@
 ```bash
 export ENVIRONMENT=production
 export REQUEST_AUTH_MODE=hmac_v2
-HMAC_KEY_1="$(openssl rand -hex 32)"
-HMAC_KEY_2="$(openssl rand -hex 32)"
-export HERALD_HMAC_KEYS="{\"key-id-1\":\"${HMAC_KEY_1}\",\"key-id-2\":\"${HMAC_KEY_2}\"}"
+# 在安全的管理主机上仅生成一次以下三个值，将其保存到密钥管理系统，并向
+# 所有副本注入相同值。不要在应用入口脚本或每次重启时重新生成：
+#   openssl rand -hex 32  # HERALD_HMAC_KEY_1
+#   openssl rand -hex 32  # HERALD_HMAC_KEY_2
+#   openssl rand -hex 32  # HERALD_IDEMPOTENCY_KEY
+: "${HERALD_HMAC_KEY_1:?请从密钥管理系统加载 HERALD_HMAC_KEY_1}"
+: "${HERALD_HMAC_KEY_2:?请从密钥管理系统加载 HERALD_HMAC_KEY_2}"
+: "${HERALD_IDEMPOTENCY_KEY:?请从密钥管理系统加载 HERALD_IDEMPOTENCY_KEY}"
+export HERALD_HMAC_KEYS="{\"key-id-1\":\"${HERALD_HMAC_KEY_1}\",\"key-id-2\":\"${HERALD_HMAC_KEY_2}\"}"
 export HERALD_HMAC_DEFAULT_KEY_ID=key-id-1
-export HERALD_IDEMPOTENCY_SECRET="$(openssl rand -hex 32)"
+export HERALD_IDEMPOTENCY_SECRET="${HERALD_IDEMPOTENCY_KEY}"
 export HMAC_MAX_DRIFT=60s
 export HMAC_V1_ENABLED=false
-unset HMAC_KEY_1 HMAC_KEY_2
+unset HERALD_HMAC_KEY_1 HERALD_HMAC_KEY_2 HERALD_IDEMPOTENCY_KEY
 export HERALD_TEST_MODE=false
 export PROVIDER_FAILURE_POLICY=strict
 export REDIS_PASSWORD="your-redis-password"
