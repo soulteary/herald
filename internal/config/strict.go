@@ -5,6 +5,11 @@ import (
 	"strings"
 )
 
+// verificationRequestEnvelopeBytes reserves the JSON field names, punctuation,
+// and the currently issued challenge ID so every generated code can fit in at
+// least the v1 verification request.
+const verificationRequestEnvelopeBytes = 64
+
 func normalizedOneOf(value string, allowed ...string) bool {
 	v := strings.ToLower(strings.TrimSpace(value))
 	for _, candidate := range allowed {
@@ -60,6 +65,9 @@ func validateStrictSettings() error {
 	}
 	if CodeLength < 4 {
 		problems = append(problems, "CODE_LENGTH must be at least 4")
+	}
+	if MaxBodyBytes > 0 && CodeLength > MaxBodyBytes-verificationRequestEnvelopeBytes {
+		problems = append(problems, "CODE_LENGTH plus the verification JSON envelope must not exceed HERALD_MAX_BODY_BYTES")
 	}
 	if ResendCooldown < 0 || IdempotencyKeyTTL < 0 {
 		problems = append(problems, "RESEND_COOLDOWN and IDEMPOTENCY_KEY_TTL must not be negative")
