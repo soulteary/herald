@@ -176,7 +176,7 @@ When enabled, Herald proxies TOTP (Authenticator) requests to [herald-totp](http
 |----------|-------------|---------|----------|
 | `HERALD_TEST_MODE` | Enable test code exposure only with `ENVIRONMENT=test`; forbidden in production | `false` | No |
 | `HERALD_TEST_API_KEY` | Dedicated key for the test-code listener | (empty) | Test mode |
-| `HERALD_TEST_LISTENER_ADDR` | Separate loopback-only test listener | `127.0.0.1:0` | No |
+| `HERALD_TEST_LISTENER_ADDR` | Separate loopback-only test listener | `127.0.0.1:18082` | No |
 
 ### Test mode and debugging
 
