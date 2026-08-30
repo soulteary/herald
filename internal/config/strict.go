@@ -5,10 +5,10 @@ import (
 	"strings"
 )
 
-// verificationRequestEnvelopeBytes reserves the JSON field names, punctuation,
-// and the currently issued challenge ID so every generated code can fit in at
-// least the v1 verification request.
-const verificationRequestEnvelopeBytes = 64
+// verificationRequestEnvelopeBytes reserves the compact JSON field names,
+// punctuation, and a 36-character legacy challenge ID so every generated code
+// can fit in at least the v1 verification request.
+const verificationRequestEnvelopeBytes = 65
 
 func normalizedOneOf(value string, allowed ...string) bool {
 	v := strings.ToLower(strings.TrimSpace(value))
