@@ -33,14 +33,21 @@ This document explains Herald's security features, security configuration, and b
 ```bash
 export ENVIRONMENT=production
 export REQUEST_AUTH_MODE=hmac_v2
-HMAC_KEY_1="$(openssl rand -hex 32)"
-HMAC_KEY_2="$(openssl rand -hex 32)"
-export HERALD_HMAC_KEYS="{\"key-id-1\":\"${HMAC_KEY_1}\",\"key-id-2\":\"${HMAC_KEY_2}\"}"
+# Provision these three values once on a secure administration host, store them
+# in a secret manager, and inject the same values into every replica. Do not
+# regenerate them in the application entrypoint or on restart:
+#   openssl rand -hex 32  # HERALD_HMAC_KEY_1
+#   openssl rand -hex 32  # HERALD_HMAC_KEY_2
+#   openssl rand -hex 32  # HERALD_IDEMPOTENCY_KEY
+: "${HERALD_HMAC_KEY_1:?load HERALD_HMAC_KEY_1 from the secret manager}"
+: "${HERALD_HMAC_KEY_2:?load HERALD_HMAC_KEY_2 from the secret manager}"
+: "${HERALD_IDEMPOTENCY_KEY:?load HERALD_IDEMPOTENCY_KEY from the secret manager}"
+export HERALD_HMAC_KEYS="{\"key-id-1\":\"${HERALD_HMAC_KEY_1}\",\"key-id-2\":\"${HERALD_HMAC_KEY_2}\"}"
 export HERALD_HMAC_DEFAULT_KEY_ID=key-id-1
-export HERALD_IDEMPOTENCY_SECRET="$(openssl rand -hex 32)"
+export HERALD_IDEMPOTENCY_SECRET="${HERALD_IDEMPOTENCY_KEY}"
 export HMAC_MAX_DRIFT=60s
 export HMAC_V1_ENABLED=false
-unset HMAC_KEY_1 HMAC_KEY_2
+unset HERALD_HMAC_KEY_1 HERALD_HMAC_KEY_2 HERALD_IDEMPOTENCY_KEY
 export HERALD_TEST_MODE=false
 export PROVIDER_FAILURE_POLICY=strict
 export REDIS_PASSWORD="your-redis-password"
