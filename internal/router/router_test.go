@@ -373,3 +373,27 @@ func TestRouter_TestCodeRoute_NotMountedInDevOrProd(t *testing.T) {
 		t.Errorf("GET /v1/test/code/:id in development status = %d, want 404, body=%s", resp.StatusCode, string(body))
 	}
 }
+
+func TestTrustedProxyChainRejectsSpoofedLeftmostIP(t *testing.T) {
+	app := fiber.New(fiber.Config{
+		ProxyHeader:        fiber.HeaderXForwardedFor,
+		TrustProxy:         true,
+		EnableIPValidation: true,
+		TrustProxyConfig: fiber.TrustProxyConfig{
+			Proxies: []string{"10.0.0.1", "10.0.0.2"},
+		},
+	})
+	app.Get("/", func(c fiber.Ctx) error { return c.SendString(c.IP()) })
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.RemoteAddr = "10.0.0.2:1234"
+	req.Header.Set(fiber.HeaderXForwardedFor, "203.0.113.250, 198.51.100.7, 10.0.0.1")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if got := string(body); got != "198.51.100.7" {
+		t.Fatalf("trusted client IP = %q, want first untrusted hop 198.51.100.7", got)
+	}
+}
