@@ -373,3 +373,33 @@ func TestRouter_TestCodeRoute_NotMountedInDevOrProd(t *testing.T) {
 		t.Errorf("GET /v1/test/code/:id in development status = %d, want 404, body=%s", resp.StatusCode, string(body))
 	}
 }
+
+func TestRouter_OversizedBodyReturnsStableJSON(t *testing.T) {
+	const limit = 8
+	app := fiber.New(fiber.Config{
+		BodyLimit:         limit,
+		StreamRequestBody: true,
+		ErrorHandler:      jsonErrorHandler,
+	})
+	app.Use(stableBodyLimitMiddleware(limit))
+	app.Post("/", func(c fiber.Ctx) error {
+		return c.JSON(fiber.Map{"ok": true})
+	})
+
+	req := httptest.NewRequest("POST", "/", strings.NewReader("0123456789abcdef"))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != fiber.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want 413; body=%s", resp.StatusCode, body)
+	}
+	if got := resp.Header.Get("Content-Type"); !strings.Contains(got, "application/json") {
+		t.Fatalf("Content-Type = %q, want JSON", got)
+	}
+	if !strings.Contains(string(body), `"reason":"payload_too_large"`) {
+		t.Fatalf("body = %s, want stable payload_too_large reason", body)
+	}
+}
