@@ -413,8 +413,9 @@ func Validate() error {
 	if strings.TrimSpace(CORSAllowOrigins) == "*" {
 		problems = append(problems, "CORS wildcard (HERALD_CORS_ALLOW_ORIGINS=*) is forbidden in production")
 	}
-	if strings.EqualFold(RequestAuthMode, "none") {
-		problems = append(problems, "REQUEST_AUTH_MODE=none is forbidden in production")
+	switch strings.ToLower(strings.TrimSpace(RequestAuthMode)) {
+	case "none", "off", "disabled":
+		problems = append(problems, "REQUEST_AUTH_MODE="+RequestAuthMode+" is forbidden in production")
 	}
 	if HMACV1Enabled {
 		// Not fatal, but the legacy scheme is not replay-resistant; warn loudly.
