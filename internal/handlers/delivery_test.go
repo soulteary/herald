@@ -82,6 +82,15 @@ func TestDelivery_StrictRevokesOnProviderFailure(t *testing.T) {
 	}
 }
 
+func TestDelivery_NormalizesStrictProviderPolicy(t *testing.T) {
+	app := newDeliveryApp(t, " STRICT ")
+	body := `{"user_id":"u1","channel":"email","destination":"a@b.com","purpose":"login"}`
+	r := postChallenge(app, body)
+	if r.status != fiber.StatusInternalServerError {
+		t.Fatalf("normalized strict status = %d, want 500, body=%s", r.status, string(r.body))
+	}
+}
+
 // TestDelivery_SoftFlagsDeliveryFailed proves that in soft mode (dev/degraded)
 // the challenge is still created but the response carries a delivery_status
 // signal so the caller knows the code may not have been delivered.

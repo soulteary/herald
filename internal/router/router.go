@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"strings"
 	"time"
 
@@ -92,6 +93,51 @@ func stableBodyLimitMiddleware(limit int) fiber.Handler {
 	}
 }
 
+// trustedForwardedClientIP walks a proxy-appended chain from right to left and
+// returns the first address outside the configured trusted proxy boundary.
+func trustedForwardedClientIP(raw string, trusted []string) (string, bool) {
+	parts := strings.Split(raw, ",")
+	for i := len(parts) - 1; i >= 0; i-- {
+		ip := net.ParseIP(strings.TrimSpace(parts[i]))
+		if ip == nil {
+			return "", false
+		}
+		if !isTrustedProxyIP(ip, trusted) {
+			return ip.String(), true
+		}
+	}
+	return "", false
+}
+
+func isTrustedProxyIP(ip net.IP, trusted []string) bool {
+	for _, entry := range trusted {
+		entry = strings.TrimSpace(entry)
+		if candidate := net.ParseIP(entry); candidate != nil && candidate.Equal(ip) {
+			return true
+		}
+		if _, network, err := net.ParseCIDR(entry); err == nil && network.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+func sanitizeTrustedForwardedIP(header string, trusted []string) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		raw := c.Get(header)
+		if raw == "" {
+			return c.Next()
+		}
+		if clientIP, ok := trustedForwardedClientIP(raw, trusted); ok {
+			c.Request().Header.Set(header, clientIP)
+		} else {
+			// A malformed or all-proxy chain is not client identity.
+			c.Request().Header.Del(header)
+		}
+		return c.Next()
+	}
+}
+
 // testAuthMiddleware guards the test-code endpoint with a constant-time
 // comparison against HERALD_TEST_API_KEY. It accepts the key via X-Test-Api-Key
 // or Authorization: Bearer <key>.
@@ -168,8 +214,9 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 		ErrorHandler:      jsonErrorHandler,
 		// Fiber only reads the proxy header when the immediate peer matches the
 		// explicit proxy allowlist, preventing direct header spoofing.
-		ProxyHeader: config.TrustedProxyHeader,
-		TrustProxy:  len(config.TrustedProxies) > 0,
+		ProxyHeader:        config.TrustedProxyHeader,
+		TrustProxy:         len(config.TrustedProxies) > 0,
+		EnableIPValidation: true,
 		TrustProxyConfig: fiber.TrustProxyConfig{
 			Proxies: config.TrustedProxies,
 		},
@@ -178,6 +225,9 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 	// Middleware
 	app.Use(recover.New())
 	app.Use(stableBodyLimitMiddleware(config.MaxBodyBytes))
+	if config.TrustedProxyHeader != "" && len(config.TrustedProxies) > 0 {
+		app.Use(sanitizeTrustedForwardedIP(config.TrustedProxyHeader, config.TrustedProxies))
+	}
 
 	// Request logging using logger-kit
 	app.Use(logger.FiberMiddleware(logger.MiddlewareConfig{

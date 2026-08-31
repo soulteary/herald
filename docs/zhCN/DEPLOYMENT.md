@@ -61,6 +61,8 @@ go build -o herald main.go
 | `HERALD_TRUSTED_PROXY_HEADER` | 转发客户端 IP 的请求头；仅信任允许列表中的代理 | （空） | 配置可信代理时 |
 | `HERALD_TRUSTED_PROXIES` | 可信代理 IP/CIDR 允许列表，逗号分隔 | （空） | 配置代理请求头时 |
 
+Herald 从右向左解析转发 IP 链，仅跳过明确配置为可信的代理节点，并将遇到的第一个不可信地址作为客户端 IP；不会自动信任调用方可控的最左侧前缀。
+
 #### 服务间认证
 
 | 变量 | 描述 | 默认值 | 必需 |
@@ -85,7 +87,7 @@ go build -o herald main.go
 | `MAX_ATTEMPTS` | 单 challenge 最大验证失败次数，超过后锁定 | `5` | 否 |
 | `LOCKOUT_DURATION` | 锁定持续时间（如 `10m`） | `10m` | 否 |
 | `RESEND_COOLDOWN` | 同一 challenge 重发冷却时间 | `60s` | 否 |
-| `CODE_LENGTH` | 验证码位数 | `6` | 否 |
+| `CODE_LENGTH` | 验证码位数（最小 `4`；还须在扣除紧凑的上下文绑定 V2 请求封装后不超过 `HERALD_MAX_BODY_BYTES`，当前封装为 88 字节） | `6` | 否 |
 | `IDEMPOTENCY_KEY_TTL` | 幂等键缓存 TTL；`0` 表示使用 `CHALLENGE_EXPIRY` | `0` | 否 |
 | `ALLOWED_PURPOSES` | 允许的 purpose，逗号分隔，如 `login,reset,bind,stepup` | `login` | 否 |
 
@@ -187,7 +189,7 @@ go build -o herald main.go
 |------|------|--------|------|
 | `HERALD_TEST_MODE` | 仅在 `ENVIRONMENT=test` 时启用测试码暴露；生产禁止 | `false` | 否 |
 | `HERALD_TEST_API_KEY` | 测试码监听器专用密钥 | （空） | 测试模式 |
-| `HERALD_TEST_LISTENER_ADDR` | 独立、仅回环地址的测试监听器 | `127.0.0.1:0` | 否 |
+| `HERALD_TEST_LISTENER_ADDR` | 独立、仅回环地址的测试监听器 | `127.0.0.1:18082` | 否 |
 
 ### 测试模式与调试
 

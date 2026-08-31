@@ -33,10 +33,20 @@
 ```bash
 export ENVIRONMENT=production
 export REQUEST_AUTH_MODE=hmac_v2
-export HERALD_HMAC_KEYS='{"key-id-1":"secret-key-1","key-id-2":"secret-key-2"}'
+# 在安全的管理主机上仅生成一次以下三个值，将其保存到密钥管理系统，并向
+# 所有副本注入相同值。不要在应用入口脚本或每次重启时重新生成：
+#   openssl rand -hex 32  # HERALD_HMAC_KEY_1
+#   openssl rand -hex 32  # HERALD_HMAC_KEY_2
+#   openssl rand -hex 32  # HERALD_IDEMPOTENCY_KEY
+: "${HERALD_HMAC_KEY_1:?请从密钥管理系统加载 HERALD_HMAC_KEY_1}"
+: "${HERALD_HMAC_KEY_2:?请从密钥管理系统加载 HERALD_HMAC_KEY_2}"
+: "${HERALD_IDEMPOTENCY_KEY:?请从密钥管理系统加载 HERALD_IDEMPOTENCY_KEY}"
+export HERALD_HMAC_KEYS="{\"key-id-1\":\"${HERALD_HMAC_KEY_1}\",\"key-id-2\":\"${HERALD_HMAC_KEY_2}\"}"
 export HERALD_HMAC_DEFAULT_KEY_ID=key-id-1
+export HERALD_IDEMPOTENCY_SECRET="${HERALD_IDEMPOTENCY_KEY}"
 export HMAC_MAX_DRIFT=60s
 export HMAC_V1_ENABLED=false
+unset HERALD_HMAC_KEY_1 HERALD_HMAC_KEY_2 HERALD_IDEMPOTENCY_KEY
 export HERALD_TEST_MODE=false
 export PROVIDER_FAILURE_POLICY=strict
 export REDIS_PASSWORD="your-redis-password"
@@ -142,6 +152,8 @@ SHA256_HEX(RAW_BODY)
 - `X-Nonce`：本次请求的唯一值
 - `X-Service`：调用方服务标识
 - `X-Key-Id`：Key ID；仅当配置 `HERALD_HMAC_DEFAULT_KEY_ID` 时可省略
+
+省略 `X-Key-Id` 时，签名方必须将规范串中的 `KEY_ID` 行保持为空。`HERALD_HMAC_DEFAULT_KEY_ID` 只用于服务端选择验签密钥，不会填充被签名的规范字段。
 
 **服务端配置**:
 ```bash

@@ -50,6 +50,8 @@ The following match the implementation in `internal/config/config.go`.
 | `HERALD_TRUSTED_PROXY_HEADER` | Forwarded client-IP header; only read from trusted proxies | (empty) | With trusted proxies |
 | `HERALD_TRUSTED_PROXIES` | Comma-separated trusted proxy IP/CIDR allowlist | (empty) | With proxy header |
 
+Forwarded IP chains are parsed from right to left. Herald skips only explicitly trusted proxy hops and uses the first untrusted address as the client IP; a caller-controlled leftmost prefix is never trusted automatically.
+
 #### Service-to-service authentication
 
 | Variable | Description | Default | Required |
@@ -74,7 +76,7 @@ If none are set, the service logs a warning and allows unauthenticated requests 
 | `MAX_ATTEMPTS` | Max verify failures per challenge before lockout | `5` | No |
 | `LOCKOUT_DURATION` | Lockout duration (e.g. `10m`) | `10m` | No |
 | `RESEND_COOLDOWN` | Resend cooldown for same challenge | `60s` | No |
-| `CODE_LENGTH` | Verification code length (digits) | `6` | No |
+| `CODE_LENGTH` | Verification code length (digits, minimum `4`; must also fit `HERALD_MAX_BODY_BYTES` after the compact context-bound V2 envelope, currently 88 bytes) | `6` | No |
 | `IDEMPOTENCY_KEY_TTL` | Idempotency key cache TTL; `0` = use `CHALLENGE_EXPIRY` | `0` | No |
 | `ALLOWED_PURPOSES` | Allowed purposes, comma-separated (e.g. `login,reset,bind,stepup`) | `login` | No |
 
@@ -176,7 +178,7 @@ When enabled, Herald proxies TOTP (Authenticator) requests to [herald-totp](http
 |----------|-------------|---------|----------|
 | `HERALD_TEST_MODE` | Enable test code exposure only with `ENVIRONMENT=test`; forbidden in production | `false` | No |
 | `HERALD_TEST_API_KEY` | Dedicated key for the test-code listener | (empty) | Test mode |
-| `HERALD_TEST_LISTENER_ADDR` | Separate loopback-only test listener | `127.0.0.1:0` | No |
+| `HERALD_TEST_LISTENER_ADDR` | Separate loopback-only test listener | `127.0.0.1:18082` | No |
 
 ### Test mode and debugging
 

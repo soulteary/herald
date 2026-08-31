@@ -138,11 +138,27 @@ func TestValidate_ProductionRefusesTestMode(t *testing.T) {
 	}
 }
 
+func TestValidate_ProductionRefusesNoAuthAliases(t *testing.T) {
+	for _, mode := range []string{"none", "off", "disabled", " OFF "} {
+		t.Run(mode, func(t *testing.T) {
+			defer withProdEnv(t)()
+			RequestAuthMode = mode
+			if err := Validate(); err == nil {
+				t.Fatalf("production with REQUEST_AUTH_MODE=%q must fail Validate()", mode)
+			}
+		})
+	}
+}
+
 func TestValidate_ProductionRefusesSoftProviderPolicy(t *testing.T) {
-	defer withProdEnv(t)()
-	ProviderFailurePolicy = "soft"
-	if err := Validate(); err == nil {
-		t.Fatal("production with PROVIDER_FAILURE_POLICY=soft must fail Validate()")
+	for _, policy := range []string{"soft", " SOFT "} {
+		t.Run(policy, func(t *testing.T) {
+			defer withProdEnv(t)()
+			ProviderFailurePolicy = policy
+			if err := Validate(); err == nil {
+				t.Fatalf("production with PROVIDER_FAILURE_POLICY=%q must fail Validate()", policy)
+			}
+		})
 	}
 }
 

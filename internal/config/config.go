@@ -87,7 +87,7 @@ var (
 	// mounted when TestCodeExposureEnabled() is true, is guarded by this key, and
 	// should be bound to a loopback/admin listener.
 	TestAPIKey       = env.Get("HERALD_TEST_API_KEY", "")
-	TestListenerAddr = env.Get("HERALD_TEST_LISTENER_ADDR", "127.0.0.1:0")
+	TestListenerAddr = env.Get("HERALD_TEST_LISTENER_ADDR", "127.0.0.1:18082")
 
 	// RiskAckPasswordlessRedis explicitly acknowledges running against a
 	// passwordless Redis in production (discouraged). Without it, Validate()
@@ -404,7 +404,7 @@ func Validate() error {
 	if TestMode {
 		problems = append(problems, "HERALD_TEST_MODE=true is forbidden in production")
 	}
-	if ProviderFailurePolicy == "soft" {
+	if NormalizedProviderFailurePolicy() == "soft" {
 		problems = append(problems, "PROVIDER_FAILURE_POLICY=soft is forbidden in production; use strict")
 	}
 	if RedisPassword == "" && !RiskAckPasswordlessRedis {
@@ -413,8 +413,9 @@ func Validate() error {
 	if strings.TrimSpace(CORSAllowOrigins) == "*" {
 		problems = append(problems, "CORS wildcard (HERALD_CORS_ALLOW_ORIGINS=*) is forbidden in production")
 	}
-	if strings.EqualFold(RequestAuthMode, "none") {
-		problems = append(problems, "REQUEST_AUTH_MODE=none is forbidden in production")
+	switch strings.ToLower(strings.TrimSpace(RequestAuthMode)) {
+	case "none", "off", "disabled":
+		problems = append(problems, "REQUEST_AUTH_MODE="+RequestAuthMode+" is forbidden in production")
 	}
 	if HMACV1Enabled {
 		// Not fatal, but the legacy scheme is not replay-resistant; warn loudly.
