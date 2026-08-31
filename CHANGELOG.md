@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-31
+
+### Security
+
+- Reject every supported no-auth alias in production and apply the normalized
+  provider failure policy consistently during validation and delivery.
+- Parse trusted forwarded-IP chains from the trusted proxy boundary, rejecting
+  malformed or all-proxy chains instead of accepting caller-controlled prefixes.
+- Return a stable JSON `413 payload_too_large` response for declared and streamed
+  oversized request bodies, close rejected streaming connections, and enforce the
+  same limit on the dedicated test listener.
+- Apply available Alpine runtime security updates, including the fix for
+  CVE-2026-14456, while keeping the container non-root.
+
+### Fixed
+
+- Give the test-only listener a discoverable loopback default
+  (`127.0.0.1:18082`) instead of an ephemeral port.
+- Generate correct SemVer Docker aliases for manually dispatched releases and
+  update `latest` only for stable versions.
+- Correct the production HMAC examples so generated secrets are provisioned
+  once, shared by all replicas, and the canonical key-ID field remains empty
+  when `X-Key-Id` is omitted.
+
+### Changed
+
+- Remove the arbitrary ten-digit OTP ceiling. Codes must be at least four digits
+  and fit within `HERALD_MAX_BODY_BYTES` together with the verification envelope.
+- Update `herald-totp` to v1.2.0 and refresh Prometheus and compression
+  dependencies.
+
+## [1.1.0] - 2026-08-26
+
+### Changed
+
+- Update the project and container build to Go 1.27 and refresh the lint tooling.
+- Update `govulncheck` to v1.7.0 for Go 1.27 compatibility.
+
+### Fixed
+
+- Remove data races from the affected tests.
+
 ## [1.0.0] - 2026-08-26
 
 ### Security (breaking)
@@ -96,3 +138,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 See `docs/enUS/MIGRATION_V2.md` and `docs/zhCN/MIGRATION_V2.md` for the v1→v2
 authentication diff, environment-variable migration, and rollback guidance.
+
+[Unreleased]: https://github.com/soulteary/herald/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/soulteary/herald/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/soulteary/herald/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/soulteary/herald/releases/tag/v1.0.0
