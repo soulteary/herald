@@ -56,6 +56,7 @@ func payloadTooLarge(c fiber.Ctx) error {
 	// Do not reuse a connection whose request stream still contains rejected
 	// body bytes; otherwise fasthttp can parse the remainder as another request.
 	c.Request().Header.SetConnectionClose()
+	c.Set("Connection", "close")
 	return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{
 		"ok": false, "reason": "payload_too_large",
 	})
