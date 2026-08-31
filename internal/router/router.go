@@ -301,8 +301,13 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 		if config.TestAPIKey == "" {
 			log.Error().Msg("Test-code endpoint requested but HERALD_TEST_API_KEY is empty; refusing to mount it")
 		} else {
-			testApp = fiber.New(fiber.Config{BodyLimit: config.MaxBodyBytes, ErrorHandler: jsonErrorHandler})
+			testApp = fiber.New(fiber.Config{
+				BodyLimit:         config.MaxBodyBytes,
+				StreamRequestBody: true,
+				ErrorHandler:      jsonErrorHandler,
+			})
 			testApp.Use(recover.New())
+			testApp.Use(stableBodyLimitMiddleware(config.MaxBodyBytes))
 			testApp.Get("/livez", func(c fiber.Ctx) error {
 				return c.JSON(fiber.Map{"ok": true, "status": "live"})
 			})
