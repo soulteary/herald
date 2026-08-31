@@ -306,11 +306,6 @@ func TestRouter_OversizedBodyRejected(t *testing.T) {
 
 	resp, err := rw.App.Test(req)
 	if err != nil {
-		// fasthttp enforces BodyLimit at read time and surfaces it as an error
-		// before a response is produced. That is an acceptable rejection.
-		if strings.Contains(err.Error(), "body size exceeds") {
-			return
-		}
 		t.Fatalf("app.Test: %v", err)
 	}
 	if resp.StatusCode != fiber.StatusRequestEntityTooLarge {
@@ -377,7 +372,7 @@ func TestRouter_TestCodeRoute_NotMountedInDevOrProd(t *testing.T) {
 func TestRouter_OversizedBodyReturnsStableJSON(t *testing.T) {
 	const limit = 8
 	app := fiber.New(fiber.Config{
-		BodyLimit:         transportBodyLimit(limit),
+		BodyLimit:         transportBodyLimit(),
 		StreamRequestBody: true,
 		ErrorHandler:      jsonErrorHandler,
 	})
@@ -386,7 +381,10 @@ func TestRouter_OversizedBodyReturnsStableJSON(t *testing.T) {
 		return c.JSON(fiber.Map{"ok": true})
 	})
 
-	req := httptest.NewRequest("POST", "/", strings.NewReader("0123456789abcdef"))
+	// Exceed both the application limit and the former 1 MiB transport
+	// headroom. This verifies Fiber cannot reject the request before the JSON
+	// middleware runs.
+	req := httptest.NewRequest("POST", "/", strings.NewReader(strings.Repeat("x", (1<<20)+limit+1)))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := app.Test(req)
 	if err != nil {
