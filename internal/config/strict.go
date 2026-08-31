@@ -5,6 +5,13 @@ import (
 	"strings"
 )
 
+// contextBoundVerificationRequestEnvelopeBytes is the size of the smallest
+// compact v2 verification request that carries a 36-character legacy
+// challenge ID and one non-empty context binding. Keep the JSON literal here
+// so changes to the request envelope are visible instead of hidden in a magic
+// number.
+const contextBoundVerificationRequestEnvelopeBytes = len(`{"challenge_id":"00000000-0000-0000-0000-000000000000","code":"","expected_user_id":"x"}`)
+
 func normalizedOneOf(value string, allowed ...string) bool {
 	v := strings.ToLower(strings.TrimSpace(value))
 	for _, candidate := range allowed {
@@ -58,8 +65,11 @@ func validateStrictSettings() error {
 	if ChallengeExpiry <= 0 || MaxAttempts <= 0 || LockoutDuration <= 0 {
 		problems = append(problems, "CHALLENGE_EXPIRY, MAX_ATTEMPTS, and LOCKOUT_DURATION must be positive")
 	}
-	if CodeLength < 4 || CodeLength > 10 {
-		problems = append(problems, "CODE_LENGTH must be between 4 and 10")
+	if CodeLength < 4 {
+		problems = append(problems, "CODE_LENGTH must be at least 4")
+	}
+	if MaxBodyBytes > 0 && CodeLength > MaxBodyBytes-contextBoundVerificationRequestEnvelopeBytes {
+		problems = append(problems, "CODE_LENGTH plus a context-bound v2 verification JSON envelope must not exceed HERALD_MAX_BODY_BYTES")
 	}
 	if ResendCooldown < 0 || IdempotencyKeyTTL < 0 {
 		problems = append(problems, "RESEND_COOLDOWN and IDEMPOTENCY_KEY_TTL must not be negative")
