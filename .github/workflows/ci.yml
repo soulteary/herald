@@ -1,12 +1,5 @@
 name: CI
 
-# NOTE: This repository currently uses local `replace` directives in go.mod
-# pointing at sibling `../kits/*` sources during the security-hardening work.
-# CI `go mod download` / `go build` will only succeed once those kit fixes are
-# released and go.mod is re-pinned to tagged versions (see docs migration notes).
-# Until then, the module-download steps below are expected to fail on a clean
-# checkout and this is documented, not a silent skip.
-
 on:
   push:
     branches: [ main, develop ]
@@ -191,15 +184,21 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - name: Validate compose config
         run: docker compose config >/dev/null
+      - name: Build Compose image
+        run: docker compose build herald
       - name: Config-startup-failure test (prod without auth must refuse)
         run: |
           set +e
           OUT=$(docker run --rm -e ENVIRONMENT=production -e API_KEY= -e HMAC_SECRET= \
-            herald:test 2>&1)
+            herald:local 2>&1)
           CODE=$?
+          set -e
           echo "$OUT"
           if [ "$CODE" -eq 0 ]; then
             echo "ERROR: production started with no auth configured"; exit 1
+          fi
+          if ! grep -Fq "production config validation failed" <<<"$OUT"; then
+            echo "ERROR: container failed for an unexpected reason"; exit 1
           fi
           echo "OK: production refused to start without auth (exit $CODE)"
       - name: Compose smoke test (bring up, probe /livez, tear down)
