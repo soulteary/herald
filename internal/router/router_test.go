@@ -233,16 +233,19 @@ func TestRouter_TestModeRoute(t *testing.T) {
 	originalTestMode := config.TestMode
 	originalEnv := config.Env
 	originalTestKey := config.TestAPIKey
+	originalBodyLimit := config.MaxBodyBytes
 	defer func() {
 		config.TestMode = originalTestMode
 		config.Env = originalEnv
 		config.TestAPIKey = originalTestKey
+		config.MaxBodyBytes = originalBodyLimit
 	}()
 	// The test-code endpoint is only mounted under the combined
 	// test-environment + test-mode switch AND requires a test API key.
 	config.Env = config.EnvTest
 	config.TestMode = true
 	config.TestAPIKey = "test-secret-key"
+	config.MaxBodyBytes = 8
 
 	redisClient, _ := testutil.NewTestRedisClient()
 	defer func() { _ = redisClient.Close() }()
@@ -250,6 +253,17 @@ func TestRouter_TestModeRoute(t *testing.T) {
 	rw := NewRouterWithClientAndHandlers(redisClient, testLogger())
 	if rw.TestApp == nil {
 		t.Fatal("expected a dedicated test app")
+	}
+
+	oversizedReq := httptest.NewRequest("GET", "/livez", strings.NewReader("0123456789abcdef"))
+	oversizedResp, err := rw.TestApp.Test(oversizedReq)
+	if err != nil {
+		t.Fatalf("oversized test app request: %v", err)
+	}
+	oversizedBody, _ := io.ReadAll(oversizedResp.Body)
+	if oversizedResp.StatusCode != fiber.StatusRequestEntityTooLarge ||
+		!strings.Contains(string(oversizedBody), `"reason":"payload_too_large"`) {
+		t.Fatalf("oversized test app response = %d, %s; want stable JSON 413", oversizedResp.StatusCode, oversizedBody)
 	}
 
 	// The public app must never expose the test-code route.
@@ -306,11 +320,6 @@ func TestRouter_OversizedBodyRejected(t *testing.T) {
 
 	resp, err := rw.App.Test(req)
 	if err != nil {
-		// fasthttp enforces BodyLimit at read time and surfaces it as an error
-		// before a response is produced. That is an acceptable rejection.
-		if strings.Contains(err.Error(), "body size exceeds") {
-			return
-		}
 		t.Fatalf("app.Test: %v", err)
 	}
 	if resp.StatusCode != fiber.StatusRequestEntityTooLarge {
@@ -388,5 +397,35 @@ func TestTrustedForwardedClientIPRejectsSpoofedPrefix(t *testing.T) {
 func TestTrustedForwardedClientIPRejectsMalformedChain(t *testing.T) {
 	if got, ok := trustedForwardedClientIP("198.51.100.7, not-an-ip", []string{"10.0.0.0/8"}); ok {
 		t.Fatalf("malformed chain resolved to %q; want rejection", got)
+	}
+}
+
+func TestRouter_OversizedBodyReturnsStableJSON(t *testing.T) {
+	const limit = 8
+	app := fiber.New(fiber.Config{
+		BodyLimit:         limit,
+		StreamRequestBody: true,
+		ErrorHandler:      jsonErrorHandler,
+	})
+	app.Use(stableBodyLimitMiddleware(limit))
+	app.Post("/", func(c fiber.Ctx) error {
+		return c.JSON(fiber.Map{"ok": true})
+	})
+
+	req := httptest.NewRequest("POST", "/", strings.NewReader("0123456789abcdef"))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != fiber.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want 413; body=%s", resp.StatusCode, body)
+	}
+	if got := resp.Header.Get("Content-Type"); !strings.Contains(got, "application/json") {
+		t.Fatalf("Content-Type = %q, want JSON", got)
+	}
+	if !strings.Contains(string(body), `"reason":"payload_too_large"`) {
+		t.Fatalf("body = %s, want stable payload_too_large reason", body)
 	}
 }

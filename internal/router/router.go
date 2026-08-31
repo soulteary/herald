@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"time"
@@ -37,12 +38,55 @@ func jsonErrorHandler(c fiber.Ctx, err error) error {
 		reason = "not_found"
 	case fiber.StatusMethodNotAllowed:
 		reason = "method_not_allowed"
+	case fiber.StatusRequestEntityTooLarge:
+		reason = "payload_too_large"
 	default:
 		if status < fiber.StatusInternalServerError {
 			reason = "request_error"
 		}
 	}
 	return c.Status(status).JSON(fiber.Map{"ok": false, "reason": reason})
+}
+
+// stableBodyLimitMiddleware makes oversized responses part of Herald's JSON
+// contract. With StreamRequestBody enabled, Fiber uses BodyLimit as the
+// buffering threshold and exposes larger bodies as streams; this middleware
+// then reads at most limit+1 bytes for requests without a declared size.
+func payloadTooLarge(c fiber.Ctx) error {
+	// Do not reuse a connection whose request stream still contains rejected
+	// body bytes; otherwise fasthttp can parse the remainder as another request.
+	c.Request().Header.SetConnectionClose()
+	c.Set("Connection", "close")
+	return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{
+		"ok": false, "reason": "payload_too_large",
+	})
+}
+
+func stableBodyLimitMiddleware(limit int) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if limit <= 0 {
+			return c.Next()
+		}
+		if length := c.Request().Header.ContentLength(); length > limit {
+			return payloadTooLarge(c)
+		}
+
+		if c.Request().IsBodyStream() {
+			body, err := io.ReadAll(io.LimitReader(c.Request().BodyStream(), int64(limit)+1))
+			if err != nil {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"ok": false, "reason": "request_error",
+				})
+			}
+			if len(body) > limit {
+				return payloadTooLarge(c)
+			}
+			c.Request().SetBodyRaw(body)
+		} else if len(c.Body()) > limit {
+			return payloadTooLarge(c)
+		}
+		return c.Next()
+	}
 }
 
 // trustedForwardedClientIP walks a proxy-appended chain from right to left and
@@ -158,11 +202,12 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 	app := fiber.New(fiber.Config{
 		// Server hardening: cap request body size and enforce timeouts so a slow
 		// or oversized client cannot exhaust resources.
-		BodyLimit:    config.MaxBodyBytes,
-		ReadTimeout:  config.ReadTimeout,
-		WriteTimeout: config.WriteTimeout,
-		IdleTimeout:  config.IdleTimeout,
-		ErrorHandler: jsonErrorHandler,
+		BodyLimit:         config.MaxBodyBytes,
+		StreamRequestBody: true,
+		ReadTimeout:       config.ReadTimeout,
+		WriteTimeout:      config.WriteTimeout,
+		IdleTimeout:       config.IdleTimeout,
+		ErrorHandler:      jsonErrorHandler,
 		// Fiber only reads the proxy header when the immediate peer matches the
 		// explicit proxy allowlist, preventing direct header spoofing.
 		ProxyHeader:        config.TrustedProxyHeader,
@@ -175,6 +220,7 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 
 	// Middleware
 	app.Use(recover.New())
+	app.Use(stableBodyLimitMiddleware(config.MaxBodyBytes))
 	if config.TrustedProxyHeader != "" && len(config.TrustedProxies) > 0 {
 		app.Use(sanitizeTrustedForwardedIP(config.TrustedProxyHeader, config.TrustedProxies))
 	}
@@ -255,8 +301,13 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 		if config.TestAPIKey == "" {
 			log.Error().Msg("Test-code endpoint requested but HERALD_TEST_API_KEY is empty; refusing to mount it")
 		} else {
-			testApp = fiber.New(fiber.Config{BodyLimit: config.MaxBodyBytes, ErrorHandler: jsonErrorHandler})
+			testApp = fiber.New(fiber.Config{
+				BodyLimit:         config.MaxBodyBytes,
+				StreamRequestBody: true,
+				ErrorHandler:      jsonErrorHandler,
+			})
 			testApp.Use(recover.New())
+			testApp.Use(stableBodyLimitMiddleware(config.MaxBodyBytes))
 			testApp.Get("/livez", func(c fiber.Ctx) error {
 				return c.JSON(fiber.Map{"ok": true, "status": "live"})
 			})

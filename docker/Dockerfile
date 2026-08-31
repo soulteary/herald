@@ -54,6 +54,7 @@ FROM alpine:3.23@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc
 # ownership and PodSecurity policies are predictable across environments.
 RUN addgroup -g 10001 -S herald && \
     adduser -u 10001 -S -G herald -H -s /sbin/nologin herald && \
+    apk upgrade --no-cache && \
     apk add --no-cache ca-certificates
 
 COPY --from=builder /out/herald /bin/herald
