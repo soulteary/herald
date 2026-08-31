@@ -87,7 +87,7 @@ var (
 	// mounted when TestCodeExposureEnabled() is true, is guarded by this key, and
 	// should be bound to a loopback/admin listener.
 	TestAPIKey       = env.Get("HERALD_TEST_API_KEY", "")
-	TestListenerAddr = env.Get("HERALD_TEST_LISTENER_ADDR", "127.0.0.1:0")
+	TestListenerAddr = env.Get("HERALD_TEST_LISTENER_ADDR", "127.0.0.1:18082")
 
 	// RiskAckPasswordlessRedis explicitly acknowledges running against a
 	// passwordless Redis in production (discouraged). Without it, Validate()
