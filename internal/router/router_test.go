@@ -398,10 +398,11 @@ func TestRouter_OversizedBodyReturnsStableJSON(t *testing.T) {
 		return c.JSON(fiber.Map{"ok": true})
 	})
 
-	// Exceed both the application limit and the former 1 MiB transport
-	// headroom. This verifies Fiber cannot reject the request before the JSON
-	// middleware runs.
-	req := httptest.NewRequest("POST", "/", strings.NewReader(strings.Repeat("x", (1<<20)+limit+1)))
+	// Declare a size beyond both the application limit and the former 1 MiB
+	// transport headroom. A small streamed body keeps the test focused on the
+	// parser's Content-Length gate rather than app.Test's in-memory buffering.
+	req := httptest.NewRequest("POST", "/", strings.NewReader("x"))
+	req.ContentLength = (1 << 20) + limit + 1
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := app.Test(req)
 	if err != nil {
