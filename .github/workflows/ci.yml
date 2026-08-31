@@ -188,19 +188,28 @@ jobs:
         run: docker compose build herald
       - name: Config-startup-failure test (prod without auth must refuse)
         run: |
-          set +e
-          OUT=$(docker run --rm \
+          CONTAINER_ID=$(docker run --detach \
             -e ENVIRONMENT=production \
             -e REQUEST_AUTH_MODE=api_key \
             -e PROVIDER_FAILURE_POLICY=strict \
             -e REDIS_PASSWORD="$REDIS_PASSWORD" \
             -e API_KEY= \
             -e HMAC_SECRET= \
-            herald:local 2>&1)
-          CODE=$?
-          set -e
+            herald:local)
+          cleanup() {
+            docker rm --force "$CONTAINER_ID" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          for i in $(seq 1 10); do
+            STATUS=$(docker inspect --format '{{ .State.Status }}' "$CONTAINER_ID")
+            [ "$STATUS" != "running" ] && break
+            sleep 1
+          done
+          OUT=$(docker logs "$CONTAINER_ID" 2>&1)
+          STATUS=$(docker inspect --format '{{ .State.Status }}' "$CONTAINER_ID")
+          CODE=$(docker inspect --format '{{ .State.ExitCode }}' "$CONTAINER_ID")
           echo "$OUT"
-          if [ "$CODE" -eq 0 ]; then
+          if [ "$STATUS" = "running" ] || [ "$CODE" -eq 0 ]; then
             echo "ERROR: production started with no auth configured"; exit 1
           fi
           if ! grep -Fq "no service-to-service authentication configured" <<<"$OUT"; then
