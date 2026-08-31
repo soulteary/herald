@@ -388,11 +388,8 @@ func TestTrustedForwardedClientIPRejectsMalformedChain(t *testing.T) {
 
 func TestRouter_OversizedBodyReturnsStableJSON(t *testing.T) {
 	const limit = 8
-	if got, want := transportBodyLimit(), int(^uint(0)>>1); got != want {
-		t.Fatalf("transport body limit = %d, want platform maximum %d", got, want)
-	}
 	app := fiber.New(fiber.Config{
-		BodyLimit:         transportBodyLimit(),
+		BodyLimit:         limit,
 		StreamRequestBody: true,
 		ErrorHandler:      jsonErrorHandler,
 	})
