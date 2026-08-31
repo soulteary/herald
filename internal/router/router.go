@@ -52,15 +52,22 @@ func jsonErrorHandler(c fiber.Ctx, err error) error {
 // contract. With StreamRequestBody enabled, Fiber uses BodyLimit as the
 // buffering threshold and exposes larger bodies as streams; this middleware
 // then reads at most limit+1 bytes for requests without a declared size.
+func payloadTooLarge(c fiber.Ctx) error {
+	// Do not reuse a connection whose request stream still contains rejected
+	// body bytes; otherwise fasthttp can parse the remainder as another request.
+	c.Request().Header.SetConnectionClose()
+	return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{
+		"ok": false, "reason": "payload_too_large",
+	})
+}
+
 func stableBodyLimitMiddleware(limit int) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if limit <= 0 {
 			return c.Next()
 		}
 		if length := c.Request().Header.ContentLength(); length > limit {
-			return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{
-				"ok": false, "reason": "payload_too_large",
-			})
+			return payloadTooLarge(c)
 		}
 
 		if c.Request().IsBodyStream() {
@@ -71,15 +78,11 @@ func stableBodyLimitMiddleware(limit int) fiber.Handler {
 				})
 			}
 			if len(body) > limit {
-				return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{
-					"ok": false, "reason": "payload_too_large",
-				})
+				return payloadTooLarge(c)
 			}
 			c.Request().SetBodyRaw(body)
 		} else if len(c.Body()) > limit {
-			return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{
-				"ok": false, "reason": "payload_too_large",
-			})
+			return payloadTooLarge(c)
 		}
 		return c.Next()
 	}
