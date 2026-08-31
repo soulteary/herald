@@ -388,6 +388,9 @@ func TestTrustedForwardedClientIPRejectsMalformedChain(t *testing.T) {
 
 func TestRouter_OversizedBodyReturnsStableJSON(t *testing.T) {
 	const limit = 8
+	if got, want := transportBodyLimit(), int(^uint(0)>>1); got != want {
+		t.Fatalf("transport body limit = %d, want platform maximum %d", got, want)
+	}
 	app := fiber.New(fiber.Config{
 		BodyLimit:         transportBodyLimit(),
 		StreamRequestBody: true,
@@ -398,11 +401,7 @@ func TestRouter_OversizedBodyReturnsStableJSON(t *testing.T) {
 		return c.JSON(fiber.Map{"ok": true})
 	})
 
-	// Declare a size beyond both the application limit and the former 1 MiB
-	// transport headroom. A small streamed body keeps the test focused on the
-	// parser's Content-Length gate rather than app.Test's in-memory buffering.
-	req := httptest.NewRequest("POST", "/", strings.NewReader("x"))
-	req.ContentLength = (1 << 20) + limit + 1
+	req := httptest.NewRequest("POST", "/", strings.NewReader("0123456789abcdef"))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := app.Test(req)
 	if err != nil {
