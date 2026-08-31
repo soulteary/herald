@@ -48,18 +48,10 @@ func jsonErrorHandler(c fiber.Ctx, err error) error {
 	return c.Status(status).JSON(fiber.Map{"ok": false, "reason": reason})
 }
 
-func transportBodyLimit() int {
-	// Fiber applies BodyLimit before middleware. Keep its mandatory transport
-	// limit at the largest representable value so stableBodyLimitMiddleware is
-	// the only practical request-size gate and can always return Herald's JSON
-	// error contract.
-	return int(^uint(0) >> 1)
-}
-
 // stableBodyLimitMiddleware makes oversized responses part of Herald's JSON
-// contract. StreamRequestBody lets this outer middleware run before Fiber's
-// parser emits its own early 413; BodyLimit remains enabled only at the
-// transport's largest representable value.
+// contract. With StreamRequestBody enabled, Fiber uses BodyLimit as the
+// buffering threshold and exposes larger bodies as streams; this middleware
+// then reads at most limit+1 bytes for requests without a declared size.
 func stableBodyLimitMiddleware(limit int) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if limit <= 0 {
@@ -206,7 +198,7 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 	app := fiber.New(fiber.Config{
 		// Server hardening: cap request body size and enforce timeouts so a slow
 		// or oversized client cannot exhaust resources.
-		BodyLimit:         transportBodyLimit(),
+		BodyLimit:         config.MaxBodyBytes,
 		StreamRequestBody: true,
 		ReadTimeout:       config.ReadTimeout,
 		WriteTimeout:      config.WriteTimeout,
