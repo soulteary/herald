@@ -22,6 +22,12 @@ func normalizedOneOf(value string, allowed ...string) bool {
 	return false
 }
 
+// NormalizedProviderFailurePolicy returns the canonical value used by both
+// validation and request handling.
+func NormalizedProviderFailurePolicy() string {
+	return strings.ToLower(strings.TrimSpace(ProviderFailurePolicy))
+}
+
 // validateStrictSettings rejects unknown enum values and unsafe numeric
 // boundaries in every environment. These are operator mistakes, not relaxed
 // development settings: silently guessing a value can select a weaker policy.
