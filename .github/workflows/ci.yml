@@ -189,7 +189,13 @@ jobs:
       - name: Config-startup-failure test (prod without auth must refuse)
         run: |
           set +e
-          OUT=$(docker run --rm -e ENVIRONMENT=production -e API_KEY= -e HMAC_SECRET= \
+          OUT=$(docker run --rm \
+            -e ENVIRONMENT=production \
+            -e REQUEST_AUTH_MODE=api_key \
+            -e PROVIDER_FAILURE_POLICY=strict \
+            -e REDIS_PASSWORD="$REDIS_PASSWORD" \
+            -e API_KEY= \
+            -e HMAC_SECRET= \
             herald:local 2>&1)
           CODE=$?
           set -e
@@ -197,8 +203,8 @@ jobs:
           if [ "$CODE" -eq 0 ]; then
             echo "ERROR: production started with no auth configured"; exit 1
           fi
-          if ! grep -Fq "production config validation failed" <<<"$OUT"; then
-            echo "ERROR: container failed for an unexpected reason"; exit 1
+          if ! grep -Fq "no service-to-service authentication configured" <<<"$OUT"; then
+            echo "ERROR: container did not report the expected missing-auth failure"; exit 1
           fi
           echo "OK: production refused to start without auth (exit $CODE)"
       - name: Compose smoke test (bring up, probe /livez, tear down)
