@@ -233,16 +233,19 @@ func TestRouter_TestModeRoute(t *testing.T) {
 	originalTestMode := config.TestMode
 	originalEnv := config.Env
 	originalTestKey := config.TestAPIKey
+	originalBodyLimit := config.MaxBodyBytes
 	defer func() {
 		config.TestMode = originalTestMode
 		config.Env = originalEnv
 		config.TestAPIKey = originalTestKey
+		config.MaxBodyBytes = originalBodyLimit
 	}()
 	// The test-code endpoint is only mounted under the combined
 	// test-environment + test-mode switch AND requires a test API key.
 	config.Env = config.EnvTest
 	config.TestMode = true
 	config.TestAPIKey = "test-secret-key"
+	config.MaxBodyBytes = 8
 
 	redisClient, _ := testutil.NewTestRedisClient()
 	defer func() { _ = redisClient.Close() }()
@@ -250,6 +253,17 @@ func TestRouter_TestModeRoute(t *testing.T) {
 	rw := NewRouterWithClientAndHandlers(redisClient, testLogger())
 	if rw.TestApp == nil {
 		t.Fatal("expected a dedicated test app")
+	}
+
+	oversizedReq := httptest.NewRequest("GET", "/livez", strings.NewReader("0123456789abcdef"))
+	oversizedResp, err := rw.TestApp.Test(oversizedReq)
+	if err != nil {
+		t.Fatalf("oversized test app request: %v", err)
+	}
+	oversizedBody, _ := io.ReadAll(oversizedResp.Body)
+	if oversizedResp.StatusCode != fiber.StatusRequestEntityTooLarge ||
+		!strings.Contains(string(oversizedBody), `"reason":"payload_too_large"`) {
+		t.Fatalf("oversized test app response = %d, %s; want stable JSON 413", oversizedResp.StatusCode, oversizedBody)
 	}
 
 	// The public app must never expose the test-code route.
