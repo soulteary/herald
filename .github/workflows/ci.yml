@@ -136,13 +136,9 @@ jobs:
             VERSION=${{ steps.version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Assert image runs as non-root
+      - name: Assert image runs as fixed non-root user
         run: |
-          UID_OUT=$(docker run --rm --entrypoint id herald:test -u)
-          echo "container uid: $UID_OUT"
-          if [ "$UID_OUT" = "0" ]; then
-            echo "ERROR: image runs as root (uid 0)"; exit 1
-          fi
+          test "$(docker inspect --format '{{.Config.User}}' herald:test)" = "10001:10001"
       - name: Generate SBOM (SPDX)
         uses: anchore/sbom-action@f325610c9f50a54015d37c8d16cb3b0e2c8f4de0 # v0
         with:
