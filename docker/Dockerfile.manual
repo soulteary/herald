@@ -2,10 +2,10 @@
 
 # Manual/China-mirror build variant. Same hardening as docker/Dockerfile but
 # uses tuna mirrors and goproxy.cn for environments without direct access.
-FROM golang:1.27.0-alpine3.23 AS builder
+FROM golang:1.27.1-alpine3.24 AS builder
 RUN echo '' > /etc/apk/repositories && \
-    echo "https://mirror.tuna.tsinghua.edu.cn/alpine/v3.23/main"      >> /etc/apk/repositories && \
-    echo "https://mirror.tuna.tsinghua.edu.cn/alpine/v3.23/community" >> /etc/apk/repositories
+    echo "https://mirror.tuna.tsinghua.edu.cn/alpine/v3.24/main"      >> /etc/apk/repositories && \
+    echo "https://mirror.tuna.tsinghua.edu.cn/alpine/v3.24/community" >> /etc/apk/repositories
 RUN apk add --no-cache git ca-certificates tzdata
 
 WORKDIR /app
@@ -40,7 +40,7 @@ RUN if [ "$USE_UPX" = "1" ]; then \
       upx -9 -o /out/herald.min /out/herald && mv /out/herald.min /out/herald; \
     fi
 
-FROM alpine:3.23
+FROM alpine:3.24
 ENV TZ=Asia/Shanghai
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirror.tuna.tsinghua.edu.cn/g' /etc/apk/repositories && \
     apk add --no-cache ca-certificates tzdata && \
