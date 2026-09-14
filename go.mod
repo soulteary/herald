@@ -3,21 +3,21 @@ module github.com/soulteary/herald
 go 1.27.0
 
 require (
-	github.com/alicebob/miniredis/v2 v2.38.0
+	github.com/alicebob/miniredis/v2 v2.39.0
 	github.com/gofiber/fiber/v3 v3.5.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/client_model v0.6.3
 	github.com/pterm/pterm v0.12.83
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/rs/zerolog v1.35.1
-	github.com/soulteary/audit-kit v1.8.0
-	github.com/soulteary/challenge-kit v1.7.0
+	github.com/soulteary/audit-kit v1.9.0
+	github.com/soulteary/challenge-kit v1.8.0
 	github.com/soulteary/cli-kit v1.9.0
-	github.com/soulteary/health-kit/v2 v2.2.0
+	github.com/soulteary/health-kit/v2 v2.3.0
 	github.com/soulteary/herald-totp v1.2.0
 	github.com/soulteary/http-kit v1.5.0
 	github.com/soulteary/i18n-kit/v2 v2.2.0
-	github.com/soulteary/logger-kit/v2 v2.2.0
+	github.com/soulteary/logger-kit/v2 v2.3.0
 	github.com/soulteary/metrics-kit/v2 v2.2.0
 	github.com/soulteary/middleware-kit/v2 v2.2.0
 	github.com/soulteary/provider-kit v1.7.0
