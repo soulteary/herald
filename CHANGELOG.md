@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-09-14
+
+### Changed
+
+- Update `herald-totp` to v1.2.2.
+- Refresh the kit modules used by the service: `audit-kit` v1.9.0,
+  `challenge-kit` v1.8.0, `health-kit` v2.3.0, and `logger-kit` v2.3.0.
+- Raise the indirect terminal dependencies pulled in by `pterm`
+  (`go-runewidth` v0.0.30, `terminfo` v1.2.0).
+- Align the container baseline with Stargate.
+
 ## [1.2.0] - 2026-08-31
 
 ### Security
