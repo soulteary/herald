@@ -15,14 +15,22 @@ import (
 
 	"github.com/pterm/pterm"
 	"github.com/pterm/pterm/putils"
-	logger "github.com/soulteary/logger-kit/v2"
-	version "github.com/soulteary/version-kit/v2"
+	logger "github.com/soulteary/logger-kit/v3"
+	version "github.com/soulteary/version-kit/v4"
 
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/router"
 	"github.com/soulteary/herald/internal/server"
 	rediskit "github.com/soulteary/redis-kit/client"
-	"github.com/soulteary/tracing-kit"
+	tracing "github.com/soulteary/tracing-kit/v2"
+	otlp "github.com/soulteary/tracing-kit/v2/otlp"
+
+	// audit-kit v2 dropped the blank imports its root package used to carry, so
+	// a database audit backend now needs the driver registered by the program.
+	// These are the two drivers audit-kit v1 registered; keeping them here keeps
+	// AUDIT_STORAGE_TYPE=database working for existing deployments.
+	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/lib/pq"
 )
 
 // log is the global logger instance
@@ -144,7 +152,7 @@ func run() error {
 
 	// Initialize OpenTelemetry tracing if enabled
 	if config.OTLPEnabled {
-		if _, err := tracing.InitTracer(config.ServiceName, version.Version, config.OTLPEndpoint); err != nil {
+		if _, err := otlp.InitTracer(config.ServiceName, version.Version, config.OTLPEndpoint); err != nil {
 			log.Warn().Err(err).Msg("Failed to initialize OpenTelemetry tracing")
 		} else {
 			log.Info().Msg("OpenTelemetry tracing initialized")

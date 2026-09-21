@@ -14,7 +14,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/redis/go-redis/v9"
-	logger "github.com/soulteary/logger-kit/v2"
+	logger "github.com/soulteary/logger-kit/v3"
 
 	challengekit "github.com/soulteary/challenge-kit"
 	"github.com/soulteary/herald/internal/config"

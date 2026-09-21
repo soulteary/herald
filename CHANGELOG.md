@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Move every kit dependency to its current major version and update
+  `herald-totp` to v1.2.3. The kits that split framework- and backend-specific
+  code into subpackages are now imported that way, so Herald links only the
+  adapters it uses:
+  `audit-kit` v1.9.0 -> v2.1.0, `health-kit` v2.3.0 -> v4.0.0,
+  `http-kit` v1.5.0 -> v2.0.0, `i18n-kit` v2.2.0 -> v4.0.1,
+  `logger-kit` v2.3.0 -> v3.0.0, `metrics-kit` v2.2.0 -> v3.0.0,
+  `middleware-kit` v2.2.0 -> v3.0.0, `secure-kit` v1.6.0 -> v2.1.0,
+  `tracing-kit` v1.5.0 -> v2.0.0, `version-kit` v2.2.0 -> v4.0.0,
+  `challenge-kit` v1.8.0 -> v1.10.0, and `redis-kit` v1.6.0 -> v1.7.0.
+- Build the Redis audit store explicitly and hand it to `StorageOptions`,
+  replacing the `RedisClient`/`RedisPrefix`/`RedisTTL` fields removed in
+  `audit-kit` v2. The store keeps the `otp:audit:` key prefix and the
+  `AUDIT_TTL` retention window, and it no longer closes the Redis client that
+  routing, rate limiting and caching share when the audit writer stops.
+- Register the `mysql` and `postgres` database drivers in `main.go`.
+  `audit-kit` v2 no longer blank-imports them from its root package, so
+  **deployments using `AUDIT_STORAGE_TYPE=database` need no change: Herald
+  registers the drivers itself.** A test pins both registrations so they cannot
+  be dropped unnoticed.
+- Configure the outbound trace propagator once on the SDK's HTTP client,
+  replacing the per-request `InjectTraceContext` calls removed in `http-kit`
+  v2. Outbound trace headers are unchanged.
+- Point the release `-X` build flags at `version-kit/v4` so built binaries keep
+  reporting their real version instead of `dev`.
+
+Herald's external behaviour is unchanged: routes, authentication outcomes, the
+`/healthz` and `/metrics` responses, log fields, metric names, and the format
+and Redis key prefix of audit records all stay as they were.
+
+### Fixed
+
+- Audit storage configured with a `postgres://` URL now reaches the database.
+  `audit-kit` v1 compared the URL scheme against a mismatched literal and
+  rejected every PostgreSQL URL as "unsupported database URL format"; v2 fixes
+  the comparison.
+
 ## [1.2.1] - 2026-09-14
 
 ### Changed

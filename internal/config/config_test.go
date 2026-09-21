@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	logger "github.com/soulteary/logger-kit/v2"
+	logger "github.com/soulteary/logger-kit/v3"
 )
 
 func TestParseHMACKeys(t *testing.T) {

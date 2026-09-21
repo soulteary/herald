@@ -14,10 +14,14 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/cors"
 	"github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/redis/go-redis/v9"
-	health "github.com/soulteary/health-kit/v2"
-	logger "github.com/soulteary/logger-kit/v2"
-	metricskit "github.com/soulteary/metrics-kit/v2"
-	middlewarekit "github.com/soulteary/middleware-kit/v2"
+	health "github.com/soulteary/health-kit/v4"
+	healthfiber "github.com/soulteary/health-kit/v4/fiberadapter"
+	redisprobe "github.com/soulteary/health-kit/v4/redisprobe"
+	logger "github.com/soulteary/logger-kit/v3"
+	loggerfiber "github.com/soulteary/logger-kit/v3/fiberadapter"
+	metricsfiber "github.com/soulteary/metrics-kit/v3/fiberadapter"
+	middlewarekit "github.com/soulteary/middleware-kit/v3"
+	mwfiber "github.com/soulteary/middleware-kit/v3/fiberadapter"
 	rediskit "github.com/soulteary/redis-kit/client"
 
 	"github.com/soulteary/herald/internal/auth"
@@ -226,11 +230,13 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 	}
 
 	// Request logging using logger-kit
-	app.Use(logger.FiberMiddleware(logger.MiddlewareConfig{
-		Logger:           log,
-		SkipPaths:        []string{"/healthz", "/metrics", "/livez", "/readyz"},
-		IncludeRequestID: true,
-		IncludeLatency:   true,
+	app.Use(loggerfiber.Middleware(loggerfiber.Config{
+		MiddlewareConfig: logger.MiddlewareConfig{
+			Logger:           log,
+			SkipPaths:        []string{"/healthz", "/metrics", "/livez", "/readyz"},
+			IncludeRequestID: true,
+			IncludeLatency:   true,
+		},
 	}))
 
 	// OpenTelemetry tracing middleware (if enabled)
@@ -265,8 +271,8 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 	// Health check using health-kit
 	healthConfig := health.DefaultConfig().WithServiceName(config.ServiceName)
 	healthAggregator := health.NewAggregator(healthConfig)
-	healthAggregator.AddChecker(health.NewRedisChecker(redisClient))
-	app.Get("/healthz", health.FiberHandler(healthAggregator))
+	healthAggregator.AddChecker(redisprobe.New(redisClient))
+	app.Get("/healthz", healthfiber.Handler(healthAggregator))
 
 	// Liveness: the process is up and able to serve. Never touches dependencies
 	// so a transient Redis outage cannot cause the orchestrator to kill the pod.
@@ -291,7 +297,7 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 	})
 
 	// Prometheus metrics endpoint
-	app.Get("/metrics", metricskit.FiberHandlerFor(metrics.Registry))
+	app.Get("/metrics", metricsfiber.HandlerFor(metrics.Registry))
 
 	// Test mode endpoint: build a separate app so the route can only be exposed
 	// on the dedicated loopback/admin listener. It is never part of the public
@@ -330,10 +336,12 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 	// enabled for a migration cycle.
 	var v1Handler fiber.Handler
 	if config.HMACV1Enabled {
-		v1Handler = middlewarekit.HMACAuth(middlewarekit.HMACConfig{
-			KeyProvider:  config.GetHMACSecret,
-			MaxTimeDrift: config.HMACMaxDrift,
-			Logger:       &zerologLogger,
+		v1Handler = mwfiber.HMACAuth(mwfiber.HMACConfig{
+			HMACConfig: middlewarekit.HMACConfig{
+				KeyProvider:  config.GetHMACSecret,
+				MaxTimeDrift: config.HMACMaxDrift,
+				Logger:       &zerologLogger,
+			},
 		})
 		log.Warn().Msg("HMAC v1 is enabled (deprecated); disable HMAC_V1_ENABLED after migration")
 	}

@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/gofiber/fiber/v3"
-	common_tracing "github.com/soulteary/tracing-kit"
+	common_tracing "github.com/soulteary/tracing-kit/v2"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"

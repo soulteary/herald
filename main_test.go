@@ -1,13 +1,28 @@
 package main
 
 import (
+	"database/sql"
 	"net/http"
+	"slices"
 	"testing"
 
 	"github.com/soulteary/herald/internal/config"
 
-	logger "github.com/soulteary/logger-kit/v2"
+	logger "github.com/soulteary/logger-kit/v3"
 )
+
+// TestAuditDatabaseDriversRegistered pins the blank imports in main.go.
+// audit-kit v2 no longer registers database/sql drivers from its root package,
+// so AUDIT_STORAGE_TYPE=database fails at runtime -- not at compile time -- if
+// these imports are dropped.
+func TestAuditDatabaseDriversRegistered(t *testing.T) {
+	drivers := sql.Drivers()
+	for _, name := range []string{"mysql", "postgres"} {
+		if !slices.Contains(drivers, name) {
+			t.Errorf("database/sql driver %q is not registered; audit storage over %s would fail at runtime (registered: %v)", name, name, drivers)
+		}
+	}
+}
 
 func TestLoggerKitParseLevelFromEnv(t *testing.T) {
 	tests := []struct {

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"text/template"
 
-	i18n "github.com/soulteary/i18n-kit/v2"
+	i18n "github.com/soulteary/i18n-kit/v4"
 	"github.com/soulteary/provider-kit"
 )
 

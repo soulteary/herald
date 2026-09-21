@@ -10,8 +10,8 @@ import (
 
 	"github.com/soulteary/cli-kit/env"
 	"github.com/soulteary/cli-kit/validator"
-	logger "github.com/soulteary/logger-kit/v2"
-	secure "github.com/soulteary/secure-kit"
+	logger "github.com/soulteary/logger-kit/v3"
+	secure "github.com/soulteary/secure-kit/v2"
 )
 
 // log is the package-level logger, initialized in Initialize
