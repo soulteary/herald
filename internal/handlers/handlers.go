@@ -10,15 +10,15 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/redis/go-redis/v9"
-	logger "github.com/soulteary/logger-kit/v2"
+	logger "github.com/soulteary/logger-kit/v3"
 	rediskitcache "github.com/soulteary/redis-kit/cache"
-	secure "github.com/soulteary/secure-kit"
+	secure "github.com/soulteary/secure-kit/v2"
 	"go.opentelemetry.io/otel/attribute"
 
 	challengekit "github.com/soulteary/challenge-kit"
 	"github.com/soulteary/herald-totp/pkg/heraldtotp"
 	provider "github.com/soulteary/provider-kit"
-	"github.com/soulteary/tracing-kit"
+	"github.com/soulteary/tracing-kit/v2"
 
 	"github.com/soulteary/herald/internal/auditlog"
 	"github.com/soulteary/herald/internal/config"

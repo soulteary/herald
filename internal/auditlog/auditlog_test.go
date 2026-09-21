@@ -5,8 +5,8 @@ import (
 	"sync"
 	"testing"
 
-	audit "github.com/soulteary/audit-kit"
-	logger "github.com/soulteary/logger-kit/v2"
+	audit "github.com/soulteary/audit-kit/v2"
+	logger "github.com/soulteary/logger-kit/v3"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/soulteary/herald/internal/config"
@@ -177,4 +177,28 @@ func TestSetLoggerConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 	SetLogger(nil)
+}
+
+// TestStop_KeepsSharedRedisClientOpen pins the CloseClient=false decision made
+// when moving to audit-kit v2. The Redis client is shared with routing, rate
+// limiting and caching, so stopping the audit writer must not close it.
+// v1's RedisStorage.Close() always closed the client; v2 only does so when
+// redisstore.Config.CloseClient is set, which Herald deliberately leaves unset.
+func TestStop_KeepsSharedRedisClientOpen(t *testing.T) {
+	auditLogger = nil
+	auditLoggerInit = sync.Once{}
+
+	redisClient, err := testutil.NewTestRedisClient()
+	if err != nil {
+		t.Skipf("Redis not available: %v", err)
+	}
+	defer func() { _ = redisClient.Close() }()
+
+	SetLogger(testLogger())
+	Init(redisClient)
+	assert.NotNil(t, GetLogger())
+
+	assert.NoError(t, Stop())
+	assert.NoError(t, redisClient.Ping(context.Background()).Err(),
+		"shared Redis client was closed by the audit writer")
 }

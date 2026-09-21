@@ -7,8 +7,9 @@ import (
 	"sync/atomic"
 
 	"github.com/redis/go-redis/v9"
-	audit "github.com/soulteary/audit-kit"
-	logger "github.com/soulteary/logger-kit/v2"
+	audit "github.com/soulteary/audit-kit/v2"
+	redisstore "github.com/soulteary/audit-kit/v2/redisstore"
+	logger "github.com/soulteary/logger-kit/v3"
 
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/metrics"
@@ -47,7 +48,6 @@ func InitWithError(redisClient *redis.Client) error {
 		cfg := audit.DefaultConfig()
 		cfg.Enabled = config.AuditEnabled
 		cfg.MaskDestination = config.AuditMaskDestination
-		cfg.TTL = config.AuditTTL
 
 		// Observe dropped/failed audit records instead of losing them silently.
 		cfg.OnEnqueueFailed = func(_ *audit.Record) {
@@ -83,11 +83,14 @@ func InitWithError(redisClient *redis.Client) error {
 				TableName:   config.AuditTableName,
 			}
 
-			// Add Redis storage if client provided
+			// Add Redis storage if client provided. CloseClient stays false:
+			// the client is shared with routing, rate limiting and caching, so
+			// stopping the audit writer must not close it.
 			if redisClient != nil {
-				opts.RedisClient = redisClient
-				opts.RedisPrefix = "otp:audit:"
-				opts.RedisTTL = config.AuditTTL
+				opts.RedisStorage = redisstore.NewWithConfig(redisClient, &redisstore.Config{
+					KeyPrefix: "otp:audit:",
+					TTL:       config.AuditTTL,
+				})
 			}
 
 			storage, err = audit.NewStorageFromType(storageType, opts)
@@ -105,7 +108,7 @@ func InitWithError(redisClient *redis.Client) error {
 			}
 		} else if redisClient != nil {
 			// Default to Redis storage if client provided
-			storage = audit.NewRedisStorageWithConfig(redisClient, &audit.RedisConfig{
+			storage = redisstore.NewWithConfig(redisClient, &redisstore.Config{
 				KeyPrefix: "otp:audit:",
 				TTL:       config.AuditTTL,
 			})

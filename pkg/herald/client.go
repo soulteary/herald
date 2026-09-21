@@ -18,7 +18,8 @@ import (
 	"strings"
 	"time"
 
-	httpkit "github.com/soulteary/http-kit"
+	httpkit "github.com/soulteary/http-kit/v2"
+	otelprop "github.com/soulteary/http-kit/v2/otelprop"
 )
 
 // Client is the Herald API client
@@ -235,8 +236,13 @@ func NewClient(opts *Options) (*Client, error) {
 		maxResponseBytes = defaultMaxResponseBytes
 	}
 	clientOpts := &httpkit.Options{
-		BaseURL:            strings.TrimRight(opts.BaseURL, "/"),
-		Timeout:            timeout,
+		BaseURL: strings.TrimRight(opts.BaseURL, "/"),
+		Timeout: timeout,
+		// Replaces the per-request InjectTraceContext calls removed in
+		// http-kit v2. Global() resolves otel.GetTextMapPropagator at each
+		// injection, which is what InjectTraceContext did, so outbound trace
+		// headers are unchanged.
+		Propagator:         otelprop.Global(),
 		TLSCACertFile:      opts.TLSCACertFile,
 		TLSClientCert:      opts.TLSClientCert,
 		TLSClientKey:       opts.TLSClientKey,
@@ -375,9 +381,6 @@ func (c *Client) CreateChallenge(ctx context.Context, req *CreateChallengeReques
 		}
 	}
 
-	// Inject trace context into headers
-	c.httpClient.InjectTraceContext(ctx, httpReq)
-
 	c.addAuthHeaders(httpReq, body)
 
 	resp, err := c.httpClient.Do(httpReq)
@@ -433,9 +436,6 @@ func (c *Client) VerifyChallenge(ctx context.Context, req *VerifyChallengeReques
 
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	// Inject trace context into headers
-	c.httpClient.InjectTraceContext(ctx, httpReq)
-
 	c.addAuthHeaders(httpReq, body)
 
 	resp, err := c.httpClient.Do(httpReq)
@@ -486,7 +486,6 @@ func (c *Client) VerifyChallengeV2(ctx context.Context, req *VerifyChallengeV2Re
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	c.httpClient.InjectTraceContext(ctx, httpReq)
 	c.addAuthHeaders(httpReq, body)
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
@@ -517,7 +516,6 @@ func (c *Client) RevokeChallenge(ctx context.Context, challengeID string) (*Revo
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	c.httpClient.InjectTraceContext(ctx, httpReq)
 	c.addAuthHeaders(httpReq, nil)
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
@@ -627,7 +625,6 @@ func (c *Client) TOTPStatus(ctx context.Context, subject string) (*TOTPStatusRes
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	c.httpClient.InjectTraceContext(ctx, httpReq)
 	c.addAuthHeaders(httpReq, nil)
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
@@ -660,7 +657,6 @@ func (c *Client) TOTPVerify(ctx context.Context, req *TOTPVerifyRequest) (*TOTPV
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	c.httpClient.InjectTraceContext(ctx, httpReq)
 	c.addAuthHeaders(httpReq, body)
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
@@ -691,7 +687,6 @@ func (c *Client) TOTPEnrollStart(ctx context.Context, req *TOTPEnrollStartReques
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	c.httpClient.InjectTraceContext(ctx, httpReq)
 	c.addAuthHeaders(httpReq, body)
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
@@ -724,7 +719,6 @@ func (c *Client) TOTPEnrollConfirm(ctx context.Context, req *TOTPEnrollConfirmRe
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	c.httpClient.InjectTraceContext(ctx, httpReq)
 	c.addAuthHeaders(httpReq, body)
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
@@ -759,7 +753,6 @@ func (c *Client) TOTPRevoke(ctx context.Context, subject string) (*TOTPRevokeRes
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	c.httpClient.InjectTraceContext(ctx, httpReq)
 	c.addAuthHeaders(httpReq, body)
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
