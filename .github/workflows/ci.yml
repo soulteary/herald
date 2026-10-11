@@ -72,15 +72,6 @@ jobs:
           TOTAL=$(go tool cover -func=coverage.out | awk '/^total:/ {gsub("%", "", $3); print $3}')
           echo "total coverage: ${TOTAL}% (required: 74.0%)"
           awk -v total="$TOTAL" 'BEGIN { if (total + 0 < 74.0) exit 1 }'
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage.out
-          flags: unittests
-          name: codecov-umbrella
-          fail_ci_if_error: false
-
   lint:
     name: Code Quality Check
     runs-on: ubuntu-latest
