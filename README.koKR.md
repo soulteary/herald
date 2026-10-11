@@ -1,9 +1,8 @@
 # Herald - OTP 및 인증 코드 서비스
 
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Go Version](https://img.shields.io/badge/go-1.27.2+-blue.svg)](https://golang.org)
+[![Go Test Coverage](./.github/coverage.svg)](./.github/go-test-report.md) [![Go Report Card](./.github/goreportcard.svg)](./.github/goreportcard-report.md) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go Version](https://img.shields.io/badge/go-1.27.2+-blue.svg)](https://golang.org)
 
-[![Go Report Card](.github/goreportcard.svg)](.github/goreportcard-report.md)
+
 
 > **📧 안전한 인증을 위한 게이트웨이**
 
