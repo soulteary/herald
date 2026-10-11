@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Keep the builder aligned with the shared Stargate container baseline.
-FROM golang:1.27.1-alpine3.24 AS builder
+FROM golang:1.27.2-alpine3.24 AS builder
 
 # Only the packages actually needed to build a CGO_ENABLED=0 static binary.
 # git is used by the Go toolchain for VCS stamping; ca-certificates lets module
