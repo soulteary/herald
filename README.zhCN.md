@@ -1,7 +1,7 @@
 # Herald - OTP 和验证码服务
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Go Version](https://img.shields.io/badge/go-1.26+-blue.svg)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/go-1.27.2+-blue.svg)](https://golang.org)
 [![codecov](https://codecov.io/gh/soulteary/herald/branch/main/graph/badge.svg)](https://codecov.io/gh/soulteary/herald)
 [![Go Report Card](.github/goreportcard.svg)](.github/goreportcard-report.md)
 
@@ -15,7 +15,7 @@
 
 Herald 是一个生产就绪的独立 OTP 和验证码服务，可通过电子邮件和 SMS 发送验证码。它具有内置的速率限制、安全控制和审计日志记录功能。Herald 设计为可独立工作，也可以根据需要与其他服务集成。
 
-HTTP 服务使用 Fiber v3.5.0 及与之匹配的 Fiber 相关 kit v2 模块版本。从源码构建需要 Go 1.26 或更高版本。
+HTTP 服务使用 Fiber v3.5.0 及与之匹配的 Fiber 相关 kit v2 模块版本。从源码构建需要 Go 1.27.2 或更高版本。
 
 ## 核心特性
 
