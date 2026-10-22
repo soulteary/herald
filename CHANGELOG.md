@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-10-22
+
+### Changed
+
+- Require Go 1.27.3 and align build images and CI toolchains.
+- Update compatible Go dependencies and published Kit versions; refresh module checksums.
+- Preserve the project toolchain after quality report generation.
+
+
 ## [1.3.0] - 2026-09-21
 
 ### Changed

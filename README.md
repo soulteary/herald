@@ -1,6 +1,6 @@
 # Herald - OTP and Verification Code Service
 
-[![Go Test Coverage](./.github/coverage.svg)](./.github/go-test-report.md) [![Go Report Card](./.github/goreportcard.svg)](./.github/goreportcard-report.md) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go Version](https://img.shields.io/badge/go-1.27.2+-blue.svg)](https://golang.org)
+[![Go Test Coverage](./.github/coverage.svg)](./.github/go-test-report.md) [![Go Report Card](./.github/goreportcard.svg)](./.github/goreportcard-report.md) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go Version](https://img.shields.io/badge/go-1.27.3+-blue.svg)](https://golang.org)
 
 
 
@@ -14,7 +14,7 @@
 
 Herald is a production-ready, standalone OTP and verification code service that sends verification codes via email and SMS. It features built-in rate limiting, security controls, and audit logging. Herald is designed to work independently and can be integrated with other services as needed.
 
-The HTTP server uses Fiber v3.5.0 and the matching v2 module lines of the Fiber-facing kit packages. Building from source requires Go 1.27.2 or later.
+The HTTP server uses Fiber v3.5.0 and the matching v2 module lines of the Fiber-facing kit packages. Building from source requires Go 1.27.3 or later.
 
 ## Core Features
 
