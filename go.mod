@@ -16,7 +16,7 @@ require (
 	github.com/soulteary/challenge-kit v1.10.2
 	github.com/soulteary/cli-kit v1.9.2
 	github.com/soulteary/health-kit/v4 v4.0.2
-	github.com/soulteary/herald-totp v1.2.4
+	github.com/soulteary/herald-totp v1.2.5
 	github.com/soulteary/http-kit/v2 v2.0.2
 	github.com/soulteary/i18n-kit/v4 v4.0.3
 	github.com/soulteary/logger-kit/v3 v3.0.3

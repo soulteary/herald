@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Require Go 1.27.3 and align build images and CI toolchains.
 - Update compatible Go dependencies and published Kit versions; refresh module checksums.
 - Preserve the project toolchain after quality report generation.
+- Align the TOTP API module with the released herald-totp v1.2.5 service.
 
 
 ## [1.3.0] - 2026-09-21
