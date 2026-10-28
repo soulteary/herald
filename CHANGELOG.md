@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Upgrade `health-kit/v4` from v4.0.2 to v4.0.4 and `middleware-kit/v3`
+  from v3.0.2 to v3.0.3; refresh the required Fiber/network
+  dependency graph and module checksums.
+
 ## [1.3.2] - 2026-10-22
 
 ### Changed
