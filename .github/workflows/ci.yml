@@ -168,7 +168,7 @@ jobs:
   docker-build:
     name: Docker Build + Scan
     runs-on: ubuntu-latest
-    needs: [test]
+    # Tests and container checks are independent gates; run them in parallel.
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - name: Set up Docker Buildx
@@ -222,6 +222,20 @@ jobs:
           # anonymous shared-IP rate limiting that can also surface as exit 1.
           token-setup-trivy: ${{ secrets.GITHUB_TOKEN }}
           cache: true
+      - name: Export scanned image for Compose
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker save herald:test | gzip -1 > "$RUNNER_TEMP/herald-ci-image.tar.gz"
+      - name: Upload scanned image
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: herald-ci-image
+          path: ${{ runner.temp }}/herald-ci-image.tar.gz
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: true
 
   compose-smoke:
     name: Compose Smoke + Config Startup Failure
@@ -234,8 +248,17 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - name: Validate compose config
         run: docker compose config >/dev/null
-      - name: Build Compose image
-        run: docker compose build herald
+      - name: Download scanned image
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: herald-ci-image
+          path: ${{ runner.temp }}/herald-ci-image
+      - name: Load scanned image for Compose
+        shell: bash
+        run: |
+          set -euo pipefail
+          gzip -dc "$RUNNER_TEMP/herald-ci-image/herald-ci-image.tar.gz" | docker load
+          docker tag herald:test herald:local
       - name: Config-startup-failure test (prod without auth must refuse)
         run: |
           CONTAINER_ID=$(docker run --detach \
@@ -271,7 +294,7 @@ jobs:
           export REDIS_PASSWORD=ci_redis_pw
           export HERALD_API_KEY=ci_api_key_012345678901234567890123
           export HERALD_HMAC_SECRET=ci_hmac_secret_value
-          docker compose up -d
+          docker compose up -d --no-build
           # Wait for the herald container to become healthy.
           for i in $(seq 1 30); do
             STATUS=$(docker inspect --format '{{ .State.Health.Status }}' "$(docker compose ps -q herald)" 2>/dev/null || echo starting)
