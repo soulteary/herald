@@ -85,7 +85,7 @@ jobs:
           echo "commit=$COMMIT" >> $GITHUB_OUTPUT
           echo "build_date=$BUILD_DATE" >> $GITHUB_OUTPUT
 
-      - name: Build multi-platform binaries
+      - name: Build Linux binaries
         run: |
           mkdir -p dist
           VERSION=${{ steps.version.outputs.version }}
@@ -93,13 +93,9 @@ jobs:
           BUILD_DATE=$(date +%FT%T%z)
           LDFLAGS="-s -w -X 'github.com/soulteary/version-kit/v4.Version=${VERSION}' -X 'github.com/soulteary/version-kit/v4.Commit=${COMMIT}' -X 'github.com/soulteary/version-kit/v4.BuildDate=${BUILD_DATE}'"
           
-          # Build for multiple platforms
+          # Other host environments should use the Linux container images.
           GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o dist/herald-linux-amd64 ./main.go
           GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o dist/herald-linux-arm64 ./main.go
-          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o dist/herald-darwin-amd64 ./main.go
-          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o dist/herald-darwin-arm64 ./main.go
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o dist/herald-windows-amd64.exe ./main.go
-          GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o dist/herald-windows-arm64.exe ./main.go
 
       - name: Generate checksums
         run: |
@@ -204,10 +200,7 @@ jobs:
             ### Binaries
             - Linux AMD64: `herald-linux-amd64`
             - Linux ARM64: `herald-linux-arm64`
-            - macOS AMD64: `herald-darwin-amd64`
-            - macOS ARM64: `herald-darwin-arm64`
-            - Windows AMD64: `herald-windows-amd64.exe`
-            - Windows ARM64: `herald-windows-arm64.exe`
+            For macOS, Windows, and other environments, use the Linux container image.
             
             ### Checksums
             See `checksums.txt` for SHA256 checksums.
