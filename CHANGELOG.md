@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Reject `X-Service` and `X-Key-Id` values containing the reserved `|kid:`
+  delimiter before authentication, nonce consumption, or business writes.
+  Otherwise different service/key pairs could share an idempotency namespace
+  and replay a response across HMAC credentials. Rejected values return
+  `401/invalid_auth_headers`; ordinary namespaces and existing Redis records
+  retain their format, contents, and TTL.
 - Use length-framed, versioned idempotency fingerprints for requests containing
   embedded NUL characters. Moving separator bytes between user and locale
   fields can no longer replay a response for a different request. Ordinary

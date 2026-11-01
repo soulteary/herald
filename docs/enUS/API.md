@@ -21,6 +21,15 @@ Request authentication and client-certificate policy are independent:
 
 Send `X-Signature-Version: v2`, `X-Signature`, `X-Timestamp`, `X-Nonce`, `X-Service`, and, for multi-key configurations without a configured default, `X-Key-Id`.
 
+`X-Service` and `X-Key-Id` must not contain the reserved text `|kid:`. Such
+values return `401/invalid_auth_headers` before authentication, nonce use, or
+business writes, in every request-auth mode (including legacy v1 fallback).
+The delimiter separates the service and key components of the idempotency
+namespace. Ordinary namespace encodings and existing Redis records remain
+unchanged. If an integration used the reserved text, update its service label
+or configured key ID; reconcile unresolved sends before changing their
+namespace or retrying them with a new idempotency key.
+
 The signed canonical value is newline-delimited:
 
 ```text

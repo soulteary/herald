@@ -109,6 +109,13 @@ func New(cfg Config) fiber.Handler {
 	}
 
 	return func(c fiber.Ctx) error {
+		// These components are joined with |kid: for idempotency namespacing.
+		// Reject the reserved delimiter before authentication or any nonce/store
+		// mutation. Keeping normal namespaces unchanged also preserves existing
+		// non-expiring sending records across an upgrade.
+		if strings.Contains(c.Get(HeaderService), "|kid:") || strings.Contains(c.Get(HeaderKeyID), "|kid:") {
+			return deny(c, "invalid_auth_headers")
+		}
 		switch cfg.Mode {
 		case ModeNone:
 			return c.Next()
