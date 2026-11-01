@@ -10,11 +10,11 @@ This document outlines the security policy for the Herald project. Please select
 
 - [English Version](docs/enUS/SECURITY.md) - Complete security documentation in English
 - [中文版本](docs/zhCN/SECURITY.md) - 完整的中文安全文档
-- [Version française](docs/frFR/SECURITY.md) - Documentation de sécurité complète en français
-- [Versione italiana](docs/itIT/SECURITY.md) - Documentazione di sicurezza completa in italiano
-- [日本語版](docs/jaJP/SECURITY.md) - 日本語の完全なセキュリティドキュメント
-- [Deutsche Version](docs/deDE/SECURITY.md) - Vollständige Sicherheitsdokumentation auf Deutsch
-- [한국어 버전](docs/koKR/SECURITY.md) - 한국어로 된 완전한 보안 문서
+- [Version française](docs/frFR/SECURITY.md) - Historical translation; use English or Chinese for current requirements
+- [Versione italiana](docs/itIT/SECURITY.md) - Historical translation; use English or Chinese for current requirements
+- [日本語版](docs/jaJP/SECURITY.md) - Historical translation; use English or Chinese for current requirements
+- [Deutsche Version](docs/deDE/SECURITY.md) - Historical translation; use English or Chinese for current requirements
+- [한국어 버전](docs/koKR/SECURITY.md) - Historical translation; use English or Chinese for current requirements
 
 ## Reporting a Vulnerability
 

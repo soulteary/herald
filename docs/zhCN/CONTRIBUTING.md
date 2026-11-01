@@ -198,8 +198,8 @@ git push origin feature/your-feature-name
 清晰简洁地描述实际发生了什么。
 
 **环境信息**
-- OS: [e.g. macOS 12.0]
-- Go 版本: [e.g. 1.26]
+- OS: [e.g. Linux container on macOS]
+- Go 版本: [e.g. 1.27.3]
 - Redis 版本: [e.g. 7.0]
 - Herald 版本: [e.g. v1.0.0]
 ```

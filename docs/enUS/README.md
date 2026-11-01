@@ -142,3 +142,10 @@ Documentation improvements are welcome:
 1. Find errors or areas that need improvement
 2. Submit an Issue describing the problem
 3. Or directly submit a Pull Request
+
+## v1.3.13 upgrade entry points
+
+Read [HMAC identity compatibility](API.md#hmac-identity-and-legacy-idempotency-records),
+[deployment and rollback requirements](DEPLOYMENT.md#hmac-identity-upgrade), and
+[production CORS lists](DEPLOYMENT.md#production-cors-origin-lists) before upgrading.
+The [troubleshooting guide](TROUBLESHOOTING.md) covers the new rejection reasons.

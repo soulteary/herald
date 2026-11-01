@@ -142,3 +142,9 @@ herald/
 1. 发现错误或需要改进的地方
 2. 提交 Issue 描述问题
 3. 或直接提交 Pull Request
+
+## v1.3.13 升级入口
+
+升级前阅读 [HMAC 身份兼容性](API.md#hmac-身份与旧幂等记录)、
+[部署与回滚要求](DEPLOYMENT.md#hmac-身份升级) 和 [生产 CORS 列表](DEPLOYMENT.md#生产-cors-来源列表)。
+新拒绝原因的处理见 [故障排查](TROUBLESHOOTING.md)。

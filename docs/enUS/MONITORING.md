@@ -70,7 +70,7 @@ Counter tracking the total number of OTP verifications.
 
 **Labels:**
 - `result`: Verification result (`success` or `failure`)
-- `reason`: Failure reason (e.g., `expired`, `invalid`, `locked`, `too_many_attempts`)
+- `reason`: Failure reason (e.g., `expired`, `invalid`, `locked`)
 
 **Example:**
 ```
@@ -104,15 +104,15 @@ herald_rate_limit_hits_total{scope="resend_cooldown"} 200
 Histogram tracking Redis operation latency.
 
 **Labels:**
-- `operation`: Redis operation type (`get`, `set`, `del`, `exists`)
+- `operation`: Instrumented wrapper (`ratelimit`, `ratelimit_user`, `ratelimit_ip`, `ratelimit_dest`, `cooldown`); not every Redis command is instrumented
 
 **Buckets:** [0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0]
 
 **Example:**
 ```
-herald_redis_operation_duration_seconds_bucket{operation="get",le="0.01"} 5000
-herald_redis_operation_duration_seconds_sum{operation="get"} 12.5
-herald_redis_operation_duration_seconds_count{operation="get"} 10000
+herald_redis_operation_duration_seconds_bucket{operation="ratelimit_user",le="0.01"} 5000
+herald_redis_operation_duration_seconds_sum{operation="ratelimit_user"} 12.5
+herald_redis_operation_duration_seconds_count{operation="ratelimit_user"} 10000
 ```
 
 ## Prometheus Configuration
@@ -326,3 +326,16 @@ message. Span status and exception events use the same safe reason. Do not
 enable raw provider-body logging to investigate failures. Review historical
 logs and exported spans for echoed sensitive data and rotate exposed credentials.
 See [security](SECURITY.md#provider-failure-diagnostics) for compatibility details.
+
+## Authentication and idempotency outcomes
+
+- `herald_idempotency_total{result}` emits `replay`, `conflict`, `in_flight`, `delivery_unknown`, `ownership_lost`, or `backend_error`. Both fingerprint conflicts and legacy namespace conflicts use `conflict`; distinguish them by the API reason, without adding identity labels.
+- `herald_nonce_replay_total` counts rejected replayed nonces.
+- `herald_provider_timeout_total{channel}` counts provider timeouts.
+- `herald_verification_contention_total{result}` records `contended` or `acquired` where emitted by the verification path.
+- `herald_challenge_state_total{state}` records emitted transitions such as `activated`, `superseded`, and `revoked`.
+- `herald_redis_operations_total{operation,result}` uses `success` or `failure`; the duration histogram's count includes both outcomes and is not an error counter.
+
+There is no separate hash-budget occupancy metric. Observe overload through
+`503/backend_unavailable`, retry headers, runtime memory and request outcomes.
+Do not add raw service/key IDs, destinations or client keys as metric labels.

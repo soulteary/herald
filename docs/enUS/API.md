@@ -460,11 +460,19 @@ HMAC/API-key failures use a JSON `reason` value:
 - `nonce_store_unavailable`: Redis nonce storage failed in fail-closed mode
 - `unauthorized`: Authentication failed
 
+### Idempotency and verification coordination errors
+- `idempotency_in_flight` (409): A pre-send claim is still in progress.
+- `delivery_unknown` (409): Sending started; do not resend automatically.
+- `idempotency_conflict` (409): The same key has different fingerprinted fields.
+- `idempotency_namespace_conflict` (409): A legacy empty-key-ID record needs operator reconciliation.
+- `context_required` (400) / `context_mismatch` (409): Required v2 context is missing or does not match.
+- `lock_contention` (409): Verification lock is contended; retry with a fresh nonce.
+- `backend_unavailable` / `audit_unavailable` (503): Backend, hash capacity, or durable audit acceptance is unavailable. A failure after a side effect does not undo that side effect.
+
 ### Challenge Errors
 - `expired`: Challenge has expired
 - `invalid`: Invalid verification code
 - `locked`: Challenge locked due to too many attempts
-- `too_many_attempts`: Too many failed attempts (may be included in `locked`)
 - `verification_failed`: General verification failure
 - `send_failed`: Failed to send verification code via provider (only during challenge creation)
 
@@ -474,6 +482,16 @@ HMAC/API-key failures use a JSON `reason` value:
 
 ### User Status Errors
 - `user_locked`: User is temporarily locked
+
+### Additional transport and storage reasons
+- `invalid_destination`: Destination validation failed.
+- `invalid_auth_headers`: A reserved namespace delimiter is present in an identity header.
+- `empty_body` / `unsupported_media_type`: Empty JSON body or unsupported request content type.
+- `payload_too_large` (413) / `request_error`: Request exceeds the body limit or another framework-level 4xx error occurs.
+- `not_found` (404) / `method_not_allowed` (405): No matching route or method.
+- `code_not_found` (404): The separate test listener has no cached test code.
+- `idempotency_ownership_lost` (409): The pre-send or activation ownership check failed; do not force a new send.
+- `redis_unreachable`: Readiness failed; `/readyz` returns 503.
 
 ### System Errors
 - `internal_error`: Internal server error

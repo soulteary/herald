@@ -69,7 +69,7 @@ herald_otp_send_duration_seconds_count{provider="smtp"} 1200
 
 **标签：**
 - `result`: 验证结果（`success` 或 `failure`）
-- `reason`: 失败原因（例如：`expired`、`invalid`、`locked`、`too_many_attempts`）
+- `reason`: 失败原因（例如：`expired`、`invalid`、`locked`）
 
 **示例：**
 ```
@@ -103,15 +103,15 @@ herald_rate_limit_hits_total{scope="resend_cooldown"} 200
 直方图，跟踪 Redis 操作延迟。
 
 **标签：**
-- `operation`: Redis 操作类型（`get`、`set`、`del`、`exists`）
+- `operation`: 已埋点的限流/冷却包装操作（`ratelimit`、`ratelimit_user`、`ratelimit_ip`、`ratelimit_dest`、`cooldown`），并非全部 Redis 命令
 
 **桶：** [0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0]
 
 **示例：**
 ```
-herald_redis_operation_duration_seconds_bucket{operation="get",le="0.01"} 5000
-herald_redis_operation_duration_seconds_sum{operation="get"} 12.5
-herald_redis_operation_duration_seconds_count{operation="get"} 10000
+herald_redis_operation_duration_seconds_bucket{operation="ratelimit_user",le="0.01"} 5000
+herald_redis_operation_duration_seconds_sum{operation="ratelimit_user"} 12.5
+herald_redis_operation_duration_seconds_count{operation="ratelimit_user"} 10000
 ```
 
 ## Prometheus 配置
@@ -321,3 +321,15 @@ groups:
 发送失败使用受控 `reason` 字段，不再记录上游错误消息；span 状态和 exception 事件也只保留安全原因码。
 排障时不要启用原始渠道响应体日志。若历史日志或导出的 span 含敏感数据，应核查访问与保留策略，
 并轮换已暴露凭据，字段变化见 [安全说明](SECURITY.md#发送渠道失败诊断)。
+
+## 认证与幂等结果
+
+- `herald_idempotency_total{result}` 使用 `replay`、`conflict`、`in_flight`、`delivery_unknown`、`ownership_lost` 或 `backend_error`。指纹冲突和旧命名空间冲突均计入 `conflict`，需按 API reason 区分，不能增加身份标签。
+- `herald_nonce_replay_total` 统计已拒绝的 nonce 重放。
+- `herald_provider_timeout_total{channel}` 统计渠道超时。
+- `herald_verification_contention_total{result}` 在验证路径埋点处记录 `contended` 或 `acquired`。
+- `herald_challenge_state_total{state}` 记录实际埋点的 `activated`、`superseded`、`revoked` 等状态。
+- `herald_redis_operations_total{operation,result}` 的结果为 `success` 或 `failure`；延迟直方图 count 包含两种结果，不是错误计数。
+
+没有独立哈希预算占用指标。结合 `503/backend_unavailable`、重试头、运行时内存和请求结果
+观察过载，不得将原始服务/密钥 ID、目标地址或客户端键加入指标标签。

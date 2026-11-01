@@ -199,8 +199,8 @@ Clearly and concisely describe what you expected to happen.
 Clearly and concisely describe what actually happened.
 
 **Environment Information**
-- OS: [e.g. macOS 12.0]
-- Go Version: [e.g. 1.26]
+- OS: [e.g. Linux container on macOS]
+- Go Version: [e.g. 1.27.3]
 - Redis Version: [e.g. 7.0]
 - Herald Version: [e.g. v1.0.0]
 ```

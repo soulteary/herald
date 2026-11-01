@@ -26,6 +26,10 @@ HTTP 服务使用 Fiber v3；依赖及 Go 工具链以 `go.mod` 为准（Go 1.27
 - ↩️ **作废 Challenge**：**POST /v1/otp/challenges/{id}/revoke** 可作废（解除/失效）不再需要的验证码 challenge
 - 🔐 **TOTP 代理（可选）**：启用后可将 TOTP（Authenticator）请求代理到 [herald-totp](https://github.com/soulteary/herald-totp)，单一 Herald 地址即可同时支持 OTP 与 TOTP
 
+v1.3.13 恢复创建流量前需遵循 [HMAC 身份升级](docs/zhCN/DEPLOYMENT.md#hmac-身份升级)。
+单密钥 HMAC 只接受省略 Key ID 或 `default`，身份不明的旧记录需人工核对；生产 CORS 列表
+不能含独立 `*` 项。本次变化见 [更新日志](CHANGELOG.md#1313---2026-11-02)。
+
 ## 快速开始
 
 ### 使用 Docker Compose

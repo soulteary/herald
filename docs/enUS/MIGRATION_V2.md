@@ -51,7 +51,7 @@ The HMAC-SHA256 of that canonical string (hex) is sent in `X-Signature`.
 | `X-Timestamp` | yes | unix seconds; must be within ±`HMAC_MAX_DRIFT` (default 60s) |
 | `X-Nonce` | yes | single-use; replays are rejected |
 | `X-Service` | yes | logical caller identity, bound into the signature |
-| `X-Key-Id` | conditionally | required unless `HERALD_HMAC_DEFAULT_KEY_ID` is set |
+| `X-Key-Id` | conditionally | required when no effective default is available (multi-key map without a default) |
 
 ### 1.3 Key policy
 
@@ -86,7 +86,7 @@ nonce for tests:
 c, _ := herald.NewClient(herald.DefaultOptions().
     WithBaseURL(base).
     WithHMACSecret(secret).
-    WithKeyID("primary"))
+    WithKeyID("default"))
 // v3 is the default SignatureVersion; older versions are for compatible routes only.
 // Use WithSignatureVersion(herald.SignatureV1)
 // only when talking to a legacy server with HMAC_V1_ENABLED=true.
@@ -102,7 +102,7 @@ c, _ := herald.NewClient(herald.DefaultOptions().
   API-key/development modes retain literal caller headers, or client IP when
   both headers are absent. An API key is not itself a namespace. `|kid:` remains
   forbidden in service and key IDs, including resolved defaults.
-- The first request **atomically claims** the key (`SET NX`). Concurrent
+- The first request **atomically claims** the key; HMAC creation also atomically checks the legacy empty-key-ID namespace. Concurrent
   duplicates with the **same fingerprinted fields** return `409/idempotency_in_flight` before
   sending, or replay a completed response within its TTL.
 - Same key + **different fingerprinted fields** → `409 Conflict`.
@@ -229,3 +229,17 @@ guide for capacity, permissions, and duplicate-event handling.
 For upgrades from versions before v1.3.10, follow the [activation index upgrade](API.md#activation-index-upgrade): pause creation, drain requests and replace all instances before resuming. Preserve unresolved sending records and audit volumes. Before rollback, wait the maximum challenge lifetime with creation stopped.
 
 Delivery diagnostics now contain bounded `reason` codes rather than raw provider errors. See [provider failure diagnostics](SECURITY.md#provider-failure-diagnostics) for field compatibility and historical log/trace handling.
+
+## v1.3.13 identity and origin upgrade
+
+With only `HMAC_SECRET`, omit `X-Key-Id` or send `default`; custom IDs require
+explicit map entries. Do not rename a caller or clear uncertain-send records.
+Pause creation, drain requests, reconcile historical identities, and replace all
+old instances. Preserve Redis, audit volumes, nonce prefixes and the effective
+idempotency derivation secret. An old empty-key-ID record blocks creation with
+`409/idempotency_namespace_conflict` rather than being migrated or replayed.
+
+Use the [deployment upgrade and rollback rules](DEPLOYMENT.md#hmac-identity-upgrade).
+Also remove standalone `*` entries from production CORS lists before upgrade or
+rollback. Neither change requires a new signature format; HMAC creation still
+requires v3. The legacy v1 fallback remains deprecated and has no nonce protection.

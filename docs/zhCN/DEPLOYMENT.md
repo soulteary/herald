@@ -59,6 +59,7 @@ export ENVIRONMENT=production REQUEST_AUTH_MODE=api_key PROVIDER_FAILURE_POLICY=
 
 | 变量 | 描述 | 默认值 | 必需 |
 |------|------|--------|------|
+| `ENVIRONMENT` | 运行策略：`development`/`dev`、`test`/`testing`、`production`/`prod`；未知值拒绝启动 | `development` | 生产设置 `production` |
 | `PORT` | 服务器监听端口（可带或不带前导冒号，如 `8082` 或 `:8082`） | `:8082` | 否 |
 | `REDIS_ADDR` | Redis 地址 | `localhost:6379` | 否 |
 | `REDIS_PASSWORD` | Redis 密码 | （空） | 生产必需，除非显式风险确认 |
@@ -195,7 +196,7 @@ HTTPS。请配置最终服务地址：包括同源跳转在内的所有重定向
 | `AUDIT_ENABLED` | 是否启用审计 | `true` | 否 |
 | `AUDIT_MASK_DESTINATION` | 是否对 destination 脱敏 | 生产未显式配置时为 `true`，否则为 `false` | 否 |
 | `AUDIT_TTL` | 审计记录在 Redis 中的 TTL（如 `168h` 即 7 天） | `168h` | 否 |
-| `AUDIT_STORAGE_TYPE` | 持久化类型：`database`、`file`、`redis` 或逗号分隔多类型 | （空） | 否 |
+| `AUDIT_STORAGE_TYPE` | 单一持久化后端：`database`（别名 `db`）、`file` 或 `redis`；空值/`none` 使用传入的 Redis 客户端 | （空） | 否 |
 | `AUDIT_DATABASE_URL` | 数据库连接串（当 `AUDIT_STORAGE_TYPE` 含 database） | （空） | 否 |
 | `AUDIT_TABLE_NAME` | 审计表名 | `audit_logs` | 否 |
 | `AUDIT_FILE_PATH` | 审计文件路径（当含 file） | （空） | 否 |
@@ -312,18 +313,10 @@ fsync 和原子 rename。
 
 **容量规划：**
 
-基础估算公式：
-```
-峰值挑战数/秒 × TTL（秒）× 每条平均大小 + 速率限制键 + 审计键
-```
-
-**示例：**
-- 峰值：100 挑战/秒
-- 挑战 TTL：300 秒（5 分钟）
-- 平均挑战大小：~500 字节
-- 估算：100 × 300 × 500 字节 ≈ 15 MB（挑战数据）
-- 加上速率限制键（~1-2 MB）和审计键（~1-2 MB）
-- **总估算：约 20 MB 最小值**
+使用代表性流量测量载荷和 Redis 开销，计入 challenge、激活索引、会过期的已完成幂等响应、
+不自动过期的不确定发送、限流/冷却、nonce 和审计保留。峰值速率乘以 challenge TTL 不能
+界定总容量。持久化审计缓冲磁盘及进程哈希预算需另行规划，并结合 `MEMORY USAGE`、键数量
+和保留记录增长量调整配置。
 
 `REDIS_ADDR` 指定单一 Redis 端点；Herald 未提供原生 Cluster 或 Sentinel 发现配置。
 高可用部署使用外部管理的故障切换端点并保留数据，不应假定多键激活脚本兼容 Redis Cluster。
@@ -361,7 +354,7 @@ Herald 在 `/metrics` 端点暴露 Prometheus 指标。以下指标可用：
 - `herald_otp_verifications_total{result,reason}` - OTP 验证总数
 - `herald_otp_send_duration_seconds{provider}` - OTP 发送操作持续时间（直方图）
 - `herald_rate_limit_hits_total{scope}` - 速率限制命中总数（scope：user、ip、destination、resend_cooldown）
-- `herald_redis_latency_seconds{operation}` - Redis 操作延迟（operation：get、set、del、exists）
+- `herald_redis_operation_duration_seconds{operation}` - Redis 包装操作延迟（限流与冷却；见 MONITORING.md）
 
 **Prometheus 抓取配置示例：**
 ```yaml
@@ -414,7 +407,7 @@ HMAC 部署先暂停创建流量、排空在途创建请求，再替换全部旧
 
 旧空 Key ID 记录保持原样，相同服务/客户端键返回 `409/idempotency_namespace_conflict`，
 需由运维核对，不能改键自动重试。不自动过期的发送记录继续保留，不能根据当前默认密钥猜测
-原凭据，也不能在密钥轮换后盲目重放或迁移旧响应。没有旧记录冲突时，显式 Key ID 记录继续正常使用。
+原凭据，也不能在密钥轮换后盲目重放或迁移旧响应。没有旧记录冲突时，仍获授权的显式 Key ID 记录继续正常使用。
 
 旧版本无法执行此保护。回滚前保持创建停用，直到受影响记录和调用身份已核对完成，且不能在
 旧代码上恢复隐式 Key ID 调用方，细节见 [API](API.md#hmac-身份与旧幂等记录)。

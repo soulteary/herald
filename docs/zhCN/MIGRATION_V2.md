@@ -46,7 +46,7 @@ HERALD-HMAC-V2\n
 | `X-Timestamp` | 是 | unix 秒；须在 ±`HMAC_MAX_DRIFT`（默认 60s）内 |
 | `X-Nonce` | 是 | 一次性；重放将被拒绝 |
 | `X-Service` | 是 | 调用方标识，参与签名绑定 |
-| `X-Key-Id` | 视情况 | 未设置 `HERALD_HMAC_DEFAULT_KEY_ID` 时必需 |
+| `X-Key-Id` | 视情况 | 没有可用默认项时必需（多键 map 且未配置默认项） |
 
 ### 1.3 密钥策略
 
@@ -75,7 +75,7 @@ Go SDK 默认使用 v3 签名。设置 key id（测试可注入固定时钟/nonc
 c, _ := herald.NewClient(herald.DefaultOptions().
     WithBaseURL(base).
     WithHMACSecret(secret).
-    WithKeyID("primary"))
+    WithKeyID("default"))
 // v2 为默认 SignatureVersion；仅当对接开启 HMAC_V1_ENABLED=true 的旧服务端时
 // 才使用 WithSignatureVersion(herald.SignatureV1)。
 ```
@@ -88,7 +88,7 @@ c, _ := herald.NewClient(herald.DefaultOptions().
 - HMAC principal 使用已签名的服务标识和实际验签密钥 ID。省略 Key ID 与显式默认 ID
   使用同一命名空间。API Key/开发模式保留原始调用头，两者均缺失时使用客户端 IP；
   API key 本身不构成命名空间。服务及密钥 ID（含解析后的默认 ID）均不得含 `|kid:`。
-- 首个请求**原子占位**（`SET NX`）。发送前相同指纹字段的并发请求返回
+- 首个请求**原子占位**；HMAC 创建还原子检查旧空 Key ID 命名空间。发送前相同指纹字段的并发请求返回
   `409/idempotency_in_flight`，已完成请求在 TTL 内重放响应。
 - 相同键 + **不同指纹字段** → `409 Conflict`。
 - 成功后精确响应会被存储，并在重试时**原样重放**。
@@ -199,3 +199,14 @@ v1 验证接口保留原有的无上下文绑定语义。
 从 v1.3.10 之前的版本升级时，按 [激活索引升级](API.md#激活索引升级) 暂停创建流量、排空进行中的请求并替换全部实例，之后再恢复。保留不确定发送记录和审计持久卷；回滚前应暂停创建并等待最长验证码有效期。
 
 渠道诊断现在使用受控 `reason`，不再记录原始错误文本。诊断字段兼容性及历史日志、span 处理要求见 [发送渠道失败诊断](SECURITY.md#发送渠道失败诊断)。
+
+## v1.3.13 身份与来源升级
+
+仅使用 `HMAC_SECRET` 时省略 `X-Key-Id` 或填写 `default`；自定义 ID 需显式 map 项。
+不能直接重命名调用方或删除不确定发送记录。暂停创建、排空请求、核对历史身份，再替换全部
+旧实例；保留 Redis、审计卷、nonce 前缀及有效幂等派生密钥。旧空 Key ID 记录以
+`409/idempotency_namespace_conflict` 阻止创建，不自动迁移或重放。
+
+遵循 [部署升级与回滚要求](DEPLOYMENT.md#hmac-身份升级)，并在升级或回滚前移除生产 CORS
+列表中的独立 `*` 项。两项变化均无需新签名格式，HMAC 创建仍要求 v3。旧 v1 回退已弃用，
+不具备 nonce 防重放保护。

@@ -36,6 +36,12 @@ Keep Redis and audit volumes persistent. See [provider diagnostics](docs/enUS/SE
 for log field changes and historical log/trace handling. Other-language translations
 are historical; current operational guides are maintained in English and Chinese.
 
+For v1.3.13, follow the [HMAC identity upgrade](docs/enUS/DEPLOYMENT.md#hmac-identity-upgrade)
+before resuming creation traffic. Single-secret HMAC accepts only an omitted
+key ID or `default`; legacy ambiguous records need reconciliation. Production
+CORS lists must not contain standalone `*` entries. See the
+[changelog](CHANGELOG.md#1313---2026-11-02) for this release.
+
 ## Quick Start
 
 ### Using Docker Compose

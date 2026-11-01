@@ -431,11 +431,19 @@ HMAC/API Key 失败会返回 JSON `reason`：
 - `nonce_store_unavailable`：故障关闭模式下 Redis nonce 存储失败
 - `unauthorized`：认证失败
 
+### 幂等与验证协调错误
+- `idempotency_in_flight`（409）：发送前占位仍在处理中。
+- `delivery_unknown`（409）：已经进入发送边界，不能自动重发。
+- `idempotency_conflict`（409）：相同键对应不同指纹字段。
+- `idempotency_namespace_conflict`（409）：旧空 Key ID 记录需要人工核对。
+- `context_required`（400）/ `context_mismatch`（409）：缺少 v2 必需上下文或上下文不匹配。
+- `lock_contention`（409）：验证锁竞争，重试需新 nonce。
+- `backend_unavailable` / `audit_unavailable`（503）：后端、哈希容量或持久化审计接收不可用；副作用发生后的失败不会撤销该副作用。
+
 ### 挑战错误
 - `expired`：挑战已过期
 - `invalid`：无效的验证码
 - `locked`：由于尝试次数过多，挑战被锁定
-- `too_many_attempts`：失败尝试次数过多（可能包含在 `locked` 中）
 - `verification_failed`：一般验证失败
 - `send_failed`：通过提供者发送验证码失败（仅在挑战创建时）
 
@@ -445,6 +453,16 @@ HMAC/API Key 失败会返回 JSON `reason`：
 
 ### 用户状态错误
 - `user_locked`：用户暂时被锁定
+
+### 其他传输与存储原因
+- `invalid_destination`：目标地址校验失败。
+- `invalid_auth_headers`：身份头包含保留的命名空间分隔符。
+- `empty_body` / `unsupported_media_type`：JSON 请求体为空或 Content-Type 不受支持。
+- `payload_too_large`（413）/ `request_error`：请求超过正文上限或发生其他框架级 4xx 错误。
+- `not_found`（404）/ `method_not_allowed`（405）：没有匹配路由或方法。
+- `code_not_found`（404）：独立测试监听器没有缓存的测试验证码。
+- `idempotency_ownership_lost`（409）：发送前或激活前的所有权检查失败，不能强行发起新发送。
+- `redis_unreachable`：Redis 就绪检查失败，`/readyz` 返回 503。
 
 ### 系统错误
 - `internal_error`：内部服务器错误
