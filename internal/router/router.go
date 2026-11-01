@@ -355,7 +355,8 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 		defaultKeyID = "default"
 	}
 
-	nonceStore := auth.NewNonceStore(redisClient, config.NonceStorePrefix, []byte(config.IdempotencySecret), config.HMACMaxDrift+30*time.Second)
+	// Auth middleware enforces nonce retention from its effective MaxDrift.
+	nonceStore := auth.NewNonceStore(redisClient, config.NonceStorePrefix, []byte(config.IdempotencySecret), 0)
 	authHandler := auth.New(auth.Config{
 		Mode:         authMode,
 		KeyProvider:  config.GetHMACSecret,

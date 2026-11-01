@@ -9,7 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/gofiber/fiber/v3"
+	"github.com/redis/go-redis/v9"
 )
 
 const middlewareTestBody = `{"ok":true}`
@@ -136,6 +138,60 @@ func TestMiddleware_HMACV2DefaultKeyID(t *testing.T) {
 	}
 	if status, reason := runMiddlewareRequest(t, cfg, headers); status != http.StatusNoContent {
 		t.Fatalf("status=%d reason=%q", status, reason)
+	}
+}
+
+// Advance Redis expiry and the verifier clock together, without sleeping. A
+// request first accepted at the future drift boundary remains valid for 2*drift.
+func TestMiddleware_HMACV2ReplayThroughoutTimestampWindow(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		configured time.Duration
+		drift      time.Duration
+	}{
+		{"default", 0, time.Minute},
+		{"60s", time.Minute, time.Minute},
+		{"120s", 2 * time.Minute, 2 * time.Minute},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			drift := tc.drift
+			mr := miniredis.RunT(t)
+			client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+			t.Cleanup(func() { _ = client.Close() })
+			now := time.Unix(1_700_000_000, 0)
+			cfg := Config{
+				Mode: ModeHMACV2, MaxDrift: tc.configured, Clock: func() time.Time { return now },
+				KeyProvider: func(string) string { return "secret" },
+				// This is the retention previously configured by the router.
+				NonceStore: NewNonceStore(client, "test:nonce:", []byte("secret"), drift+30*time.Second),
+				FailClosed: true,
+			}
+			headers := signedHeaders(now.Add(drift), "future-nonce", "key-1", "secret")
+			if status, reason := runMiddlewareRequest(t, cfg, headers); status != http.StatusNoContent {
+				t.Fatalf("initial request: status=%d reason=%q", status, reason)
+			}
+			elapsed := time.Duration(0)
+			for _, at := range []time.Duration{drift + 31*time.Second, 2 * drift} {
+				advance := at - elapsed
+				mr.FastForward(advance)
+				now = now.Add(advance)
+				elapsed = at
+				if status, reason := runMiddlewareRequest(t, cfg, headers); status != http.StatusUnauthorized || reason != "replayed_nonce" {
+					t.Fatalf("replay after %s: status=%d reason=%q, want 401/replayed_nonce", at, status, reason)
+				}
+			}
+			// Beyond the inclusive timestamp boundary, timestamp validation rejects
+			// the request even after the nonce record has expired.
+			mr.FastForward(time.Minute)
+			now = now.Add(time.Minute)
+			if status, reason := runMiddlewareRequest(t, cfg, headers); status != http.StatusUnauthorized || reason != "timestamp_out_of_range" {
+				t.Fatalf("expired signature: status=%d reason=%q", status, reason)
+			}
+			fresh := signedHeaders(now, "fresh-nonce", "key-1", "secret")
+			if status, reason := runMiddlewareRequest(t, cfg, fresh); status != http.StatusNoContent {
+				t.Fatalf("fresh request: status=%d reason=%q", status, reason)
+			}
+		})
 	}
 }
 

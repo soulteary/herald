@@ -164,7 +164,7 @@ export HMAC_MAX_DRIFT=60s
 export HMAC_V1_ENABLED=false
 ```
 
-Herald 先校验签名，再在 Redis 中原子消费 Nonce；重复使用的 Nonce 会被拒绝。默认时间偏差窗口为 60 秒。旧版 v1 默认关闭，只应在迁移期通过 `HMAC_V1_ENABLED=true` 临时启用。
+Herald 先校验签名，再在 Redis 中原子消费 Nonce；重复使用的 Nonce 会被拒绝。默认允许前后各 60 秒的时间偏差。Nonce 至少保留允许偏差的两倍再加 30 秒（默认 150 秒），覆盖包括未来时间戳请求在内的完整有效窗口。旧版 v1 默认关闭，只应在迁移期通过 `HMAC_V1_ENABLED=true` 临时启用。
 
 ### mTLS 认证
 
