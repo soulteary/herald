@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Upgrade `challenge-kit` from v1.10.2 to v1.10.3 and `provider-kit` from
+  v1.7.2 to v1.7.3. Verification commits now compare the stored challenge
+  snapshot and preserve its remaining TTL. HTTP providers retain their initial
+  configuration and require a complete, size-bounded 2xx response for success.
+  Public APIs and stored hash formats are unchanged; no data migration is needed.
 - Upgrade `health-kit/v4` from v4.0.2 to v4.0.4 and `middleware-kit/v3`
   from v3.0.2 to v3.0.3; refresh the required Fiber/network
   dependency graph and module checksums.
