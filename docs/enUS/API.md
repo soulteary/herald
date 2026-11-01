@@ -518,3 +518,24 @@ or cooldown capacity, and rejected verifications consume no attempt or code.
 Completed idempotency responses can still replay. Lock contention is reported
 immediately as the existing `409/lock_contention` with `Retry-After: 1`.
 See [deployment](DEPLOYMENT.md#otp-hash-work-admission) for sizing and retry rules.
+
+## HMAC identity and legacy idempotency records
+
+Idempotency uses the signed service and the actual key ID selected for HMAC
+verification. Omitting `X-Key-Id` and explicitly sending that default ID now use
+the same record. This does not change the signature: an omitted wire header still
+has an empty canonical key-ID line. No HMAC version or SDK API change is required.
+
+Existing explicit-key records retain their keys, contents, ownership and TTLs.
+Old empty-key-ID records do not identify the credential that originally used a
+possibly rotated default. When such a record exists for the same service and
+client key, creation returns `409/idempotency_namespace_conflict` before hashing,
+rate/cooldown writes or delivery. It is not copied, replayed or deleted, even when
+its fingerprint matches. This guard applies to every verified key ID so default
+rotation cannot expose an old response under another credential. API-key and
+unauthenticated development namespaces are unchanged.
+
+Preserve unresolved sending records and the idempotency derivation secret.
+Reconcile legacy conflicts using delivery/audit evidence; do not switch client
+keys or clear non-expiring records to force a resend. Completed legacy records
+keep their ordinary expiry. See [upgrade requirements](DEPLOYMENT.md#hmac-identity-upgrade).
