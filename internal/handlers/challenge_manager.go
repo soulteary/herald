@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -39,11 +40,27 @@ local previous = redis.call('GET', KEYS[1])
 if redis.call('EXISTS', ARGV[2] .. ARGV[1]) == 0 then
     return redis.error_reply('pending challenge is missing')
 end
+local legacy = redis.call('GET', KEYS[2])
+local ownedLegacy = false
+if legacy then
+    local record = redis.call('GET', ARGV[2] .. legacy)
+    if record then
+        local data = cjson.decode(record)
+        ownedLegacy = data.user_id == ARGV[4] and data.purpose == ARGV[5]
+            and data.channel == ARGV[6] and data.destination == ARGV[7]
+    end
+end
+if ownedLegacy and legacy ~= ARGV[1] then
+    redis.call('DEL', ARGV[2] .. legacy)
+end
 if previous and previous ~= ARGV[1] then
     redis.call('DEL', ARGV[2] .. previous)
 end
 redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[3])
-return previous or ''
+if ownedLegacy then
+    redis.call('DEL', KEYS[2])
+end
+return previous or (ownedLegacy and legacy) or ''
 `
 
 func (m *atomicChallengeManager) SwapActive(ctx context.Context, ch *challengekit.Challenge) (string, error) {
@@ -54,17 +71,24 @@ func (m *atomicChallengeManager) SwapActive(ctx context.Context, ch *challengeki
 	if m.client == nil || ttlMs <= 0 {
 		return "", fmt.Errorf("%w: invalid activation backend or expiry", challengekit.ErrBackendUnavailable)
 	}
-	previous, err := m.client.Eval(ctx, activateAndRevokeScript, []string{m.activeIndexKey(ch)}, ch.ID, m.config.ChallengeKeyPrefix, ttlMs).Text()
+	previous, err := m.client.Eval(ctx, activateAndRevokeScript, []string{m.activeIndexKey(ch), m.legacyActiveIndexKey(ch)}, ch.ID, m.config.ChallengeKeyPrefix, ttlMs, ch.UserID, ch.Purpose, string(ch.Channel), ch.Destination).Text()
 	if err != nil {
 		return "", fmt.Errorf("%w: activate and revoke: %v", challengekit.ErrBackendUnavailable, err)
 	}
 	return previous, nil
 }
 
-// Preserve challenge-kit v1.10.3's index encoding so the first post-upgrade
-// resend also revokes the code referenced by an existing deployment. Tests
-// seed this index with the dependency's unwrapped manager.
+// Use an unambiguous encoding without changing case or trimming opaque identities.
 func (m *atomicChallengeManager) activeIndexKey(ch *challengekit.Challenge) string {
+	identity, _ := json.Marshal([]string{ch.UserID, ch.Purpose, string(ch.Channel), ch.Destination})
+	sum := sha256.Sum256(identity)
+	return m.config.ActiveIndexPrefix + "v2:" + hex.EncodeToString(sum[:])
+}
+
+// Preserve challenge-kit v1.10.3's index encoding so the first post-upgrade
+// resend can revoke the legacy code after checking its exact identity. Tests
+// seed this index with the dependency's unwrapped manager.
+func (m *atomicChallengeManager) legacyActiveIndexKey(ch *challengekit.Challenge) string {
 	identity := strings.Join([]string{
 		strings.ToLower(strings.TrimSpace(ch.UserID)),
 		strings.ToLower(strings.TrimSpace(ch.Purpose)),
