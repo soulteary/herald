@@ -142,6 +142,16 @@ Herald 从右向左解析转发 IP 链，仅跳过明确配置为可信的代理
 
 启用后，Herald 将 TOTP（Authenticator）请求代理到 [herald-totp](https://github.com/soulteary/herald-totp)。TOTP 路由位于 `/v1/totp/*`（status、verify、enroll/start、enroll/confirm、revoke）。
 
+TOTP 调用使用 10 秒超时，校验 TLS 证书并要求 TLS 1.2 或更高版本，生产环境必须使用
+HTTPS。请配置最终服务地址：包括同源跳转在内的所有重定向均被拒绝。Base URL 可以
+包含路径前缀，但不能包含用户凭据、查询参数或 fragment。
+
+`PROVIDER_MAX_RESPONSE_BYTES` 同时限制 TOTP 响应体，默认 1 MiB。正常响应必须是完整
+的 JSON 对象且 HTTP 状态为 200。重定向、其他 HTTP 状态、超限、格式错误或传输中断
+均返回 `502/proxy_failed`，上游错误响应体不能被转为验证成功。正常的 HTTP 200 验证
+失败仍返回 `200/ok:false`；enrollment confirm 收到完整的上游 HTTP 400 时，仍返回
+`400/invalid`。API Key 和 HMAC 的传输格式保持不变。
+
 | 变量 | 描述 | 默认值 | 必需 |
 |------|------|--------|------|
 | `HERALD_TOTP_ENABLED` | 是否启用 TOTP 代理 | `false` | 否 |

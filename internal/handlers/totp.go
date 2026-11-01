@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"context"
-	"strings"
+	"errors"
 
 	"github.com/gofiber/fiber/v3"
 
@@ -84,10 +84,6 @@ func (h *Handlers) TOTPVerify(c fiber.Ctx) error {
 	resp, err := h.totpClient.Verify(ctx, &req)
 	if err != nil {
 		h.log.Warn().Str("subject", h.maskSubject(req.Subject)).Msg("TOTP verify proxy failed")
-		// Return 200 with ok:false when verify fails (same as herald-totp)
-		if resp != nil {
-			return c.JSON(resp)
-		}
 		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "proxy_failed",
@@ -133,11 +129,11 @@ func (h *Handlers) TOTPEnrollStart(c fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
-// classifyEnrollConfirmError preserves herald-totp's explicit 400 contract.
-// herald-totp v1.0.0 exposes upstream status only in this stable error prefix;
-// all other failures (transport, malformed response, or 5xx) are proxy failures.
+// Only a complete upstream HTTP 400 preserves the enrollment error contract.
+// Transport, malformed response, and other HTTP failures are proxy failures.
 func classifyEnrollConfirmError(err error) (int, string) {
-	if err != nil && strings.HasPrefix(err.Error(), "enroll/confirm returned 400:") {
+	var httpErr *heraldtotp.HTTPError
+	if errors.As(err, &httpErr) && httpErr.StatusCode == fiber.StatusBadRequest {
 		return fiber.StatusBadRequest, "invalid"
 	}
 	return fiber.StatusBadGateway, "proxy_failed"

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Harden all TOTP proxy calls with a redirect-denying HTTP client, verified
+  TLS, bounded response reads, and strict HTTP 200 response handling. Failed
+  or incomplete upstream responses cannot become successful verification
+  results, and redirects cannot forward TOTP codes or service credentials.
+- Apply `PROVIDER_MAX_RESPONSE_BYTES` to TOTP responses as well. Redirects,
+  non-200 responses, oversized bodies, and malformed or interrupted responses
+  now return `502/proxy_failed`. Valid `200/ok:false` verification results and
+  complete enrollment-confirm HTTP 400 responses retain their existing contract.
+
 ## [1.3.3] - 2026-11-01
 
 ### Fixed

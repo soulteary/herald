@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/soulteary/herald-totp/pkg/heraldtotp"
 )
 
 func TestClassifyEnrollConfirmError(t *testing.T) {
@@ -14,8 +15,9 @@ func TestClassifyEnrollConfirmError(t *testing.T) {
 		status int
 		reason string
 	}{
-		{name: "invalid enrollment", err: errors.New("enroll/confirm returned 400: invalid"), status: fiber.StatusBadRequest, reason: "invalid"},
-		{name: "upstream failure", err: errors.New("enroll/confirm returned 500: failed"), status: fiber.StatusBadGateway, reason: "proxy_failed"},
+		{name: "invalid enrollment", err: &heraldtotp.HTTPError{StatusCode: 400}, status: fiber.StatusBadRequest, reason: "invalid"},
+		{name: "upstream failure", err: &heraldtotp.HTTPError{StatusCode: 500}, status: fiber.StatusBadGateway, reason: "proxy_failed"},
+		{name: "untrusted error text", err: errors.New("enroll/confirm returned 400: invalid"), status: fiber.StatusBadGateway, reason: "proxy_failed"},
 		{name: "transport failure", err: errors.New("connection refused"), status: fiber.StatusBadGateway, reason: "proxy_failed"},
 	}
 
