@@ -7,8 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-11-01
+
+### Fixed
+
+- Retain HMAC nonces for the full accepted timestamp window, including
+  future-dated requests, so an accepted request cannot be replayed early.
+- Require complete user, purpose, and channel binding on v2 verification.
+- Persist a sending state before provider calls. Retries cannot automatically
+  resend after an uncertain delivery or a failed completion write to Redis.
+- Persist audit records locally before acceptance, retry backend delivery, and
+  replay pending records after restart instead of dropping them on queue or
+  backend failures.
+
+### Compatibility
+
+- v2 verification requires `expected_user_id`, `expected_purpose`, and
+  `expected_channel`; v1 verification retains its existing request format.
+- Uncertain sends return `409/delivery_unknown` for the same idempotency key
+  until reconciled. Sending records do not expire automatically.
+- Audit-enabled deployments require a writable persistent `AUDIT_SPOOL_DIR`,
+  one directory per instance. Preserve pending records across upgrades. Audit
+  delivery is at least once; consumers can deduplicate by `event_id`.
+- Unavailable audit storage prevents startup; runtime local acceptance failures
+  return `503/audit_unavailable` on affected operations.
+
 ### Changed
 
+- Build, validate, and publish native binaries for Linux amd64 and arm64.
+  Other environments should use the Linux container image.
 - Upgrade `challenge-kit` from v1.10.2 to v1.10.3 and `provider-kit` from
   v1.7.2 to v1.7.3. Verification commits now compare the stored challenge
   snapshot and preserve its remaining TTL. HTTP providers retain their initial
