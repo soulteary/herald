@@ -84,3 +84,24 @@ func TestRouterExplicitCORSAndTracing(t *testing.T) {
 		}
 	}
 }
+
+func TestRouterLegacyConstructorAndInitializationFailure(t *testing.T) {
+	rc, _ := testutil.NewTestRedisClient()
+	defer func() { _ = rc.Close() }()
+	oldURL, oldRedis, oldPassword, oldV1 := config.HeraldSMTPAPIURL, config.RedisAddr, config.RedisPassword, config.HMACV1Enabled
+	defer func() {
+		config.HeraldSMTPAPIURL, config.RedisAddr, config.RedisPassword, config.HMACV1Enabled = oldURL, oldRedis, oldPassword, oldV1
+	}()
+	config.RedisAddr, config.RedisPassword, config.HMACV1Enabled = rc.Options().Addr, "", true
+	app := NewRouter(testLogger())
+	if app == nil {
+		t.Fatal("legacy constructor returned nil")
+	}
+	config.HeraldSMTPAPIURL = "://bad"
+	defer func() {
+		if recover() == nil {
+			t.Error("legacy wrapper did not panic on initialization failure")
+		}
+	}()
+	NewRouterWithClientAndHandlers(rc, testLogger())
+}

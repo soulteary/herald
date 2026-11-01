@@ -166,7 +166,7 @@ func (m *Manager) loadTemplates() {
 		channel := parts[1]
 		purpose := strings.TrimSuffix(parts[2], filepath.Ext(parts[2]))
 
-		key := fmt.Sprintf("%s:%s:%s", locale, channel, purpose)
+		key := locale + ":" + channel + ":" + purpose
 		// Strict mode: undefined fields error instead of silently emitting
 		// "<no value>", surfacing template mistakes at render time.
 		tmpl, err := template.New(filepath.Base(path)).Option("missingkey=error").ParseFiles(path)
@@ -182,7 +182,7 @@ func (m *Manager) loadTemplates() {
 func (m *Manager) Render(locale, channel, purpose string, data TemplateData) (string, error) {
 	locale = normalizeLocale(locale)
 	// Try to find template: locale:channel:purpose
-	key := fmt.Sprintf("%s:%s:%s", locale, channel, purpose)
+	key := locale + ":" + channel + ":" + purpose
 	if tmpl, ok := m.templates[key]; ok {
 		if out, err := boundedExecute(tmpl, data); err == nil {
 			return out, nil
@@ -192,7 +192,7 @@ func (m *Manager) Render(locale, channel, purpose string, data TemplateData) (st
 	}
 
 	// Fallback to locale:channel:*
-	key = fmt.Sprintf("%s:%s:*", locale, channel)
+	key = locale + ":" + channel + ":*"
 	if tmpl, ok := m.templates[key]; ok {
 		if out, err := boundedExecute(tmpl, data); err == nil {
 			return out, nil
@@ -209,7 +209,7 @@ func (m *Manager) Render(locale, channel, purpose string, data TemplateData) (st
 func (m *Manager) RenderEmail(locale, purpose string, data TemplateData) (subject, body string, err error) {
 	locale = normalizeLocale(locale)
 	// Try to find template: locale:email:purpose
-	key := fmt.Sprintf("%s:email:%s", locale, purpose)
+	key := locale + ":email:" + purpose
 	if tmpl, ok := m.templates[key]; ok {
 		if content, rerr := boundedExecute(tmpl, data); rerr == nil {
 			// For email, we expect the template to contain both subject and body
@@ -233,7 +233,7 @@ func (m *Manager) RenderEmail(locale, purpose string, data TemplateData) (subjec
 func (m *Manager) RenderSMS(locale, purpose string, data TemplateData) (body string, err error) {
 	locale = normalizeLocale(locale)
 	// Try to find template: locale:sms:purpose
-	key := fmt.Sprintf("%s:sms:%s", locale, purpose)
+	key := locale + ":sms:" + purpose
 	if tmpl, ok := m.templates[key]; ok {
 		if out, rerr := boundedExecute(tmpl, data); rerr == nil {
 			return out, nil
