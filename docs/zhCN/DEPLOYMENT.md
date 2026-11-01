@@ -2,6 +2,8 @@
 
 ## 快速开始
 
+构建和验证统一在 Linux 环境进行。macOS、Windows 及其他环境推荐使用下方 Docker Compose 方案部署 Linux 容器；CI 不验证这些平台上的原生构建。
+
 ### 使用 Docker Compose
 
 ```bash
@@ -13,7 +15,7 @@ docker compose up -d
 
 仓库中的 Compose 服务已设置生产启动所必需的 `PROVIDER_FAILURE_POLICY=strict`。
 
-### 手动部署
+### Linux 手动部署
 
 ```bash
 # 构建
