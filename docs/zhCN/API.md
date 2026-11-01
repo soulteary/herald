@@ -76,6 +76,12 @@ sha256_hex_of_raw_body
 **请求头：**
 - `Idempotency-Key`（可选）：重试时使用相同键和相同请求。已完成请求在 `IDEMPOTENCY_KEY_TTL` 内重放响应；发送前的并发请求返回 `409/idempotency_in_flight`。开始发送后，尚未完成的请求返回 `409/delivery_unknown`，即使超过 TTL 也不会再次发送。相同键对应不同请求时返回 `409/idempotency_conflict`。
 
+指纹保留字段边界，即使 JSON 字符串包含 NUL 字符（`\u0000`）也不会混淆不同请求。
+普通请求的指纹和 Redis key 与旧版本兼容；含 NUL 的请求使用带版本和长度信息的指纹。
+如果相同键下已有旧格式记录，重试返回 `409/idempotency_conflict`，不会修改或删除记录。
+有过期时间的记录仍按原 TTL 保留；无过期时间的发送中记录需先核对渠道投递结果，不能
+为了重试而直接删除记录或更换幂等键。
+
 Herald 在调用发送渠道前保存不自动过期的发送记录。进程退出、渠道结果不确定或后续 Redis
 写入失败时，该记录会阻止重试再次发送。最终成功记录写入失败返回 `503/backend_unavailable`。
 使用相同键重试：若结果已经提交则重放，否则返回 `delivery_unknown`。收到该响应时不要自动

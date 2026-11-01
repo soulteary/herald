@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Use length-framed, versioned idempotency fingerprints for requests containing
+  embedded NUL characters. Moving separator bytes between user and locale
+  fields can no longer replay a response for a different request. Ordinary
+  request fingerprints and Redis keys remain unchanged. Existing legacy NUL
+  records return `409/idempotency_conflict` and retain their contents and TTL;
+  non-expiring sending records must be reconciled rather than cleared to retry.
 - Harden all TOTP proxy calls with a redirect-denying HTTP client, verified
   TLS, bounded response reads, and strict HTTP 200 response handling. Failed
   or incomplete upstream responses cannot become successful verification

@@ -5,9 +5,11 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -95,7 +97,25 @@ func (s *Store) redisKey(principal, clientKey string) string {
 
 // Fingerprint computes a stable fingerprint over the normalized request fields
 // so the same key reused with a different body is detected as a conflict.
+// Ordinary NUL-free requests retain their existing fingerprint for rolling
+// upgrades. Embedded NULs require length framing: delimiters alone let bytes
+// move between fields without changing the hash input. The v2 prefix keeps
+// framed fingerprints disjoint from legacy hex digests.
 func Fingerprint(parts ...string) string {
+	for _, p := range parts {
+		if strings.ContainsRune(p, '\x00') {
+			h := sha256.New()
+			var size [8]byte
+			binary.BigEndian.PutUint64(size[:], uint64(len(parts)))
+			_, _ = h.Write(size[:])
+			for _, field := range parts {
+				binary.BigEndian.PutUint64(size[:], uint64(len(field)))
+				_, _ = h.Write(size[:])
+				_, _ = h.Write([]byte(field))
+			}
+			return "v2:" + hex.EncodeToString(h.Sum(nil))
+		}
+	}
 	h := sha256.New()
 	for _, p := range parts {
 		_, _ = h.Write([]byte(p))
