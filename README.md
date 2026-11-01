@@ -80,6 +80,8 @@ docker compose logs -f herald
 
 ### Manual Deployment
 
+Builds and validation run on Linux. For macOS, Windows, and other environments, we recommend deploying Herald in a Linux container using Docker Compose.
+
 For manual deployment and advanced configuration, see the [Deployment Guide](docs/enUS/DEPLOYMENT.md).
 
 ## Basic Configuration

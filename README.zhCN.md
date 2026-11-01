@@ -80,6 +80,8 @@ docker compose logs -f herald
 
 ### 手动部署
 
+项目在 Linux 上进行构建和验证。macOS、Windows 及其他环境推荐通过 Docker Compose 部署 Linux 容器。
+
 有关手动部署和高级配置，请参阅 [部署指南](docs/zhCN/DEPLOYMENT.md)。
 
 ## 基本配置

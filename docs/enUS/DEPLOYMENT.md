@@ -2,6 +2,8 @@
 
 ## Quick Start
 
+Linux is the build and validation environment. For macOS, Windows, and other environments, use the Docker Compose deployment below to run Herald in a Linux container. Native builds on those platforms are not covered by CI.
+
 ### Using Docker Compose
 
 ```bash
@@ -13,7 +15,7 @@ docker compose up -d
 
 The checked-in Compose service sets `PROVIDER_FAILURE_POLICY=strict`, which is required for production startup.
 
-### Manual Deployment
+### Manual Deployment on Linux
 
 ```bash
 # Build
