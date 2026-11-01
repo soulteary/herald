@@ -101,6 +101,27 @@ Check service health. This endpoint also verifies Redis connectivity.
 
 Create a new verification challenge and send verification code.
 
+
+After provider delivery, activation deletes the superseded challenge and updates
+its active index in a single Redis Lua operation. A successful resend cannot
+leave the previous code redeemable because a separate revoke request failed or
+the Herald process exited between those steps. A missing replacement challenge
+fails activation without discarding the current one.
+
+An activation error still fails the creation request. If an idempotency key was
+used, the sending record remains non-expiring: retrying the same key returns
+`delivery_unknown`, rather than sending another code. A lost activation reply
+can mean both old and new codes were invalidated; reconcile delivery before
+retrying with another key.
+
+Existing Redis key names, index encodings and challenge lifetimes are preserved;
+no schema migration or new configuration is required. This fix does not scan for
+or remove unidentified orphaned codes left by an earlier revocation failure.
+They retain their original expiry; revoke known affected challenge IDs when
+reconciling an earlier incident. Keep the existing Redis persistence and audit
+volume requirements during upgrades.
+
+
 **Headers:**
 - `Idempotency-Key` (optional): Reuse this key with the same request when retrying. Completed requests replay their response within `IDEMPOTENCY_KEY_TTL`; pre-send concurrent requests return `409/idempotency_in_flight`. Once sending starts, an incomplete request returns `409/delivery_unknown` rather than sending again, even after the TTL. A different request with the same key returns `409/idempotency_conflict`.
 

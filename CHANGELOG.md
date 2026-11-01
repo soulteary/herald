@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Revoke the superseded OTP and publish its replacement active index in one
+  Redis Lua operation. A failed standalone revocation or a Herald process exit
+  can no longer leave both codes redeemable after a successful resend. Existing
+  active-index encodings, challenge records, expiry settings and idempotency
+  delivery-unknown protection are retained.
+
 - Bind the idempotency header (including its absence) in HMAC v3. HMAC challenge
   creation requires v3 so changing or stripping the header cannot redirect a
   signed request into another idempotency record and cause a duplicate send.

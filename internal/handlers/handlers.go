@@ -96,7 +96,7 @@ func NewHandlersWithError(redisClient *redis.Client, log *logger.Logger) (*Handl
 		ChallengeKeyPrefix: "otp:ch:",
 		LockKeyPrefix:      "otp:lock:",
 	}
-	challengeMgr := challengekit.NewManager(redisClient, challengeConfig)
+	challengeMgr := newAtomicChallengeManager(redisClient, challengeConfig)
 
 	rateLimitMgr := ratelimit.NewManager(redisClient)
 
@@ -964,11 +964,7 @@ func (h *Handlers) activateChallenge(c fiber.Ctx, spanCtx context.Context, ch *c
 		})
 	}
 	if prevID != "" && prevID != ch.ID {
-		if err := h.challengeManager.Revoke(spanCtx, prevID); err != nil {
-			h.log.Warn().Err(err).Str("challenge_id", prevID).Msg("Failed to revoke superseded challenge")
-		} else {
-			metrics.RecordChallengeState("superseded")
-		}
+		metrics.RecordChallengeState("superseded")
 	}
 	metrics.RecordChallengeState("activated")
 
