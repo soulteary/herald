@@ -125,7 +125,7 @@
 2. **HMAC 인증의 경우**
    ```bash
    # HMAC_SECRET이 구성되었는지 확인
-   echo $HMAC_SECRET
+   test -n "$HMAC_SECRET" && echo "HMAC_SECRET is set"
    
    # 타임스탬프가 5분 창 내에 있는지 확인
    # 서명 계산이 Herald의 구현과 일치하는지 확인
@@ -134,7 +134,7 @@
 3. **API 키 인증의 경우**
    ```bash
    # API_KEY가 설정되었는지 확인
-   echo $API_KEY
+   test -n "$API_KEY" && echo "API_KEY is set"
    
    # X-API-Key 헤더가 구성된 키와 일치하는지 확인
    ```
@@ -241,10 +241,10 @@
 4. **Prometheus 메트릭 확인**
    ```promql
    # Redis 지연 시간 확인
-   histogram_quantile(0.99, rate(herald_redis_latency_seconds_bucket[5m]))
+   histogram_quantile(0.99, rate(herald_redis_operation_duration_seconds_bucket[5m]))
    
    # Redis 작업 오류 확인
-   rate(herald_redis_latency_seconds_count[5m])
+   rate(herald_redis_operation_duration_seconds_count[5m])
    ```
 
 5. **Herald 로그 검토**
@@ -318,7 +318,7 @@
    histogram_quantile(0.95, rate(herald_otp_send_duration_seconds_bucket[5m]))
    
    # Redis 지연 시간 확인
-   histogram_quantile(0.99, rate(herald_redis_latency_seconds_bucket[5m]))
+   histogram_quantile(0.99, rate(herald_redis_operation_duration_seconds_bucket[5m]))
    ```
 
 2. **리소스 사용량 확인**

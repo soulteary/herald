@@ -104,7 +104,7 @@ herald_rate_limit_hits_total{scope="resend_cooldown"} 200
 
 ### Metriche Redis
 
-#### `herald_redis_latency_seconds`
+#### `herald_redis_operation_duration_seconds`
 
 Istogramma che traccia la latenza delle operazioni Redis.
 
@@ -115,9 +115,9 @@ Istogramma che traccia la latenza delle operazioni Redis.
 
 **Esempio:**
 ```
-herald_redis_latency_seconds_bucket{operation="get",le="0.01"} 5000
-herald_redis_latency_seconds_sum{operation="get"} 12.5
-herald_redis_latency_seconds_count{operation="get"} 10000
+herald_redis_operation_duration_seconds_bucket{operation="get",le="0.01"} 5000
+herald_redis_operation_duration_seconds_sum{operation="get"} 12.5
+herald_redis_operation_duration_seconds_count{operation="get"} 10000
 ```
 
 ## Configurazione Prometheus
@@ -195,7 +195,7 @@ scrape_configs:
 
 3. **Latenza Redis P99**
    ```
-   histogram_quantile(0.99, rate(herald_redis_latency_seconds_bucket[5m]))
+   histogram_quantile(0.99, rate(herald_redis_operation_duration_seconds_bucket[5m]))
    ```
 
 ### Metriche di Errore
@@ -251,7 +251,7 @@ groups:
       # Alta latenza Redis
       - alert: HeraldHighRedisLatency
         expr: |
-          histogram_quantile(0.99, rate(herald_redis_latency_seconds_bucket[5m])) > 0.1
+          histogram_quantile(0.99, rate(herald_redis_operation_duration_seconds_bucket[5m])) > 0.1
         for: 5m
         labels:
           severity: warning

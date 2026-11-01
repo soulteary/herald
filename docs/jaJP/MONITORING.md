@@ -104,7 +104,7 @@ herald_rate_limit_hits_total{scope="resend_cooldown"} 200
 
 ### Redis メトリクス
 
-#### `herald_redis_latency_seconds`
+#### `herald_redis_operation_duration_seconds`
 
 Redis 操作のレイテンシを追跡するヒストグラム。
 
@@ -115,9 +115,9 @@ Redis 操作のレイテンシを追跡するヒストグラム。
 
 **例：**
 ```
-herald_redis_latency_seconds_bucket{operation="get",le="0.01"} 5000
-herald_redis_latency_seconds_sum{operation="get"} 12.5
-herald_redis_latency_seconds_count{operation="get"} 10000
+herald_redis_operation_duration_seconds_bucket{operation="get",le="0.01"} 5000
+herald_redis_operation_duration_seconds_sum{operation="get"} 12.5
+herald_redis_operation_duration_seconds_count{operation="get"} 10000
 ```
 
 ## Prometheus 設定
@@ -195,7 +195,7 @@ scrape_configs:
 
 3. **Redis P99 レイテンシ**
    ```
-   histogram_quantile(0.99, rate(herald_redis_latency_seconds_bucket[5m]))
+   histogram_quantile(0.99, rate(herald_redis_operation_duration_seconds_bucket[5m]))
    ```
 
 ### エラーメトリクス
@@ -251,7 +251,7 @@ groups:
       # 高 Redis レイテンシ
       - alert: HeraldHighRedisLatency
         expr: |
-          histogram_quantile(0.99, rate(herald_redis_latency_seconds_bucket[5m])) > 0.1
+          histogram_quantile(0.99, rate(herald_redis_operation_duration_seconds_bucket[5m])) > 0.1
         for: 5m
         labels:
           severity: warning

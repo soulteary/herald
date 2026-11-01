@@ -125,7 +125,7 @@ Questa guida ti aiuta a diagnosticare e risolvere problemi comuni con il servizi
 2. **Per Autenticazione HMAC**
    ```bash
    # Verificare che HMAC_SECRET sia configurato
-   echo $HMAC_SECRET
+   test -n "$HMAC_SECRET" && echo "HMAC_SECRET is set"
    
    # Controllare che il timestamp sia entro la finestra di 5 minuti
    # Verificare che il calcolo della firma corrisponda all'implementazione Herald
@@ -134,7 +134,7 @@ Questa guida ti aiuta a diagnosticare e risolvere problemi comuni con il servizi
 3. **Per Autenticazione Chiave API**
    ```bash
    # Verificare che API_KEY sia impostato
-   echo $API_KEY
+   test -n "$API_KEY" && echo "API_KEY is set"
    
    # Controllare che l'header X-API-Key corrisponda alla chiave configurata
    ```
@@ -241,10 +241,10 @@ Questa guida ti aiuta a diagnosticare e risolvere problemi comuni con il servizi
 4. **Controllare le Metriche Prometheus**
    ```promql
    # Controllare la latenza Redis
-   histogram_quantile(0.99, rate(herald_redis_latency_seconds_bucket[5m]))
+   histogram_quantile(0.99, rate(herald_redis_operation_duration_seconds_bucket[5m]))
    
    # Controllare gli errori delle operazioni Redis
-   rate(herald_redis_latency_seconds_count[5m])
+   rate(herald_redis_operation_duration_seconds_count[5m])
    ```
 
 5. **Esaminare i Log Herald**
@@ -318,7 +318,7 @@ Questa guida ti aiuta a diagnosticare e risolvere problemi comuni con il servizi
    histogram_quantile(0.95, rate(herald_otp_send_duration_seconds_bucket[5m]))
    
    # Controllare la latenza Redis
-   histogram_quantile(0.99, rate(herald_redis_latency_seconds_bucket[5m]))
+   histogram_quantile(0.99, rate(herald_redis_operation_duration_seconds_bucket[5m]))
    ```
 
 2. **Controllare l'Utilizzo delle Risorse**
