@@ -40,10 +40,10 @@ Questa guida ti aiuta a diagnosticare e risolvere problemi comuni con il servizi
 3. **Controllare le Metriche Prometheus**
    ```promql
    # Controllare il tasso di fallimento invio
-   rate(herald_otp_sends_total{result="failed"}[5m]) / rate(herald_otp_sends_total[5m])
+   rate(herald_otp_sends_total{result="failure"}[5m]) / rate(herald_otp_sends_total[5m])
    
    # Controllare il successo invio per provider
-   rate(herald_otp_sends_total{result="success"}[5m]) by (provider)
+   sum by (provider) (rate(herald_otp_sends_total{result="success"}[5m]))
    ```
 
 4. **Controllare i Log di Audit**
@@ -91,10 +91,10 @@ Questa guida ti aiuta a diagnosticare e risolvere problemi comuni con il servizi
 4. **Controllare le Metriche Prometheus**
    ```promql
    # Controllare i motivi di fallimento della verifica
-   rate(herald_otp_verifications_total{result="failed"}[5m]) by (reason)
+   sum by (reason) (rate(herald_otp_verifications_total{result="failure"}[5m]))
    
    # Controllare le challenge bloccate
-   rate(herald_otp_verifications_total{result="failed",reason="locked"}[5m])
+   rate(herald_otp_verifications_total{result="failure",reason="locked"}[5m])
    ```
 
 5. **Esaminare i Log di Audit**
@@ -178,7 +178,7 @@ Questa guida ti aiuta a diagnosticare e risolvere problemi comuni con il servizi
 2. **Controllare le Metriche Prometheus**
    ```promql
    # Controllare gli hit di limitazione della velocità per ambito
-   rate(herald_rate_limit_hits_total[5m]) by (scope)
+   sum by (scope) (rate(herald_rate_limit_hits_total[5m]))
    
    # Controllare il tasso di hit di limitazione della velocità
    rate(herald_rate_limit_hits_total[5m])
@@ -218,14 +218,14 @@ Questa guida ti aiuta a diagnosticare e risolvere problemi comuni con il servizi
 1. **Controllare la Connettività Redis**
    ```bash
    # Testare la connessione Redis
-   redis-cli -h $REDIS_ADDR -p 6379 PING
+   REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli -h redis.example.internal -p 6379 -n "${REDIS_DB:-0}" PING
    ```
 
 2. **Verificare la Configurazione**
    ```bash
    # Controllare la configurazione Redis
    echo $REDIS_ADDR
-   echo $REDIS_PASSWORD
+   test -n "$REDIS_PASSWORD" && echo "REDIS_PASSWORD is set"
    echo $REDIS_DB
    ```
 
@@ -273,10 +273,10 @@ Questa guida ti aiuta a diagnosticare e risolvere problemi comuni con il servizi
 1. **Controllare le Metriche Provider**
    ```promql
    # Controllare il tasso di fallimento invio per provider
-   rate(herald_otp_sends_total{result="failed"}[5m]) by (provider)
+   sum by (provider) (rate(herald_otp_sends_total{result="failure"}[5m]))
    
    # Controllare la durata invio per provider
-   histogram_quantile(0.95, rate(herald_otp_send_duration_seconds_bucket[5m])) by (provider)
+   histogram_quantile(0.95, sum by (le, provider) (rate(herald_otp_send_duration_seconds_bucket[5m])))
    ```
 
 2. **Esaminare i Log Provider**
@@ -327,7 +327,7 @@ Questa guida ti aiuta a diagnosticare e risolvere problemi comuni con il servizi
    top -p $(pgrep herald)
    
    # Controllare il conteggio Goroutine
-   curl http://localhost:8082/debug/pprof/goroutine?debug=1
+   curl -fsS http://localhost:8082/metrics | rg "^herald_"
    ```
 
 3. **Esaminare i Modelli di Richiesta**

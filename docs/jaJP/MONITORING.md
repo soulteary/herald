@@ -31,7 +31,7 @@ GET http://localhost:8082/metrics
 **例：**
 ```
 herald_otp_challenges_total{channel="email",purpose="login",result="success"} 1234
-herald_otp_challenges_total{channel="sms",purpose="login",result="failed"} 5
+herald_otp_challenges_total{channel="sms",purpose="login",result="failure"} 5
 ```
 
 ### 送信メトリクス
@@ -48,7 +48,7 @@ herald_otp_challenges_total{channel="sms",purpose="login",result="failed"} 5
 **例：**
 ```
 herald_otp_sends_total{channel="email",provider="smtp",result="success"} 1200
-herald_otp_sends_total{channel="sms",provider="placeholder",result="failed"} 10
+herald_otp_sends_total{channel="sms",provider="placeholder",result="failure"} 10
 ```
 
 #### `herald_otp_send_duration_seconds`
@@ -80,9 +80,9 @@ OTP 検証の総数を追跡するカウンター。
 **例：**
 ```
 herald_otp_verifications_total{result="success",reason=""} 1100
-herald_otp_verifications_total{result="failed",reason="expired"} 50
-herald_otp_verifications_total{result="failed",reason="invalid"} 30
-herald_otp_verifications_total{result="failed",reason="locked"} 5
+herald_otp_verifications_total{result="failure",reason="expired"} 50
+herald_otp_verifications_total{result="failure",reason="invalid"} 30
+herald_otp_verifications_total{result="failure",reason="locked"} 5
 ```
 
 ### レート制限メトリクス
@@ -207,12 +207,12 @@ scrape_configs:
 
 2. **検証失敗理由**
    ```
-   rate(herald_otp_verifications_total{result="failed"}[5m]) by (reason)
+   sum by (reason) (rate(herald_otp_verifications_total{result="failure"}[5m]))
    ```
 
 3. **送信失敗率**
    ```
-   rate(herald_otp_sends_total{result="failed"}[5m]) / rate(herald_otp_sends_total[5m])
+   rate(herald_otp_sends_total{result="failure"}[5m]) / rate(herald_otp_sends_total[5m])
    ```
 
 ## アラートルール
@@ -227,7 +227,7 @@ groups:
       # 高失敗率
       - alert: HeraldHighVerificationFailureRate
         expr: |
-          rate(herald_otp_verifications_total{result="failed"}[5m]) / 
+          rate(herald_otp_verifications_total{result="failure"}[5m]) /
           rate(herald_otp_verifications_total[5m]) > 0.1
         for: 5m
         labels:
@@ -239,7 +239,7 @@ groups:
       # 高送信失敗率
       - alert: HeraldHighSendFailureRate
         expr: |
-          rate(herald_otp_sends_total{result="failed"}[5m]) / 
+          rate(herald_otp_sends_total{result="failure"}[5m]) /
           rate(herald_otp_sends_total[5m]) > 0.05
         for: 5m
         labels:
