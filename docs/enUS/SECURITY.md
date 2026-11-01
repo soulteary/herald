@@ -366,3 +366,16 @@ This prevents duplicate sends after success-record failures and replay of a
 previous credential's response after default-key rotation. It does not involve
 HMAC forgery.
 See [upgrade requirements](DEPLOYMENT.md#hmac-identity-upgrade).
+## Single-secret HMAC key identities
+
+With only `HMAC_SECRET` configured, unknown key IDs previously selected that
+secret while acquiring separate nonce and idempotency namespaces. A validly
+signed retry with another ID could send twice after successful delivery and a
+failed Redis completion write. This requires the shared secret; it is not a
+signature forgery.
+
+Single-secret lookup now permits only an omitted ID or exactly `default`.
+Unknown IDs fail before nonce consumption or handler side effects. Explicit key
+maps retain their configured identities; HMAC v2/v3 wire formats are unchanged.
+Old records remain intact. Renaming an old custom ID does not reconcile its
+unresolved sends. Follow the [migration and rollback requirements](DEPLOYMENT.md#single-secret-key-id-allowlist).

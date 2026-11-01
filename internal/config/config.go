@@ -409,7 +409,8 @@ func parseHMACKeys() error {
 }
 
 // GetHMACSecret returns the HMAC secret for the given key ID
-// If keyID is empty, returns the default key or HMACSecret
+// If keyID is empty, returns the configured default. Single-secret mode only
+// accepts the implicit ID "default"; unknown IDs must not create aliases.
 func GetHMACSecret(keyID string) string {
 	// If HMAC keys map is configured, use it
 	if len(hmacKeysMap) > 0 {
@@ -427,7 +428,11 @@ func GetHMACSecret(keyID string) string {
 		return ""
 	}
 
-	// Fallback to single HMACSecret (backward compatibility)
+	// A single secret has one identity. Accepting arbitrary IDs here would
+	// let a caller mint new nonce and idempotency namespaces for that secret.
+	if keyID != "" && keyID != "default" {
+		return ""
+	}
 	return HMACSecret
 }
 
