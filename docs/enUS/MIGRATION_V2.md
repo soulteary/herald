@@ -89,12 +89,21 @@ c, _ := herald.NewClient(herald.DefaultOptions().
 - Keys are **namespaced per principal** (derived from key-id/service/api-key), so
   two callers using the same client-chosen key do not collide.
 - The first request **atomically claims** the key (`SET NX`). Concurrent
-  duplicates with the **same body** wait/replay and result in **exactly one**
-  provider send.
+  duplicates with the **same body** return `409/idempotency_in_flight` before
+  sending, or replay a completed response within its TTL.
 - Same key + **different body** → `409 Conflict`.
 - After success, the exact response is stored and **replayed** for retries.
-- If the idempotency backend is unavailable → `503` (fail closed), never a
-  double-send.
+- Before delivery, the claim becomes a non-expiring `sending` record. A crash
+  or an uncertain post-send failure leaves the key blocked with
+  `409/delivery_unknown`; it cannot be reclaimed by TTL expiry. Failures before
+  this boundary can still release or expire the pending claim.
+- A failed success-record write returns `503/backend_unavailable`. If Redis
+  committed the write but its acknowledgement was lost, a retry replays it.
+- Provider errors after this boundary also retain the record, including strict
+  mode failures. This trades automatic recovery for avoiding duplicate sends.
+  Operators must reconcile unresolved records; do not blindly delete them or
+  retry with a new key. Redis data loss, eviction, or key/secret changes can
+  defeat this protection. Completed responses still expire normally.
 
 ---
 
@@ -167,8 +176,9 @@ deleted from your environment.
   `REQUEST_AUTH_MODE=api_key` to keep pre-v2 clients working while you roll SDKs.
 - To temporarily accept old HMAC v1 clients, set `HMAC_V1_ENABLED=true` (not
   recommended long-term; it has no replay protection).
-- Redis keys are additive (`otp:nonce:*`, `otp:idem:*`); rolling back the binary
-  leaves stale keys that expire by TTL. No destructive migration is required.
+- Redis keys are additive (`otp:nonce:*`, `otp:idem2:*`). Nonce and completed
+  response keys expire normally; unresolved `sending` records do not. Preserve
+  them during rollback and reconcile them before any cleanup.
 
 ---
 

@@ -90,7 +90,7 @@ Herald 从右向左解析转发 IP 链，仅跳过明确配置为可信的代理
 | `LOCKOUT_DURATION` | 锁定持续时间（如 `10m`） | `10m` | 否 |
 | `RESEND_COOLDOWN` | 同一 challenge 重发冷却时间 | `60s` | 否 |
 | `CODE_LENGTH` | 验证码位数（最小 `4`；还须在扣除紧凑的上下文绑定 V2 请求封装后不超过 `HERALD_MAX_BODY_BYTES`，当前封装为 136 字节） | `6` | 否 |
-| `IDEMPOTENCY_KEY_TTL` | 幂等键缓存 TTL；`0` 表示使用 `CHALLENGE_EXPIRY` | `0` | 否 |
+| `IDEMPOTENCY_KEY_TTL` | 发送前占位和成功响应的 TTL；不确定发送记录不过期；`0` 表示使用 `CHALLENGE_EXPIRY` | `0` | 否 |
 | `ALLOWED_PURPOSES` | 允许的 purpose，逗号分隔，如 `login,reset,bind,stepup` | `login` | 否 |
 
 #### 限流
@@ -245,8 +245,21 @@ Herald 从右向左解析转发 IP 链，仅跳过明确配置为可信的代理
 **键前缀：**
 - `otp:ch:*` - 挑战数据（TTL：挑战过期时间）
 - `otp:rate:*` - 速率限制计数器（TTL：速率限制窗口）
-- `otp:idem:*` - 幂等性记录（TTL：幂等键 TTL）
+- `otp:idem2:*` - 幂等记录（发送前占位和成功响应按配置 TTL 过期；不确定发送不过期）
 - `otp:lock:*` - 用户锁定记录（TTL：锁定持续时间）
+
+**不确定的发送记录：**
+
+幂等存储应使用持久化 Redis，并采用 `noeviction` 策略。要阻止重发，已确认的写入就必须
+在重试期间保留；Redis 丢失或淘汰该记录后，Herald 无法保证不重复发送。请按所需的可靠性
+配置 Redis 持久化和故障转移。在存在未核对记录或仍可能重试时，不要清空数据库或轮换
+`HERALD_IDEMPOTENCY_SECRET`，否则派生键变化会绕过旧记录。
+
+`sending` 状态记录不设 TTL，包含用于核对的 `challenge_id`。监控 `delivery_unknown`
+结果和未完成记录数量，并用该 challenge ID（也是传给渠道的幂等键）查询渠道日志。
+管理员处理记录前需确认原请求已停止、投递结果已核实，不能自动过期或删除记录，也不能
+直接换键重发；确需补发时应作为业务上的独立决定处理。持久化后、发送前退出也会留下
+记录，因此需要为人工核对和存储容量留出空间。这保证不确定键最多尝试发送一次，不保证投递成功。
 
 **容量规划：**
 

@@ -355,6 +355,9 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 		case err == idempotency.ErrConflict:
 			metrics.RecordIdempotency("conflict")
 			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"ok": false, "reason": "idempotency_conflict"})
+		case err == idempotency.ErrDeliveryUnknown:
+			metrics.RecordIdempotency("delivery_unknown")
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"ok": false, "reason": "delivery_unknown"})
 		case err == idempotency.ErrInFlight:
 			metrics.RecordIdempotency("in_flight")
 			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"ok": false, "reason": "idempotency_in_flight"})
@@ -559,11 +562,10 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 
 	softDeliveryFailed := false
 
-	// Renew ownership immediately before the external side effect. Combined
-	// with the config invariant that the lease outlives ProviderTimeout, this
-	// prevents a retry from acquiring the key while this request is sending.
+	// Persist the send boundary before invoking the provider. A TTL lease alone
+	// would expire after a process exit and allow a second delivery.
 	if idempotencyKey != "" {
-		if err := h.idempotencyStore.Refresh(spanCtx, principal, idempotencyKey, fingerprint, idempotencyOwner); err != nil {
+		if err := h.idempotencyStore.MarkSending(spanCtx, principal, idempotencyKey, fingerprint, idempotencyOwner, ch.ID); err != nil {
 			_ = h.challengeManager.RevokePending(spanCtx, ch.ID)
 			if errors.Is(err, idempotency.ErrOwnershipLost) {
 				metrics.RecordIdempotency("ownership_lost")
@@ -572,7 +574,7 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 					"reason": "idempotency_ownership_lost",
 				})
 			}
-			h.log.Error().Err(err).Msg("Failed to refresh idempotency ownership before provider send")
+			h.log.Error().Err(err).Msg("Failed to persist idempotency send boundary")
 			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
 				"ok":     false,
 				"reason": "backend_unavailable",
@@ -580,14 +582,14 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 		}
 	}
 
-	// Start provider observability only after the Redis lease refresh succeeds.
+	// Start provider observability only after the send boundary is persisted.
 	providerCtx, providerSpan := tracing.StartSpan(spanCtx, "otp.provider.send")
 	providerSpan.SetAttributes(
 		attribute.String("channel", req.Channel),
 		attribute.String("provider", providerName),
 	)
 
-	// Record only provider latency; lease-refresh time belongs to Redis, not the provider.
+	// Record only provider latency; send-boundary persistence belongs to Redis.
 	sendStart := time.Now()
 
 	// Send using provider-kit Registry (returns *SendResult, error)
@@ -620,8 +622,8 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 			// Strict mode: revoke challenge and return error
 			_ = h.challengeManager.Revoke(spanCtx, ch.ID)
 			metrics.RecordChallengeState("revoked")
-			// Also clear the idempotency slot so a retry can proceed.
-			failIdem()
+			// The provider may have delivered before reporting an error. Keep
+			// the sending record so a retry cannot send a second code.
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"ok":     false,
 				"reason": "send_failed",
@@ -657,9 +659,8 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 	// previously active challenge so an older, still-live code cannot be
 	// redeemed. A backend error here must not leave a redeemable-but-unindexed
 	// code, so on failure we revoke this pending challenge and fail closed.
-	// Renew and re-check the idempotency lease immediately before activation. A
-	// slow handler whose lease expired must not replace or revoke the challenge
-	// created by the request that acquired the key afterwards.
+	// Re-check ownership immediately before activation. Sending records remain
+	// non-expiring; a backend error must not reopen the key for another send.
 	if idempotencyKey != "" {
 		if err := h.idempotencyStore.Refresh(spanCtx, principal, idempotencyKey, fingerprint, idempotencyOwner); err != nil {
 			_ = h.challengeManager.RevokePending(spanCtx, ch.ID)
@@ -681,7 +682,6 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 	if actErr != nil {
 		h.log.Error().Err(actErr).Str("challenge_id", ch.ID).Msg("Failed to activate challenge")
 		_ = h.challengeManager.RevokePending(spanCtx, ch.ID)
-		failIdem()
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "internal_error",
@@ -712,10 +712,13 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 	// Store the terminal idempotency result so concurrent/subsequent duplicates
 	// replay this exact response instead of sending another code.
 	if idempotencyKey != "" {
-		if payload, mErr := json.Marshal(response); mErr == nil {
-			if err := h.idempotencyStore.Succeed(spanCtx, principal, idempotencyKey, fingerprint, idempotencyOwner, payload); err != nil {
-				h.log.Warn().Err(err).Msg("Failed to persist idempotency success record")
-			}
+		payload, err := json.Marshal(response)
+		if err == nil {
+			err = h.idempotencyStore.Succeed(spanCtx, principal, idempotencyKey, fingerprint, idempotencyOwner, payload)
+		}
+		if err != nil {
+			h.log.Error().Err(err).Msg("Failed to persist idempotency success record")
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "backend_unavailable"})
 		}
 	}
 

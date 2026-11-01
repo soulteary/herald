@@ -17,9 +17,12 @@ import (
 type State string
 
 const (
-	// StatePending means a request with this key is in-flight; a concurrent
-	// duplicate must not proceed.
+	// StatePending is an expiring pre-send claim; a concurrent duplicate must
+	// not proceed. MarkSending makes the claim non-expiring before delivery.
 	StatePending State = "pending"
+	// StateSending is persisted before delivery without a TTL. A crash or an
+	// uncertain provider result must never turn this key into a fresh send.
+	StateSending State = "sending"
 	// StateSucceeded means the original request completed and the stored
 	// response should be replayed.
 	StateSucceeded State = "succeeded"
@@ -32,6 +35,8 @@ const (
 var (
 	// ErrInFlight indicates a concurrent request holds the pending slot.
 	ErrInFlight = errors.New("idempotency: request in flight")
+	// ErrDeliveryUnknown means delivery may have happened and cannot be retried safely.
+	ErrDeliveryUnknown = errors.New("idempotency: delivery outcome unknown")
 	// ErrConflict indicates the same key was used with a different request
 	// fingerprint (different body). This maps to HTTP 409.
 	ErrConflict = errors.New("idempotency: key reused with a different request")
@@ -49,6 +54,7 @@ type Record struct {
 	State       State           `json:"state"`
 	Fingerprint string          `json:"fingerprint"`
 	Owner       string          `json:"owner,omitempty"`
+	ChallengeID string          `json:"challenge_id,omitempty"`
 	Response    json.RawMessage `json:"response,omitempty"`
 	CreatedAt   int64           `json:"created_at"`
 }
@@ -105,6 +111,7 @@ func Fingerprint(parts ...string) string {
 //   - replayResp, "", nil      -> a prior success exists; caller replays it
 //     (replayResp non-nil).
 //   - nil, "", ErrInFlight    -> a concurrent request holds the slot.
+//   - nil, "", ErrDeliveryUnknown -> sending started; never resend automatically.
 //   - nil, "", ErrConflict    -> key reused with a different fingerprint.
 //   - nil, "", ErrBackendUnavailable -> Redis failure; caller fails closed.
 func (s *Store) Begin(ctx context.Context, principal, clientKey, fingerprint string) (replay json.RawMessage, owner string, err error) {
@@ -147,6 +154,8 @@ func (s *Store) Begin(ctx context.Context, principal, clientKey, fingerprint str
 	switch existing.State {
 	case StateSucceeded:
 		return existing.Response, "", nil
+	case StateSending:
+		return nil, "", ErrDeliveryUnknown
 	case StateFailed:
 		return nil, "", ErrInFlight
 	default:
@@ -154,11 +163,34 @@ func (s *Store) Begin(ctx context.Context, principal, clientKey, fingerprint str
 	}
 }
 
+// MarkSending atomically removes the pending lease before the external side
+// effect. Only its owner can complete it; Fail and TTL expiry cannot reopen it.
+// ChallengeID lets operators reconcile an interrupted send without storing codes.
+func (s *Store) MarkSending(ctx context.Context, principal, clientKey, fingerprint, owner, challengeID string) error {
+	key := s.redisKey(principal, clientKey)
+	return s.mutateOwned(ctx, key, fingerprint, owner, func(tx *redis.Tx, current Record) error {
+		if current.State != StatePending {
+			return ErrDeliveryUnknown
+		}
+		current.State = StateSending
+		current.ChallengeID = challengeID
+		payload, err := json.Marshal(current)
+		if err != nil {
+			return err
+		}
+		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+			pipe.Set(ctx, key, payload, 0)
+			return nil
+		})
+		return err
+	})
+}
+
 // Succeed stores the terminal success response so future duplicates replay it.
 func (s *Store) Succeed(ctx context.Context, principal, clientKey, fingerprint, owner string, response json.RawMessage) error {
 	key := s.redisKey(principal, clientKey)
-	return s.mutateOwned(ctx, key, fingerprint, owner, func(tx *redis.Tx) error {
-		rec := Record{State: StateSucceeded, Fingerprint: fingerprint, Response: response, CreatedAt: time.Now().Unix()}
+	return s.mutateOwned(ctx, key, fingerprint, owner, func(tx *redis.Tx, current Record) error {
+		rec := Record{State: StateSucceeded, Fingerprint: fingerprint, ChallengeID: current.ChallengeID, Response: response, CreatedAt: time.Now().Unix()}
 		recJSON, _ := json.Marshal(rec)
 		_, err := tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
 			pipe.Set(ctx, key, recJSON, s.ttl)
@@ -168,11 +200,14 @@ func (s *Store) Succeed(ctx context.Context, principal, clientKey, fingerprint, 
 	})
 }
 
-// Fail clears the pending slot so a subsequent retry with the same key can
-// proceed. A terminal failure does not cache a poisoned response.
+// Fail clears a pre-send pending slot so a retry can proceed. Once sending
+// starts, even an error can mean delivery happened, so the record is retained.
 func (s *Store) Fail(ctx context.Context, principal, clientKey, fingerprint, owner string) error {
 	key := s.redisKey(principal, clientKey)
-	return s.mutateOwned(ctx, key, fingerprint, owner, func(tx *redis.Tx) error {
+	return s.mutateOwned(ctx, key, fingerprint, owner, func(tx *redis.Tx, current Record) error {
+		if current.State != StatePending {
+			return ErrDeliveryUnknown
+		}
 		_, err := tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
 			pipe.Del(ctx, key)
 			return nil
@@ -182,20 +217,25 @@ func (s *Store) Fail(ctx context.Context, principal, clientKey, fingerprint, own
 }
 
 // Refresh verifies that the caller still owns a pending record and renews its
-// TTL. Handlers call this immediately before activation so an expired, stale
+// TTL before sending, or preserves an unexpired sending record. Handlers call
+// this immediately before activation so an expired, stale
 // request cannot mutate challenge state owned by a replacement request.
 func (s *Store) Refresh(ctx context.Context, principal, clientKey, fingerprint, owner string) error {
 	key := s.redisKey(principal, clientKey)
-	return s.mutateOwned(ctx, key, fingerprint, owner, func(tx *redis.Tx) error {
+	return s.mutateOwned(ctx, key, fingerprint, owner, func(tx *redis.Tx, current Record) error {
 		_, err := tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
-			pipe.Expire(ctx, key, s.ttl)
+			if current.State == StateSending {
+				pipe.Persist(ctx, key)
+			} else {
+				pipe.Expire(ctx, key, s.ttl)
+			}
 			return nil
 		})
 		return err
 	})
 }
 
-func (s *Store) mutateOwned(ctx context.Context, key, fingerprint, owner string, mutate func(*redis.Tx) error) error {
+func (s *Store) mutateOwned(ctx context.Context, key, fingerprint, owner string, mutate func(*redis.Tx, Record) error) error {
 	err := s.client.Watch(ctx, func(tx *redis.Tx) error {
 		raw, err := tx.Get(ctx, key).Bytes()
 		if errors.Is(err, redis.Nil) {
@@ -208,11 +248,14 @@ func (s *Store) mutateOwned(ctx context.Context, key, fingerprint, owner string,
 		if err := json.Unmarshal(raw, &current); err != nil {
 			return err
 		}
-		if current.State != StatePending || current.Fingerprint != fingerprint || current.Owner != owner || owner == "" {
+		if (current.State != StatePending && current.State != StateSending) || current.Fingerprint != fingerprint || current.Owner != owner || owner == "" {
 			return ErrOwnershipLost
 		}
-		return mutate(tx)
+		return mutate(tx, current)
 	}, key)
+	if errors.Is(err, ErrDeliveryUnknown) {
+		return ErrDeliveryUnknown
+	}
 	if errors.Is(err, ErrOwnershipLost) || errors.Is(err, redis.TxFailedErr) {
 		return ErrOwnershipLost
 	}
