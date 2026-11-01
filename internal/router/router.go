@@ -203,6 +203,11 @@ func NewRouterWithClientAndHandlers(redisClient *redis.Client, log *logger.Logge
 // NewRouterWithClientAndHandlersE creates a router and reports handler/provider
 // initialization failures to the startup path.
 func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logger) (*RouterWithHandlers, error) {
+	corsOrigins, err := config.CORSOrigins()
+	if err != nil {
+		return nil, err
+	}
+
 	app := fiber.New(fiber.Config{
 		// Server hardening: cap request body size and enforce timeouts so a slow
 		// or oversized client cannot exhaust resources.
@@ -246,19 +251,15 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 	}
 
 	// CORS is disabled by default. Only enable it when an explicit origin
-	// allowlist is configured; a wildcard is rejected by config.Validate() in
-	// production so it can never be enabled there.
-	if origins := strings.TrimSpace(config.CORSAllowOrigins); origins != "" {
-		allowedOrigins := strings.Split(origins, ",")
-		for i := range allowedOrigins {
-			allowedOrigins[i] = strings.TrimSpace(allowedOrigins[i])
-		}
+	// allowlist is configured. Startup validation and router construction both
+	// reject wildcard entries in production.
+	if len(corsOrigins) > 0 {
 		app.Use(cors.New(cors.Config{
-			AllowOrigins: allowedOrigins,
+			AllowOrigins: corsOrigins,
 			AllowMethods: []string{"GET", "POST", "OPTIONS"},
 			AllowHeaders: []string{"Content-Type", "Authorization", "X-Service", "X-Signature", "X-Signature-Version", "X-Timestamp", "X-Nonce", "X-Key-Id", "X-API-Key", "Idempotency-Key", "traceparent", "tracestate"},
 		}))
-		log.Info().Str("origins", origins).Msg("CORS enabled with explicit allowlist")
+		log.Info().Str("origins", strings.TrimSpace(config.CORSAllowOrigins)).Msg("CORS enabled with explicit allowlist")
 	}
 
 	// A configured provider that cannot be constructed must abort startup

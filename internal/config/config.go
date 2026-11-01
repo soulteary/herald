@@ -536,8 +536,8 @@ func productionPolicyProblems() []string {
 	if RedisPassword == "" && !RiskAckPasswordlessRedis {
 		problems = append(problems, "passwordless Redis in production (set REDIS_PASSWORD or HERALD_RISK_ACK_PASSWORDLESS_REDIS=true to override)")
 	}
-	if strings.TrimSpace(CORSAllowOrigins) == "*" {
-		problems = append(problems, "CORS wildcard (HERALD_CORS_ALLOW_ORIGINS=*) is forbidden in production")
+	if _, err := CORSOrigins(); err != nil {
+		problems = append(problems, err.Error())
 	}
 	switch strings.ToLower(strings.TrimSpace(RequestAuthMode)) {
 	case "none", "off", "disabled":
