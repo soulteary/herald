@@ -92,6 +92,63 @@ func TestStore_RetryAfterFail(t *testing.T) {
 	}
 }
 
+func TestStore_SendingSurvivesRestartAndCannotBeCleared(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rc.Close() })
+	s := NewStore(rc, "test:idem:", []byte("secret"), time.Minute)
+	ctx := context.Background()
+	_, owner, err := s.Begin(ctx, "p", "key", "fp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MarkSending(ctx, "p", "key", "fp", "stale-owner", "ch"); err != ErrOwnershipLost {
+		t.Fatalf("stale MarkSending: %v", err)
+	}
+	if err := s.MarkSending(ctx, "p", "key", "fp", owner, "ch"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Fail(ctx, "p", "key", "fp", owner); err != ErrDeliveryUnknown {
+		t.Fatalf("Fail after send: %v", err)
+	}
+	if err := s.Refresh(ctx, "p", "key", "fp", owner); err != nil {
+		t.Fatal(err)
+	}
+	if ttl := mr.TTL(s.redisKey("p", "key")); ttl != 0 {
+		t.Fatalf("sending TTL=%s, want no expiry", ttl)
+	}
+	mr.FastForward(24 * time.Hour)
+	restarted := NewStore(rc, "test:idem:", []byte("secret"), time.Minute)
+	if _, _, err := restarted.Begin(ctx, "p", "key", "fp"); err != ErrDeliveryUnknown {
+		t.Fatalf("restart Begin: %v", err)
+	}
+	if _, _, err := restarted.Begin(ctx, "p", "key", "changed"); err != ErrConflict {
+		t.Fatalf("changed request: %v", err)
+	}
+	var rec Record
+	raw, err := rc.Get(ctx, s.redisKey("p", "key")).Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &rec); err != nil {
+		t.Fatal(err)
+	}
+	if rec.ChallengeID != "ch" {
+		t.Fatalf("reconciliation challenge ID=%q", rec.ChallengeID)
+	}
+	response := json.RawMessage(`{"challenge_id":"ch"}`)
+	if err := s.Succeed(ctx, "p", "key", "fp", owner, response); err != nil {
+		t.Fatal(err)
+	}
+	replay, newOwner, err := restarted.Begin(ctx, "p", "key", "fp")
+	if err != nil || newOwner != "" || string(replay) != string(response) {
+		t.Fatalf("completion: replay=%s owner=%q err=%v", replay, newOwner, err)
+	}
+	if ttl := mr.TTL(s.redisKey("p", "key")); ttl != time.Minute {
+		t.Fatalf("success TTL=%s", ttl)
+	}
+}
+
 func TestStore_DifferentPrincipalsNoCollision(t *testing.T) {
 	s := newStore(t)
 	ctx := context.Background()

@@ -1116,8 +1116,8 @@ func TestHandlers_CreateChallenge_IdempotencyCacheError(t *testing.T) {
 		t.Fatalf("First request failed: status=%d, body=%s", resp1.StatusCode, string(body))
 	}
 
-	// Idempotency cache Set may fail, but request should still succeed
-	// The error is logged but doesn't fail the request
+	// A normal idempotent request succeeds. Redis completion failures are
+	// exercised by TestIdempotency_SuccessWriteFailureDoesNotResend.
 }
 
 func TestHandlers_CreateChallenge_Idempotency(t *testing.T) {

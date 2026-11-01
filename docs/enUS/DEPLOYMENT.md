@@ -79,7 +79,7 @@ If none are set, the service logs a warning and allows unauthenticated requests 
 | `LOCKOUT_DURATION` | Lockout duration (e.g. `10m`) | `10m` | No |
 | `RESEND_COOLDOWN` | Resend cooldown for same challenge | `60s` | No |
 | `CODE_LENGTH` | Verification code length (digits, minimum `4`; must also fit `HERALD_MAX_BODY_BYTES` after the compact context-bound V2 envelope, currently 136 bytes) | `6` | No |
-| `IDEMPOTENCY_KEY_TTL` | Idempotency key cache TTL; `0` = use `CHALLENGE_EXPIRY` | `0` | No |
+| `IDEMPOTENCY_KEY_TTL` | Pre-send claim and completed response TTL; unresolved sends do not expire; `0` = use `CHALLENGE_EXPIRY` | `0` | No |
 | `ALLOWED_PURPOSES` | Allowed purposes, comma-separated (e.g. `login,reset,bind,stepup`) | `login` | No |
 
 #### Rate limiting
@@ -223,8 +223,27 @@ For production deployments, it is **strongly recommended** to use a dedicated Re
 **Key Prefixes:**
 - `otp:ch:*` - Challenge data (TTL: challenge expiry time)
 - `otp:rate:*` - Rate limiting counters (TTL: rate limit window)
-- `otp:idem:*` - Idempotency records (TTL: idempotency key TTL)
+- `otp:idem2:*` - Idempotency records (pending/completed: configured TTL; unresolved sending: no expiry)
 - `otp:lock:*` - User lockout records (TTL: lockout duration)
+
+**Unresolved sends:**
+
+Use persistent Redis storage and a `noeviction` policy for idempotency records.
+An acknowledged write must survive for as long as retries need to be suppressed;
+Herald cannot prevent duplicates after Redis loses or evicts that write. Choose
+Redis persistence and failover settings for the durability your deployment needs.
+Do not flush the database or rotate `HERALD_IDEMPOTENCY_SECRET` while unresolved
+records or retries remain: changing the derived key would bypass an old record.
+
+A `sending` record has no TTL and includes `challenge_id` for reconciliation.
+Monitor `delivery_unknown` idempotency outcomes and the number of unresolved
+records. Check provider delivery logs using that challenge ID (also the provider
+idempotency key) before an administrator resolves the record. Do not automatically
+expire or delete these records: the original request may still be running, or
+its message may already have been delivered. Establish a separate, explicit
+business decision for any replacement send. Unresolved records consume storage
+until reconciled, including crashes between persisting the record and sending.
+This is an at-most-once send attempt for an unresolved key, not guaranteed delivery.
 
 **Capacity Planning:**
 

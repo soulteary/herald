@@ -81,11 +81,17 @@ c, _ := herald.NewClient(herald.DefaultOptions().
 - 在 `POST /v1/otp/challenges` 上携带 `Idempotency-Key`。
 - 键**按 principal 命名空间隔离**（由 key-id/service/api-key 派生），不同调用方
   即便使用相同的客户端键也不会冲突。
-- 首个请求**原子占位**（`SET NX`）。相同 body 的并发重复请求会等待/重放，最终
-  **仅触发一次** Provider 发送。
+- 首个请求**原子占位**（`SET NX`）。发送前相同 body 的并发请求返回
+  `409/idempotency_in_flight`，已完成请求在 TTL 内重放响应。
 - 相同键 + **不同 body** → `409 Conflict`。
 - 成功后精确响应会被存储，并在重试时**原样重放**。
-- 幂等后端不可用 → `503`（失败关闭），绝不重复发送。
+- 调用渠道前将占位记录转为不自动过期的 `sending` 状态。进程退出或发送后结果不确定时，
+  同一键返回 `409/delivery_unknown`，不能因 TTL 到期而重新发送。发送前的失败仍可释放或
+  等待占位记录过期。
+- 最终成功记录写入失败返回 `503/backend_unavailable`；若写入已提交但确认丢失，重试会重放。
+- 渠道报错（包括 strict 模式）也保留发送记录，以牺牲自动恢复来避免重复发送。
+  运维需核对不确定记录，不能直接删除记录或更换键重发。Redis 数据丢失、淘汰记录或更换
+  密钥等操作会破坏此保障；正常成功响应仍按 TTL 过期。
 
 ---
 
@@ -154,7 +160,7 @@ c, _ := herald.NewClient(herald.DefaultOptions().
   SDK 期间保持旧客户端可用。
 - 若需临时接受旧 HMAC v1 客户端，设 `HMAC_V1_ENABLED=true`（不建议长期启用，
   其无重放保护）。
-- Redis 键为增量式（`otp:nonce:*`、`otp:idem:*`）；回滚二进制后残留键将按 TTL
+- Redis 键为增量式（`otp:nonce:*`、`otp:idem2:*`）；不确定的 `sending` 记录不会自动过期，回滚时也需保留并核对。其他键按 TTL
   过期，无需破坏性迁移。
 
 ---

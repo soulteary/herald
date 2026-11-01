@@ -74,7 +74,21 @@ Check service health. This endpoint also verifies Redis connectivity.
 Create a new verification challenge and send verification code.
 
 **Headers:**
-- `Idempotency-Key` (optional): A unique key to ensure idempotent requests. If provided, duplicate requests with the same key within the TTL will return the same challenge response without creating a new challenge or sending a new code.
+- `Idempotency-Key` (optional): Reuse this key with the same request when retrying. Completed requests replay their response within `IDEMPOTENCY_KEY_TTL`; pre-send concurrent requests return `409/idempotency_in_flight`. Once sending starts, an incomplete request returns `409/delivery_unknown` rather than sending again, even after the TTL. A different request with the same key returns `409/idempotency_conflict`.
+
+Before calling the provider, Herald persists a non-expiring send record. If the
+process exits, the provider reports an uncertain result, or a later Redis write
+fails, that record prevents retries from sending another code. A failed final
+success write returns `503/backend_unavailable`. Retry with the same key: a
+committed result replays, while an unresolved send returns `delivery_unknown`.
+Do not automatically switch to a new key on that response; reconcile delivery
+with the provider first. A crash immediately before the provider call may also
+leave an unresolved record even though nothing was sent.
+
+This protection requires an `Idempotency-Key` and retention of the Redis record.
+It does not make the provider and Redis a distributed transaction. A completed
+response expires after the configured TTL; using its key after that TTL starts
+a new request. See the deployment guide for persistence and reconciliation.
 
 **Request:**
 ```json

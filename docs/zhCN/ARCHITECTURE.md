@@ -79,7 +79,7 @@ flowchart LR
 
 - **Challenge 数据**：`otp:ch:*` — challenge 载荷、验证码哈希、TTL、尝试次数。
 - **限流**：`otp:rate:*` — 按用户、IP、destination 限流。
-- **幂等**：`otp:idem:*` — 幂等键 → 缓存的 challenge 响应。
+- **幂等**：`otp:idem2:*` — 发送前占位、不自动过期的发送记录或缓存的 challenge 响应。
 
 ## 安全边界
 

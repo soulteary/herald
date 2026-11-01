@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/redis/go-redis/v9"
 	provider "github.com/soulteary/provider-kit"
 
 	"github.com/soulteary/herald/internal/config"
@@ -32,7 +33,7 @@ func (p *countingProvider) Channel() provider.Channel { return p.channel }
 func (p *countingProvider) Name() string              { return "counting" }
 func (p *countingProvider) Validate() error           { return nil }
 
-func newIdemApp(t *testing.T) (*fiber.App, *countingProvider) {
+func newIdemHandlers(t *testing.T, rc *redis.Client) *Handlers {
 	t.Helper()
 	config.CodeLength = 6
 	config.MaxAttempts = 5
@@ -45,12 +46,18 @@ func newIdemApp(t *testing.T) (*fiber.App, *countingProvider) {
 	config.ProviderFailurePolicy = "strict"
 	config.IdempotencySecret = "test-idem-secret"
 
-	rc := testRedisClient(t)
-	t.Cleanup(func() { _ = rc.Close() })
 	h, err := NewHandlersWithError(rc, testLogger())
 	if err != nil {
 		t.Fatalf("NewHandlersWithError: %v", err)
 	}
+	return h
+}
+
+func newIdemApp(t *testing.T) (*fiber.App, *countingProvider) {
+	t.Helper()
+	rc := testRedisClient(t)
+	t.Cleanup(func() { _ = rc.Close() })
+	h := newIdemHandlers(t, rc)
 	cp := &countingProvider{channel: provider.ChannelEmail}
 	// Replace the registry with one that only has our counting provider.
 	reg := provider.NewRegistry()

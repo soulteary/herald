@@ -79,7 +79,7 @@ flowchart LR
 
 - **Challenge data**: `otp:ch:*` — challenge payload, code hash, TTL, attempts.
 - **Rate limits**: `otp:rate:*` — per user, per IP, per destination.
-- **Idempotency**: `otp:idem:*` — idempotency key → cached challenge response.
+- **Idempotency**: `otp:idem2:*` — pre-send claim, non-expiring send record, or cached challenge response.
 
 ## Security Boundaries
 
