@@ -8,6 +8,8 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"hash"
+	"sync"
 )
 
 // Digester computes stable, non-reversible digests of PII using an HMAC keyed
@@ -16,13 +18,31 @@ import (
 // from Redis or exported metrics.
 type Digester struct {
 	pepper []byte
+	pool   sync.Pool
 }
 
-// NewDigester creates a Digester. An empty pepper is allowed (it degrades to a
-// plain, unkeyed SHA-256) but callers SHOULD supply a non-empty pepper in
+type digestState struct {
+	mac       hash.Hash
+	sum       [sha256.Size]byte
+	encoded   [sha256.Size * 2]byte
+	separator [1]byte
+}
+
+func (d *Digester) acquire() *digestState {
+	if cached := d.pool.Get(); cached != nil {
+		state := cached.(*digestState)
+		state.mac.Reset()
+		return state
+	}
+	return &digestState{mac: hmac.New(sha256.New, d.pepper)}
+}
+
+// NewDigester creates a Digester and copies its pepper. A Digester must not
+// be copied after first use. An empty pepper is allowed (it uses HMAC-SHA256 with
+// an empty key) but callers SHOULD supply a non-empty pepper in
 // production; config.Validate enforces this at startup.
 func NewDigester(pepper []byte) *Digester {
-	return &Digester{pepper: pepper}
+	return &Digester{pepper: append([]byte(nil), pepper...)}
 }
 
 // Digest returns a hex-encoded, peppered digest of the given value. Empty input
@@ -32,18 +52,26 @@ func (d *Digester) Digest(value string) string {
 	if value == "" {
 		return ""
 	}
-	mac := hmac.New(sha256.New, d.pepper)
+	state := d.acquire()
+	mac := state.mac
 	_, _ = mac.Write([]byte(value))
-	return hex.EncodeToString(mac.Sum(nil))
+	hex.Encode(state.encoded[:], mac.Sum(state.sum[:0]))
+	out := string(state.encoded[:])
+	d.pool.Put(state)
+	return out
 }
 
 // DigestParts returns a peppered digest over multiple parts with an unambiguous
 // separator so ("a","bc") and ("ab","c") do not collide.
 func (d *Digester) DigestParts(parts ...string) string {
-	mac := hmac.New(sha256.New, d.pepper)
+	state := d.acquire()
+	mac := state.mac
 	for _, p := range parts {
 		_, _ = mac.Write([]byte(p))
-		_, _ = mac.Write([]byte{0})
+		_, _ = mac.Write(state.separator[:])
 	}
-	return hex.EncodeToString(mac.Sum(nil))
+	hex.Encode(state.encoded[:], mac.Sum(state.sum[:0]))
+	out := string(state.encoded[:])
+	d.pool.Put(state)
+	return out
 }

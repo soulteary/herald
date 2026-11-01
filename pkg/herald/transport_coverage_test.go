@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -101,5 +102,22 @@ func TestSDKDefaultsAndConstructionFailures(t *testing.T) {
 	}
 	if _, e = c.CreateChallenge(context.WithValue(context.Background(), IdempotencyKeyContextKey, "existing-key"), &CreateChallengeRequest{}); e != nil {
 		t.Fatal(e)
+	}
+}
+
+func TestSDKRejectsNilRequestContext(t *testing.T) {
+	c, err := NewClient(DefaultOptions().WithBaseURL("https://example.com"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, call := range sdkErrorCalls(c, nil) {
+		t.Run(name, func(t *testing.T) {
+			if err := call(); err == nil || !strings.Contains(err.Error(), "failed to create request") {
+				t.Fatalf("invalid context: %v", err)
+			}
+		})
+	}
+	if _, err := c.RevokeChallenge(context.Background(), ""); err == nil {
+		t.Fatal("empty challenge ID accepted")
 	}
 }

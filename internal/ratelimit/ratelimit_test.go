@@ -333,3 +333,29 @@ func TestManager_CheckResendCooldown_RedisError(t *testing.T) {
 		t.Error("CheckResendCooldown() should not allow when Redis fails")
 	}
 }
+
+func TestSpecificRateLimitsFailOnClosedRedis(t *testing.T) {
+	rc := testRedisClient(t)
+	_ = rc.Close()
+	m := NewManager(rc)
+	for name, call := range map[string]func() error{
+		"user": func() error {
+			_, _, _, err := m.CheckUserRateLimit(context.Background(), "u", 10, time.Minute)
+			return err
+		},
+		"IP": func() error {
+			_, _, _, err := m.CheckIPRateLimit(context.Background(), "127.0.0.1", 10, time.Minute)
+			return err
+		},
+		"destination": func() error {
+			_, _, _, err := m.CheckDestinationRateLimit(context.Background(), "digest", 10, time.Minute)
+			return err
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := call(); err == nil {
+				t.Fatal("closed backend accepted rate limit check")
+			}
+		})
+	}
+}
