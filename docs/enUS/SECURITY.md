@@ -323,6 +323,20 @@ Use HMAC-SHA256 signatures with timestamp validation for secure inter-service co
 
 API Key authentication is suitable for development but not recommended for production inter-service communication.
 
+## Provider failure diagnostics
+
+Provider error messages can echo OTP message bodies, destinations or credentials.
+Herald records only known provider reason codes in delivery-failure logs, span
+status and exception events, and audit failure records. Unknown reason codes map
+to `send_failed`; deadline failures remain classified as `timeout`. Log consumers
+should use the `reason` field rather than the former free-text `error` field.
+
+This changes diagnostics only. Client responses, strict-policy revocation and
+idempotency `delivery_unknown` handling are unchanged. No Redis record migration
+or client update is needed. Existing logs and exported spans are not rewritten;
+review access and retention for historical diagnostics if a provider previously
+echoed sensitive data, and rotate any credentials exposed there.
+
 ## Related Documentation
 
 - [API Documentation](API.md) - Learn about API security features and authentication
