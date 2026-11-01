@@ -134,6 +134,12 @@ func newHealthcheckClient() (string, *http.Client, error) {
 // (instead of calling log.Fatal deep in the stack) keeps startup failures
 // testable and shutdown ordering in one place.
 func run() error {
+	return runWithContext(context.Background())
+}
+
+// runWithContext permits an embedding caller or test to request shutdown while
+// retaining the process signal handling used by the executable.
+func runWithContext(parent context.Context) error {
 	// Display startup banner
 	showBanner()
 
@@ -206,7 +212,7 @@ func run() error {
 		log.Info().Str("port", port).Msg("Herald service starting")
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	if routerWithHandlers.TestApp != nil {
