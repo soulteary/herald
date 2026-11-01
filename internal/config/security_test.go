@@ -45,3 +45,20 @@ func TestValidateProductionSecretMaterialRejectsShortSecrets(t *testing.T) {
 		t.Fatalf("got %d secret-strength problems, want 2: %v", len(got), got)
 	}
 }
+
+func TestHashWorkBudgetMustBePositive(t *testing.T) {
+	old := MaxConcurrentHashOperations
+	defer func() { MaxConcurrentHashOperations = old }()
+	for _, limit := range []int{0, -1, 4} {
+		MaxConcurrentHashOperations = limit
+		found := false
+		for _, problem := range strictHTTPProblems() {
+			if problem == "HERALD_MAX_CONCURRENT_HASH_OPERATIONS must be positive" {
+				found = true
+			}
+		}
+		if found != (limit <= 0) {
+			t.Fatalf("limit %d: invalid budget detected=%v", limit, found)
+		}
+	}
+}

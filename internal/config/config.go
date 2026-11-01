@@ -105,6 +105,9 @@ var (
 	// API Key for service-to-service authentication
 	APIKey = env.Get("API_KEY", "")
 
+	// Hash work budget shared by creation and both verification routes.
+	MaxConcurrentHashOperations = env.GetInt("HERALD_MAX_CONCURRENT_HASH_OPERATIONS", 4)
+
 	// Challenge config
 	ChallengeExpiry   = env.GetDuration("CHALLENGE_EXPIRY", 5*time.Minute)
 	MaxAttempts       = env.GetInt("MAX_ATTEMPTS", 5)

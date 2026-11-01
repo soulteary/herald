@@ -346,3 +346,12 @@ echoed sensitive data, and rotate any credentials exposed there.
 Test-only exception: `ENVIRONMENT=test` plus `HERALD_TEST_MODE=true` stores
 plaintext codes in the test-code cache and exposes them through the guarded test
 listener and `debug_code`. Production rejects this mode.
+
+## Hash resource limits
+
+Per-user, IP and destination rate limits do not cap aggregate concurrent Argon2
+work across distinct identities and destinations. The shared OTP admission budget
+also limits creation, which previously had no global work cap. This protects
+against memory exhaustion when authenticated traffic is otherwise within the
+configured rate limits. It is not a replacement for those limits or for process
+resource limits. See [deployment](DEPLOYMENT.md#otp-hash-work-admission).

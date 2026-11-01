@@ -88,6 +88,7 @@ If none are set, the service logs a warning and allows unauthenticated requests 
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
+| `HERALD_MAX_CONCURRENT_HASH_OPERATIONS` | Shared creation/v1/v2 verification admission budget per handler instance; positive integer | `4` | No |
 | `CHALLENGE_EXPIRY` | Challenge expiry (e.g. `5m`, `300s`) | `5m` | No |
 | `MAX_ATTEMPTS` | Max verify failures per challenge before lockout | `5` | No |
 | `LOCKOUT_DURATION` | Lockout duration (e.g. `10m`) | `10m` | No |
@@ -385,3 +386,26 @@ message. Span status and exception events use the same safe reason. Do not
 enable raw provider-body logging to investigate failures. Review historical
 logs and exported spans for echoed sensitive data and rotate exposed credentials.
 See [security](SECURITY.md#provider-failure-diagnostics) for compatibility details.
+
+## OTP hash work admission
+
+`HERALD_MAX_CONCURRENT_HASH_OPERATIONS` defaults to 4 and must be positive.
+Earlier releases allowed up to 16 independent verifications while leaving
+creation unbounded. The combined default changes burst admission, not code
+validity. Creation and both OTP verification routes share this budget within the normal
+single-handler service instance. It is local to each instance, not shared across
+replicas. It does not change Argon2 parameters or apply to the TOTP proxy.
+
+Each current Argon2 operation uses about 64 MiB. Size the budget for available
+memory and CPU, including garbage collection and other process overhead; this
+is not a hard RSS limit. Excess requests are rejected without queueing with
+`503/backend_unavailable` and `Retry-After: 1`. Creation admission precedes rate
+and cooldown mutation; the pre-send idempotency claim is released when Redis is
+available. Completed idempotency responses remain replayable while capacity is
+full. Rejected verifications do not consume codes or increment their attempts.
+
+A contended verification lock gets one immediate attempt and returns the existing
+retryable `409/lock_contention` result rather than polling while holding this budget.
+Provider delivery starts after the creation slot is released, so a slow provider
+does not reserve hash capacity. Retry with the same idempotency key and a fresh
+HMAC timestamp/nonce. Existing Redis records and client signatures are unchanged.
