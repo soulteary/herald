@@ -201,6 +201,38 @@ HTTP Status Codes:
 - `403 Forbidden`: User locked
 - `500 Internal Server Error`: Internal server error
 
+### Verify Challenge with Context (v2)
+
+**POST /v2/otp/verifications**
+
+All three context fields are required and must be non-blank strings:
+
+```json
+{
+  "challenge_id": "ch_example",
+  "code": "123456",
+  "expected_user_id": "u_123",
+  "expected_purpose": "login",
+  "expected_channel": "email"
+}
+```
+
+Derive the expected user, purpose, and channel from trusted application state.
+Do not forward these fields directly from an end user's request. Request
+signature authentication identifies the calling service; it does not establish
+which user or operation that service should authorize.
+
+Missing, null, empty, or whitespace-only context fields return
+`400/context_required` before verification. A supplied context that differs from
+the challenge returns `409/context_mismatch` without consuming the code. On
+success, the response includes `ok`, `user_id`, `purpose`, `channel`,
+`challenge_id`, `amr`, `verified_at`, and `issued_at`. A successful verification
+consumes the challenge.
+
+Compatibility: v2 no longer accepts unbound or partially bound requests. Update
+existing v2 callers to supply all three fields. The v1 verification endpoint
+retains its existing behavior and does not require expected context fields.
+
 ### Revoke Challenge
 
 **POST /v1/otp/challenges/{id}/revoke**

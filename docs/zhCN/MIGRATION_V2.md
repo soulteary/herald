@@ -164,3 +164,11 @@ c, _ := herald.NewClient(herald.DefaultOptions().
 以下本地化文档**未**随本次发布更新，在重译前可能不准确：`docs/deDE`、
 `docs/frFR`、`docs/itIT`、`docs/jaJP`、`docs/koKR`。请优先参考 `docs/enUS`
 与 `docs/zhCN`。
+
+## v2 OTP 验证的必填上下文
+
+`POST /v2/otp/verifications` 现在要求同时提供非空白的 `expected_user_id`、
+`expected_purpose` 和 `expected_channel`。此前省略字段或传空串会跳过对应绑定校验。
+缺少上下文现在返回 `400/context_required`，上下文不匹配返回 `409/context_mismatch`，
+两种拒绝均不消费 challenge。升级前，请让现有 v2 调用方从业务后端可信状态中补齐三个值。
+v1 验证接口保留原有的无上下文绑定语义。

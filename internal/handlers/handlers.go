@@ -887,7 +887,7 @@ func (h *Handlers) VerifyChallenge(c fiber.Ctx) error {
 }
 
 // VerifyChallengeV2Request is the /v2/otp/verifications request. It adds
-// explicit context binding: the caller states the purpose/user/channel it
+// required context binding: the caller states the purpose/user/channel it
 // expects the challenge to have been minted for, and the server enforces it
 // atomically inside the verification lock before consuming the code.
 type VerifyChallengeV2Request struct {
@@ -924,6 +924,15 @@ func (h *Handlers) VerifyChallengeV2(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "invalid_code_format",
+		})
+	}
+
+	if strings.TrimSpace(req.ExpectedUserID) == "" ||
+		strings.TrimSpace(req.ExpectedPurpose) == "" ||
+		strings.TrimSpace(req.ExpectedChannel) == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "context_required",
 		})
 	}
 

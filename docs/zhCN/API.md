@@ -201,6 +201,33 @@ HTTP 状态代码：
 - `403 Forbidden`：用户被锁定
 - `500 Internal Server Error`：内部服务器错误
 
+### 带上下文验证挑战（v2）
+
+**POST /v2/otp/verifications**
+
+以下三个上下文字段均为必填，且必须是非空白字符串：
+
+```json
+{
+  "challenge_id": "ch_example",
+  "code": "123456",
+  "expected_user_id": "u_123",
+  "expected_purpose": "login",
+  "expected_channel": "email"
+}
+```
+
+预期用户、用途和渠道必须来自业务后端的可信状态，不能直接转发终端用户传入的值。
+请求签名只能认证调用服务，不能代替该服务对用户和操作的业务授权。
+
+缺少字段、传入 null、空串或纯空白时，在验证验证码之前返回 `400/context_required`。
+上下文与 challenge 不匹配时返回 `409/context_mismatch`，且不消费验证码。
+成功响应包含 `ok`、`user_id`、`purpose`、`channel`、`challenge_id`、`amr`、
+`verified_at` 和 `issued_at`；成功验证后 challenge 不能再次使用。
+
+兼容性：v2 不再接受无绑定或部分绑定的请求，现有 v2 调用方需要补齐三个字段。
+v1 验证接口保留原有行为，不要求传入预期上下文字段。
+
 ### 撤销挑战
 
 **POST /v1/otp/challenges/{id}/revoke**

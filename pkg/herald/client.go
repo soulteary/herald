@@ -325,14 +325,15 @@ type VerifyChallengeResponse struct {
 }
 
 // VerifyChallengeV2Request binds verification to the expected challenge
-// context, preventing a valid code from being used for a different flow.
+// context. ExpectedUserID, ExpectedPurpose, and ExpectedChannel are required.
+// Derive them from trusted application state, not end-user input.
 type VerifyChallengeV2Request struct {
 	ChallengeID     string `json:"challenge_id"`
 	Code            string `json:"code"`
 	ClientIP        string `json:"client_ip,omitempty"`
-	ExpectedUserID  string `json:"expected_user_id,omitempty"`
-	ExpectedPurpose string `json:"expected_purpose,omitempty"`
-	ExpectedChannel string `json:"expected_channel,omitempty"`
+	ExpectedUserID  string `json:"expected_user_id"`
+	ExpectedPurpose string `json:"expected_purpose"`
+	ExpectedChannel string `json:"expected_channel"`
 }
 
 // VerifyChallengeV2Response is returned by /v2/otp/verifications.
