@@ -479,11 +479,16 @@ HMAC/API Key 失败会返回 JSON `reason`：
 
 ## HMAC 身份与旧幂等记录
 
+仅配置 `HMAC_SECRET` 时，省略 `X-Key-Id` 或精确填写 `default`。其他 ID 在消费 nonce
+及进入 handler 前返回 `401/invalid_key_id`，单密钥不再隐式授权任意 ID。HMAC v2/v3
+签名格式不变。自定义 ID 必须显式配置于 `HERALD_HMAC_KEYS`；迁移时不能直接改名或
+将不确定的发送换身份重试，详见部署升级要求。
+
 幂等身份现在使用已签名服务标识和实际参与 HMAC 验签的密钥 ID。省略 `X-Key-Id` 与显式填写
 默认 ID 使用同一记录。签名不变：省略请求头时，canonical 的 Key ID 行仍必须为空，
 无需新的 HMAC 版本或 SDK API。
 
-已有显式 Key ID 记录的键名、内容、所有权和 TTL 保持不变。旧的空 Key ID 记录未保存原凭据，
+已有显式 Key ID 记录的键名、内容、所有权和 TTL 保持不变；重放要求该 ID 仍被授权。旧的空 Key ID 记录未保存原凭据，
 无法确定当时使用的是哪把默认密钥。相同服务和客户端幂等键存在此记录时，在哈希、限流/冷却
 写入和发送前返回 `409/idempotency_namespace_conflict`；即使指纹相同，也不复制、重放或删除。
 所有已验签 Key ID 均执行此保护，避免默认密钥轮换后将旧响应暴露给另一凭据。API Key 和

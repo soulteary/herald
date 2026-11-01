@@ -428,3 +428,29 @@ continue normally when there is no conflicting legacy record.
 Older releases cannot enforce this guard. Before rollback, keep creation disabled
 until affected records and caller identities have been reconciled, and do not
 resume implicit-key callers on old code. See [API](API.md#hmac-identity-and-legacy-idempotency-records).
+
+### Single-secret key-ID allowlist
+
+Only the implicit `default` identity is authorized by `HMAC_SECRET`. Previously,
+any explicit ID selected that secret and created a separate nonce/idempotency
+namespace. Unknown IDs now fail with `401/invalid_key_id`.
+
+Before resuming creation, inventory historical explicit IDs and reconcile their
+unresolved sends using provider and audit evidence. Redis idempotency keys are
+opaque and cannot be reassigned automatically. Preserve all records, the
+idempotency derivation secret, and nonce prefix. Do not delete sending records
+or switch caller IDs/client idempotency keys to force a retry.
+
+To retain a known custom ID, explicitly provision it in `HERALD_HMAC_KEYS` and
+keep the caller ID unchanged. If multiple IDs intentionally share one secret,
+they remain distinct configured identities: callers must not rotate between them
+to retry a send. Keep `default` explicitly provisioned if existing callers use
+it, and configure the map default deliberately. A production key-map deployment
+requires `HERALD_IDEMPOTENCY_SECRET`; set it to the previous effective value to
+preserve records, rather than generating a new value.
+
+Replace all instances while creation is paused. Older versions accept arbitrary
+IDs again; during rollback keep creation disabled until affected identities and
+records are reconciled and an external allowlist enforces the same restriction.
+The earlier empty-key-ID guard remains in effect, and no record is migrated or
+deleted by this fix.

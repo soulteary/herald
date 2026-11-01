@@ -67,8 +67,11 @@ func TestInitializeInvalidKeyMapUsesConfiguredSingleSecret(t *testing.T) {
 	if err := Initialize(logger.New(logger.Config{Level: logger.ErrorLevel})); err != nil {
 		t.Fatal(err)
 	}
-	if got := GetHMACSecret("unknown"); got != HMACSecret {
+	if got := GetHMACSecret("default"); got != HMACSecret {
 		t.Fatal("single-secret fallback unavailable")
+	}
+	if GetHMACSecret("unknown") != "" {
+		t.Fatal("invalid key map must not allow arbitrary single-secret aliases")
 	}
 }
 

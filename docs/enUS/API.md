@@ -521,12 +521,20 @@ See [deployment](DEPLOYMENT.md#otp-hash-work-admission) for sizing and retry rul
 
 ## HMAC identity and legacy idempotency records
 
+With only `HMAC_SECRET` configured, omit `X-Key-Id` or send exactly `default`.
+Other IDs return `401/invalid_key_id` before nonce consumption or handler side
+effects. A single secret no longer implicitly authorizes arbitrary IDs. HMAC
+v2/v3 signing is unchanged. Custom IDs require an explicit `HERALD_HMAC_KEYS`
+entry; do not rename an existing caller or retry an uncertain send under another
+identity during migration. See the deployment upgrade requirements below.
+
 Idempotency uses the signed service and the actual key ID selected for HMAC
 verification. Omitting `X-Key-Id` and explicitly sending that default ID now use
 the same record. This does not change the signature: an omitted wire header still
 has an empty canonical key-ID line. No HMAC version or SDK API change is required.
 
-Existing explicit-key records retain their keys, contents, ownership and TTLs.
+Existing explicit-key records retain their keys, contents, ownership and TTLs;
+replaying them requires that the key ID remains authorized.
 Old empty-key-ID records do not identify the credential that originally used a
 possibly rotated default. When such a record exists for the same service and
 client key, creation returns `409/idempotency_namespace_conflict` before hashing,
