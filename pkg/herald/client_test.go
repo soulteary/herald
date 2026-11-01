@@ -35,7 +35,7 @@ func TestOptionsValidate(t *testing.T) {
 	assert.Error(t, (&Options{BaseURL: "ftp://example.com"}).Validate())
 	assert.Error(t, (&Options{BaseURL: "not-a-url"}).Validate())
 	assert.Error(t, (&Options{BaseURL: "https://example.com", TLSClientCert: "cert.pem"}).Validate())
-	assert.Error(t, (&Options{BaseURL: "https://example.com", SignatureVersion: "v3"}).Validate())
+	assert.Error(t, (&Options{BaseURL: "https://example.com", SignatureVersion: "v4"}).Validate())
 	assert.Error(t, (&Options{BaseURL: "https://example.com", MaxResponseBytes: -1}).Validate())
 }
 
@@ -237,9 +237,9 @@ func TestCreateChallenge_Success(t *testing.T) {
 		bodyBytes, err := io.ReadAll(r.Body)
 		assert.NoError(t, err)
 
-		// NewClient defaults to HMAC v2: verify replay-resistant headers and the
+		// NewClient defaults to HMAC v3: verify replay-resistant headers and the
 		// canonical signature binding.
-		assert.Equal(t, "v2", r.Header.Get("X-Signature-Version"))
+		assert.Equal(t, "v3", r.Header.Get("X-Signature-Version"))
 		timestamp := r.Header.Get("X-Timestamp")
 		service := r.Header.Get("X-Service")
 		nonce := r.Header.Get("X-Nonce")
@@ -248,8 +248,8 @@ func TestCreateChallenge_Success(t *testing.T) {
 		assert.NotEmpty(t, timestamp)
 		assert.NotEmpty(t, nonce)
 
-		expectedSig := (&Client{hmacSecret: "hmac-secret"}).computeHMACv2(
-			r.Method, r.URL.Path, r.URL.RawQuery, timestamp, nonce, service, r.Header.Get("X-Key-Id"), bodyBytes)
+		expectedSig := (&Client{hmacSecret: "hmac-secret"}).computeHMACCanonical(
+			r.Method, r.URL.Path, r.URL.RawQuery, timestamp, nonce, service, r.Header.Get("X-Key-Id"), r.Header.Get("Idempotency-Key"), bodyBytes, true)
 		assert.Equal(t, expectedSig, signature)
 
 		var got CreateChallengeRequest

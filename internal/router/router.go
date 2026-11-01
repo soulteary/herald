@@ -357,7 +357,7 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 
 	// Auth middleware enforces nonce retention from its effective MaxDrift.
 	nonceStore := auth.NewNonceStore(redisClient, config.NonceStorePrefix, []byte(config.IdempotencySecret), 0)
-	authHandler := auth.New(auth.Config{
+	authConfig := auth.Config{
 		Mode:         authMode,
 		KeyProvider:  config.GetHMACSecret,
 		DefaultKeyID: defaultKeyID,
@@ -368,11 +368,17 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 		V1Handler:    v1Handler,
 		FailClosed:   config.IsProduction(),
 		Logger:       &zerologLogger,
-	})
+	}
+	authHandler := auth.New(authConfig)
+	// All HMAC creation requests require v3, even without a key. Otherwise
+	// stripping an unsigned key from a v2 request would bypass the binding.
+	createAuthConfig := authConfig
+	createAuthConfig.RequireV3 = true
+	createAuthHandler := auth.New(createAuthConfig)
 
 	// OTP routes
 	otp := api.Group("/otp")
-	otp.Post("/challenges", authHandler, h.CreateChallenge)
+	otp.Post("/challenges", createAuthHandler, h.CreateChallenge)
 	otp.Post("/verifications", authHandler, h.VerifyChallenge)
 	otp.Post("/challenges/:id/revoke", authHandler, h.RevokeChallenge)
 

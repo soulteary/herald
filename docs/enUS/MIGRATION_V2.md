@@ -1,5 +1,10 @@
 # Herald v2 Migration & Security Hardening Guide (enUS)
 
+> Current security update: the Go SDK now defaults to HMAC v3. Challenge creation
+> requires v3, including requests without an idempotency key. The historical v2
+> canonical format below is retained for compatible verification routes only.
+> Coordinate server/client upgrades; see [API authentication](API.md#hmac-v3).
+
 This document describes the breaking changes introduced by the security-hardening
 release, how to migrate, and how to roll back. It is the authoritative source for
 the v1 → v2 authentication change, idempotency/concurrency semantics, provider
@@ -69,7 +74,7 @@ request only in non-production.
 
 ### 1.6 SDK
 
-The Go SDK signs v2 by default. Set the key id and (optionally) a fixed clock/
+The Go SDK now signs v3 by default. Set the key id and (optionally) a fixed clock/
 nonce for tests:
 
 ```go
@@ -77,7 +82,8 @@ c, _ := herald.NewClient(herald.DefaultOptions().
     WithBaseURL(base).
     WithHMACSecret(secret).
     WithKeyID("primary"))
-// v2 is the default SignatureVersion; use WithSignatureVersion(herald.SignatureV1)
+// v3 is the default SignatureVersion; older versions are for compatible routes only.
+// Use WithSignatureVersion(herald.SignatureV1)
 // only when talking to a legacy server with HMAC_V1_ENABLED=true.
 ```
 

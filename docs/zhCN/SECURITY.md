@@ -129,12 +129,16 @@ Herald 分别配置传输层认证和请求层认证：
    - `REQUEST_AUTH_MODE=api_key`：通过 `X-API-Key` 或 `Authorization: Bearer ...` 传递 API Key
    - `REQUEST_AUTH_MODE=none`：仅限开发；生产环境会拒绝启动
 
-### HMAC v2 认证
+### HMAC v3 认证
 
-HMAC v2 对完整的请求形态和正文摘要进行签名：
+创建验证码时即使没有幂等键也必须使用 v3，防止删除请求头后退回旧签名。
+修改、添加或删除幂等键都会使签名失效，且不会消费 nonce。旧 HMAC 调用方需要升级；
+其他验证接口保留 v2 兼容性。完整签名格式和升级规则见 [API 认证](API.md#hmac-v3)。
+
+HMAC v3 对请求形态、幂等键摘要和正文摘要进行签名：
 
 ```text
-HERALD-HMAC-V2
+HERALD-HMAC-V3
 METHOD
 PATH
 QUERY
@@ -142,11 +146,12 @@ TIMESTAMP
 NONCE
 SERVICE
 KEY_ID
+SHA256_HEX(IDEMPOTENCY_KEY_OR_EMPTY)
 SHA256_HEX(RAW_BODY)
 ```
 
 **必需请求头**:
-- `X-Signature-Version: v2`
+- `X-Signature-Version: v3`
 - `X-Signature`：规范串的 HMAC-SHA256 小写十六进制值
 - `X-Timestamp`：Unix 秒级时间戳
 - `X-Nonce`：本次请求的唯一值

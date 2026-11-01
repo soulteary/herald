@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Bind the idempotency header (including its absence) in HMAC v3. HMAC challenge
+  creation requires v3 so changing or stripping the header cannot redirect a
+  signed request into another idempotency record and cause a duplicate send.
+  Go SDK signing defaults to v3. Older HMAC creation callers must upgrade;
+  v2 remains accepted on other routes. API key mode and Redis records are unchanged.
+
 - Reject `X-Service` and `X-Key-Id` values containing the reserved `|kid:`
   delimiter before authentication, nonce consumption, or business writes.
   Otherwise different service/key pairs could share an idempotency namespace

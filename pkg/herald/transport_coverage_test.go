@@ -85,7 +85,7 @@ func TestSDKDefaultsAndConstructionFailures(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if c.sigVersion != SignatureV2 || c.maxResponseBytes != defaultMaxResponseBytes || c.keyID != "key" {
+	if c.sigVersion != SignatureV3 || c.maxResponseBytes != defaultMaxResponseBytes || c.keyID != "key" {
 		t.Fatalf("defaults missing: %+v", c)
 	}
 	// A caller can pass an idempotency key through the documented context key.

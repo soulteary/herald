@@ -20,7 +20,7 @@ type KeyProvider func(keyID string) string
 type Mode string
 
 const (
-	// ModeHMACV2 requires a valid replay-resistant v2 signature.
+	// ModeHMACV2 selects HMAC authentication; v2/v3 acceptance is route-specific.
 	ModeHMACV2 Mode = "hmac_v2"
 	// ModeAPIKey requires a matching API key (no HMAC).
 	ModeAPIKey Mode = "api_key"
@@ -42,6 +42,9 @@ func ParseMode(s string) Mode {
 
 // Config configures the Herald auth middleware.
 type Config struct {
+	// RequireV3 rejects older HMAC schemes on routes whose side effects depend on idempotency.
+	RequireV3 bool
+
 	Mode Mode
 
 	// KeyProvider resolves HMAC secrets by key id (required for ModeHMACV2).
@@ -60,7 +63,7 @@ type Config struct {
 	MaxDrift time.Duration
 
 	// V1Enabled allows the legacy v1 fallback when a request explicitly selects
-	// it (no X-Signature-Version or version != v2) AND V1Handler is set.
+	// it (no recognized v2/v3 version) AND V1Handler is set.
 	V1Enabled bool
 	// V1Handler runs the legacy v1 verification (delegated to middleware-kit).
 	V1Handler fiber.Handler
@@ -143,10 +146,13 @@ func verifyAPIKey(c fiber.Ctx, cfg Config) error {
 
 func verifyHMACV2(c fiber.Ctx, cfg Config) error {
 	version := c.Get(HeaderSignatureVersion)
+	if cfg.RequireV3 && version != SignatureVersionV3 {
+		return deny(c, "signature_version_required")
+	}
 
 	// Legacy v1 selection: only when explicitly enabled AND the request does not
-	// claim v2. There is never a v2 -> v1 downgrade retry.
-	if version != SignatureVersionV2 {
+	// claim v2 or v3. Invalid recognized signatures never fall back to v1.
+	if version != SignatureVersionV2 && version != SignatureVersionV3 {
 		if cfg.V1Enabled && cfg.V1Handler != nil {
 			return cfg.V1Handler(c)
 		}
@@ -188,19 +194,26 @@ func verifyHMACV2(c fiber.Ctx, cfg Config) error {
 	}
 
 	canonical := CanonicalRequest{
-		Method:    c.Method(),
-		Path:      c.Path(),
-		Query:     string(c.Request().URI().QueryString()),
-		Timestamp: timestamp,
-		Nonce:     nonce,
-		Service:   service,
-		KeyID:     keyID,
-		Body:      c.Body(),
+		Method:         c.Method(),
+		Path:           c.Path(),
+		Query:          string(c.Request().URI().QueryString()),
+		Timestamp:      timestamp,
+		Nonce:          nonce,
+		Service:        service,
+		KeyID:          keyID,
+		IdempotencyKey: c.Get("Idempotency-Key"),
+		Body:           c.Body(),
 	}
 
 	// Verify the signature BEFORE consuming the nonce so a forged request cannot
 	// burn a legitimate nonce.
-	if !VerifyV2(secret, signature, canonical) {
+	valid := false
+	if version == SignatureVersionV3 {
+		valid = VerifyV3(secret, signature, canonical)
+	} else {
+		valid = VerifyV2(secret, signature, canonical)
+	}
+	if !valid {
 		return deny(c, "invalid_signature")
 	}
 

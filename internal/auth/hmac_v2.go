@@ -1,7 +1,7 @@
 // Package auth implements Herald's request authentication policy. It provides a
-// replay-resistant HMAC v2 scheme that binds the signature to the full request
-// (method, path, query, timestamp, nonce, service, key id, and a SHA-256 of the
-// raw body) and consumes a single-use nonce via Redis SET NX EX.
+// replay-resistant HMAC v2/v3 schemes binding method, path, query, timestamp,
+// nonce, service, key id, and the raw body digest. Version 3 also binds the
+// idempotency header. Each valid nonce is consumed once via Redis SET NX EX.
 //
 // Design goals (see security hardening plan, Phase 4):
 //   - v2 canonical string prevents cross-endpoint / cross-body replay.
@@ -25,6 +25,9 @@ import (
 // the v2 scheme.
 const SignatureVersionV2 = "v2"
 
+// SignatureVersionV3 binds idempotency in addition to the v2 fields.
+const SignatureVersionV3 = "v3"
+
 // canonicalPrefix is the domain-separation prefix for the v2 canonical string.
 const canonicalPrefix = "HERALD-HMAC-V2"
 
@@ -38,25 +41,32 @@ const (
 	HeaderKeyID            = "X-Key-Id"
 )
 
-// CanonicalRequest holds the fields bound into a v2 signature.
+// CanonicalRequest holds the fields bound into v2/v3 signatures.
 type CanonicalRequest struct {
-	Method    string
-	Path      string
-	Query     string
-	Timestamp string
-	Nonce     string
-	Service   string
-	KeyID     string
-	Body      []byte
+	Method         string
+	Path           string
+	Query          string
+	Timestamp      string
+	Nonce          string
+	Service        string
+	KeyID          string
+	IdempotencyKey string
+	Body           []byte
 }
 
 // Canonical returns the canonical string that is signed for v2. The raw body is
 // hashed (never included verbatim) so large bodies do not blow up the signed
 // material and binary bodies are handled safely.
-func (r CanonicalRequest) Canonical() string {
+func (r CanonicalRequest) Canonical() string { return r.canonical(canonicalPrefix, false) }
+
+// CanonicalV3 binds the idempotency header, including its absence. Hashing the
+// header keeps its bytes out of the newline-delimited field structure.
+func (r CanonicalRequest) CanonicalV3() string { return r.canonical("HERALD-HMAC-V3", true) }
+
+func (r CanonicalRequest) canonical(prefix string, bindIdempotency bool) string {
 	bodyHash := sha256.Sum256(r.Body)
 	var b strings.Builder
-	b.WriteString(canonicalPrefix)
+	b.WriteString(prefix)
 	b.WriteByte('\n')
 	b.WriteString(strings.ToUpper(r.Method))
 	b.WriteByte('\n')
@@ -72,6 +82,11 @@ func (r CanonicalRequest) Canonical() string {
 	b.WriteByte('\n')
 	b.WriteString(r.KeyID)
 	b.WriteByte('\n')
+	if bindIdempotency {
+		keyHash := sha256.Sum256([]byte(r.IdempotencyKey))
+		b.WriteString(hex.EncodeToString(keyHash[:]))
+		b.WriteByte('\n')
+	}
 	b.WriteString(hex.EncodeToString(bodyHash[:]))
 	return b.String()
 }
@@ -105,4 +120,16 @@ func TimestampWithinDrift(timestamp string, now time.Time, drift time.Duration) 
 	// seconds delta by time.Second, which can overflow time.Duration.
 	candidate := time.Unix(ts, 0)
 	return !candidate.Before(now.Add(-drift)) && !candidate.After(now.Add(drift))
+}
+
+// SignV3 signs the header-bound canonical request.
+func SignV3(secret string, r CanonicalRequest) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte(r.CanonicalV3()))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// VerifyV3 compares a v3 signature in constant time.
+func VerifyV3(secret, providedSig string, r CanonicalRequest) bool {
+	return hmac.Equal([]byte(providedSig), []byte(SignV3(secret, r)))
 }
