@@ -33,6 +33,7 @@ import (
 
 // Handlers contains all HTTP handlers
 type Handlers struct {
+	hashBudget       *hashBudget
 	challengeManager challengekit.ManagerInterface
 	rateLimitManager *ratelimit.Manager
 	providerRegistry *provider.Registry
@@ -88,7 +89,15 @@ func NewHandlers(redisClient *redis.Client, log *logger.Logger) *Handlers {
 // is configured but cannot be constructed/registered is treated as a
 // configuration failure rather than silently disabling that channel.
 func NewHandlersWithError(redisClient *redis.Client, log *logger.Logger) (*Handlers, error) {
+	hashWork, err := newHashBudget(config.MaxConcurrentHashOperations)
+	if err != nil {
+		return nil, err
+	}
 	challengeConfig := challengekit.Config{
+		MaxConcurrentVerifications: config.MaxConcurrentHashOperations,
+		// Do not poll a contended challenge lock while holding the shared budget.
+		// A positive expired deadline permits one immediate lock attempt.
+		VerifyLockWait:     time.Nanosecond,
 		Expiry:             config.ChallengeExpiry,
 		MaxAttempts:        config.MaxAttempts,
 		LockoutDuration:    config.LockoutDuration,
@@ -174,6 +183,7 @@ func NewHandlersWithError(redisClient *redis.Client, log *logger.Logger) (*Handl
 	}
 
 	return &Handlers{
+		hashBudget:       hashWork,
 		challengeManager: challengeMgr,
 		rateLimitManager: rateLimitMgr,
 		providerRegistry: registry,
@@ -273,28 +283,10 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 		h.releaseCreationClaim(spanCtx, principal, idempotencyKey, fingerprint, idempotencyOwner)
 	}
 
-	if allowed, err := h.checkCreationLimits(c, spanCtx, req, peerIP, failIdem); !allowed {
+	ch, code, handled, err := h.prepareChallenge(c, spanCtx, req, peerIP, failIdem)
+	if handled {
 		return err
 	}
-
-	// Check if user is locked
-	if h.challengeManager.IsUserLocked(spanCtx, req.UserID) {
-		failIdem()
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "user_locked",
-		})
-	}
-
-	// Create challenge
-	createReq := challengekit.CreateRequest{
-		UserID:      req.UserID,
-		Channel:     challengekit.Channel(req.Channel),
-		Destination: req.Destination,
-		Purpose:     req.Purpose,
-		ClientIP:    peerIP,
-	}
-	ch, code, err := h.challengeManager.Create(spanCtx, createReq)
 	if err != nil {
 		tracing.RecordError(span, err)
 		h.log.Error().Err(err).Msg("Failed to create challenge")
@@ -450,7 +442,7 @@ func (h *Handlers) VerifyChallenge(c fiber.Ctx) error {
 	}
 
 	// Verify challenge
-	result, err := h.challengeManager.Verify(verifyCtx, req.ChallengeID, req.Code, peerIP)
+	result, err := h.verifyWithBudget(verifyCtx, req.ChallengeID, req.Code, peerIP, nil)
 	if err != nil || result == nil || !result.OK {
 		return h.writeVerificationFailure(c, verifyCtx, verifySpan, req.ChallengeID, peerIP, result, err, false)
 	}
@@ -537,7 +529,7 @@ func (h *Handlers) VerifyChallengeV2(c fiber.Ctx) error {
 		ExpectedChannel: challengekit.Channel(req.ExpectedChannel),
 	}
 
-	result, err := h.challengeManager.VerifyWithOptions(verifyCtx, req.ChallengeID, req.Code, peerIP, opts)
+	result, err := h.verifyWithBudget(verifyCtx, req.ChallengeID, req.Code, peerIP, &opts)
 	if err != nil || result == nil || !result.OK {
 		return h.writeVerificationFailure(c, verifyCtx, verifySpan, req.ChallengeID, peerIP, result, err, true)
 	}

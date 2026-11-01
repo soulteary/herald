@@ -508,3 +508,13 @@ Mixed versions can use different indexes and leave superseded codes valid.
 Rollback requires stopping creation and waiting the maximum challenge lifetime
 before resuming on the old version. No client API or challenge record format
 changes are required.
+
+## Hash capacity overload
+
+Creation and v1/v2 OTP verification share a local hash-work admission budget
+(default 4). When it is full, requests return `503/backend_unavailable` with
+`Retry-After: 1` before hashing. Overloaded creation requests do not reserve rate
+or cooldown capacity, and rejected verifications consume no attempt or code.
+Completed idempotency responses can still replay. Lock contention is reported
+immediately as the existing `409/lock_contention` with `Retry-After: 1`.
+See [deployment](DEPLOYMENT.md#otp-hash-work-admission) for sizing and retry rules.

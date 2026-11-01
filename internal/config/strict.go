@@ -72,6 +72,9 @@ func strictEnumProblems() []string {
 
 func strictHTTPProblems() []string {
 	var problems []string
+	if MaxConcurrentHashOperations <= 0 {
+		problems = append(problems, "HERALD_MAX_CONCURRENT_HASH_OPERATIONS must be positive")
+	}
 
 	if MaxBodyBytes <= 0 {
 		problems = append(problems, "HERALD_MAX_BODY_BYTES must be positive")
