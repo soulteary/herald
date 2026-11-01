@@ -27,6 +27,7 @@ var (
 	auditLogger     *audit.Logger
 	auditLoggerInit sync.Once
 	auditInitErr    error
+	auditStorage    audit.Storage
 )
 
 // Init initializes the audit logger with the given storage. Any initialization
@@ -48,28 +49,6 @@ func InitWithError(redisClient *redis.Client) error {
 		cfg := audit.DefaultConfig()
 		cfg.Enabled = config.AuditEnabled
 		cfg.MaskDestination = config.AuditMaskDestination
-
-		// Observe dropped/failed audit records instead of losing them silently.
-		cfg.OnEnqueueFailed = func(_ *audit.Record) {
-			metrics.RecordAuditDropped()
-			if currentLog != nil {
-				currentLog.Warn().Msg("audit record dropped: writer queue full")
-			}
-		}
-		cfg.OnWriteFailed = func(_ *audit.Record, err error) {
-			metrics.RecordAuditDropped()
-			if currentLog != nil {
-				currentLog.Error().Err(err).Msg("audit record write failed")
-			}
-		}
-
-		// Configure async writer
-		if config.AuditWriterQueueSize > 0 || config.AuditWriterWorkers > 0 {
-			cfg.Writer = &audit.WriterConfig{
-				QueueSize: config.AuditWriterQueueSize,
-				Workers:   config.AuditWriterWorkers,
-			}
-		}
 
 		// Create storage based on config
 		var storage audit.Storage
@@ -116,7 +95,24 @@ func InitWithError(redisClient *redis.Client) error {
 			storage = audit.NewNoopStorage()
 		}
 
-		auditLogger = audit.NewLoggerWithWriter(storage, cfg)
+		if cfg.Enabled {
+			journal, err := newJournalStorage(storage, config.AuditSpoolDir, int64(config.AuditSpoolMaxBytes), config.AuditWriterQueueSize, config.AuditWriterWorkers, func(err error) {
+				metrics.RecordAuditWriteFailure()
+				if currentLog != nil {
+					currentLog.Error().Err(err).Msg("audit delivery or cleanup failed; undelivered records remain in spool")
+				}
+			})
+			if err != nil {
+				_ = storage.Close()
+				auditInitErr = fmt.Errorf("initialize audit spool: %w", err)
+				return
+			}
+			storage = journal
+		}
+		auditStorage = storage
+		// The logger is synchronous here: Write confirms durable local acceptance;
+		// journalStorage performs backend delivery in the background.
+		auditLogger = audit.NewLogger(storage, cfg)
 	})
 	return auditInitErr
 }
@@ -138,13 +134,16 @@ func Stop() error {
 }
 
 // LogChallengeCreated records a challenge creation event
-func LogChallengeCreated(ctx context.Context, challengeID, userID, channel, destination, purpose, ip string) {
+func LogChallengeCreated(ctx context.Context, challengeID, userID, channel, destination, purpose, ip string) error {
+	if !config.AuditEnabled {
+		return nil
+	}
 	l := GetLogger()
 	if l == nil {
-		return
+		return fmt.Errorf("audit logger unavailable: %w", auditInitErr)
 	}
 
-	l.LogChallenge(ctx, audit.EventChallengeCreated, challengeID, userID, audit.ResultSuccess,
+	return logChallenge(ctx, audit.EventChallengeCreated, challengeID, userID, audit.ResultSuccess,
 		audit.WithRecordChannel(channel),
 		audit.WithRecordDestination(destination),
 		audit.WithRecordPurpose(purpose),
@@ -153,13 +152,16 @@ func LogChallengeCreated(ctx context.Context, challengeID, userID, channel, dest
 }
 
 // LogSendSuccess records a successful send event
-func LogSendSuccess(ctx context.Context, challengeID, userID, channel, destination, purpose, provider, messageID, ip string) {
+func LogSendSuccess(ctx context.Context, challengeID, userID, channel, destination, purpose, provider, messageID, ip string) error {
+	if !config.AuditEnabled {
+		return nil
+	}
 	l := GetLogger()
 	if l == nil {
-		return
+		return fmt.Errorf("audit logger unavailable: %w", auditInitErr)
 	}
 
-	l.LogChallenge(ctx, audit.EventSendSuccess, challengeID, userID, audit.ResultSuccess,
+	return logChallenge(ctx, audit.EventSendSuccess, challengeID, userID, audit.ResultSuccess,
 		audit.WithRecordChannel(channel),
 		audit.WithRecordDestination(destination),
 		audit.WithRecordPurpose(purpose),
@@ -169,13 +171,16 @@ func LogSendSuccess(ctx context.Context, challengeID, userID, channel, destinati
 }
 
 // LogSendFailed records a failed send event
-func LogSendFailed(ctx context.Context, challengeID, userID, channel, destination, purpose, provider, reason, ip string) {
+func LogSendFailed(ctx context.Context, challengeID, userID, channel, destination, purpose, provider, reason, ip string) error {
+	if !config.AuditEnabled {
+		return nil
+	}
 	l := GetLogger()
 	if l == nil {
-		return
+		return fmt.Errorf("audit logger unavailable: %w", auditInitErr)
 	}
 
-	l.LogChallenge(ctx, audit.EventSendFailed, challengeID, userID, audit.ResultFailure,
+	return logChallenge(ctx, audit.EventSendFailed, challengeID, userID, audit.ResultFailure,
 		audit.WithRecordChannel(channel),
 		audit.WithRecordDestination(destination),
 		audit.WithRecordPurpose(purpose),
@@ -185,14 +190,39 @@ func LogSendFailed(ctx context.Context, challengeID, userID, channel, destinatio
 	)
 }
 
+// LogVerificationAttempt durably records intent before a code can be consumed.
+func LogVerificationAttempt(ctx context.Context, challengeID, ip string) error {
+	if !config.AuditEnabled {
+		return nil
+	}
+	if GetLogger() == nil {
+		return fmt.Errorf("audit logger unavailable")
+	}
+	return logChallenge(ctx, audit.EventType("verification_attempt"), challengeID, "", audit.ResultPending, audit.WithRecordIP(ip))
+}
+
+// LogRevokeAttempt durably records intent before challenge state is changed.
+func LogRevokeAttempt(ctx context.Context, challengeID, ip string) error {
+	if !config.AuditEnabled {
+		return nil
+	}
+	if GetLogger() == nil {
+		return fmt.Errorf("audit logger unavailable")
+	}
+	return logChallenge(ctx, audit.EventType("challenge_revoke_requested"), challengeID, "", audit.ResultPending, audit.WithRecordIP(ip))
+}
+
 // LogVerificationSuccess records a successful verification event
-func LogVerificationSuccess(ctx context.Context, challengeID, userID, channel, destination, purpose, ip string) {
+func LogVerificationSuccess(ctx context.Context, challengeID, userID, channel, destination, purpose, ip string) error {
+	if !config.AuditEnabled {
+		return nil
+	}
 	l := GetLogger()
 	if l == nil {
-		return
+		return fmt.Errorf("audit logger unavailable: %w", auditInitErr)
 	}
 
-	l.LogChallenge(ctx, audit.EventChallengeVerified, challengeID, userID, audit.ResultSuccess,
+	return logChallenge(ctx, audit.EventChallengeVerified, challengeID, userID, audit.ResultSuccess,
 		audit.WithRecordChannel(channel),
 		audit.WithRecordDestination(destination),
 		audit.WithRecordPurpose(purpose),
@@ -201,28 +231,56 @@ func LogVerificationSuccess(ctx context.Context, challengeID, userID, channel, d
 }
 
 // LogVerificationFailed records a failed verification event
-func LogVerificationFailed(ctx context.Context, challengeID, reason, ip string) {
+func LogVerificationFailed(ctx context.Context, challengeID, reason, ip string) error {
+	if !config.AuditEnabled {
+		return nil
+	}
 	l := GetLogger()
 	if l == nil {
-		return
+		return fmt.Errorf("audit logger unavailable: %w", auditInitErr)
 	}
 
-	l.LogChallenge(ctx, audit.EventVerificationFailed, challengeID, "", audit.ResultFailure,
+	return logChallenge(ctx, audit.EventVerificationFailed, challengeID, "", audit.ResultFailure,
 		audit.WithRecordReason(reason),
 		audit.WithRecordIP(ip),
 	)
 }
 
 // LogChallengeRevoked records a challenge revocation event
-func LogChallengeRevoked(ctx context.Context, challengeID, ip string) {
+func LogChallengeRevoked(ctx context.Context, challengeID, ip string) error {
+	if !config.AuditEnabled {
+		return nil
+	}
 	l := GetLogger()
 	if l == nil {
-		return
+		return fmt.Errorf("audit logger unavailable: %w", auditInitErr)
 	}
 
-	l.LogChallenge(ctx, audit.EventChallengeRevoked, challengeID, "", audit.ResultSuccess,
+	return logChallenge(ctx, audit.EventChallengeRevoked, challengeID, "", audit.ResultSuccess,
 		audit.WithRecordIP(ip),
 	)
+}
+
+// logChallenge acknowledges only durable acceptance, never an in-memory queue.
+func logChallenge(ctx context.Context, event audit.EventType, challengeID, userID string, result audit.Result, opts ...audit.RecordOption) error {
+	record := audit.NewRecord(event, result).WithChallengeID(challengeID).WithUserID(userID)
+	for _, opt := range opts {
+		opt(record)
+	}
+	if config.AuditMaskDestination && record.Destination != "" {
+		record.Destination = audit.MaskDestination(record.Destination, record.Channel)
+	}
+	if auditStorage == nil {
+		return fmt.Errorf("audit storage unavailable")
+	}
+	if err := auditStorage.Write(ctx, record); err != nil {
+		metrics.RecordAuditDropped()
+		if l := packageLogger.Load(); l != nil {
+			l.Error().Err(err).Msg("audit record could not be persisted")
+		}
+		return err
+	}
+	return nil
 }
 
 // Query queries audit records

@@ -163,8 +163,41 @@ When enabled, Herald proxies TOTP (Authenticator) requests to [herald-totp](http
 | `AUDIT_DATABASE_URL` | DB URL when `AUDIT_STORAGE_TYPE` includes database | (empty) | No |
 | `AUDIT_TABLE_NAME` | Audit table name | `audit_logs` | No |
 | `AUDIT_FILE_PATH` | Audit file path when using file | (empty) | No |
-| `AUDIT_WRITER_QUEUE_SIZE` | Audit writer queue size | `1000` | No |
+| `AUDIT_WRITER_QUEUE_SIZE` | Wake-up hint queue size (records are stored on disk) | `1000` | No |
 | `AUDIT_WRITER_WORKERS` | Audit writer workers | `2` | No |
+| `AUDIT_SPOOL_DIR` | Durable local audit buffer directory | `./audit-spool` (container: `/var/lib/herald/audit`) | Writable when audit is enabled |
+| `AUDIT_SPOOL_MAX_BYTES` | Maximum pending JSON payload bytes; filesystem overhead needs additional space | `67108864` | No |
+
+Audit records are written to private files and fsynced before the API accepts
+them. A full hint queue does not discard records. Backend writes are retried
+from disk; graceful shutdown keeps pending files for replay on the next start.
+Queries show delivered backend records, not the local backlog.
+
+Mount `AUDIT_SPOOL_DIR` on persistent local storage, owned by UID/GID 10001 for
+the container and preferably mode 0700. The checked-in Compose file mounts the
+`audit_spool` volume there, including when the root filesystem is read-only.
+Give each running instance its own directory/volume; an exclusive lock prevents
+concurrent owners. Preserve this volume across restarts and upgrades. `docker
+compose down -v` deletes it and must not be used while records remain pending.
+The directory must support file and directory fsync and atomic rename.
+
+An unavailable spool prevents startup. If the buffer fills or a later local
+write fails, affected APIs return `503/audit_unavailable` rather than success.
+Create requests stop before sending when their initial audit cannot be stored;
+verification and revoke attempts are stored before changing challenge state.
+A later result-record failure does not roll back an already completed operation.
+Use the same idempotency key for uncertain send results rather than blindly
+resending. Pending audit files have no automatic expiry and are bounded by the
+configured byte limit; monitor disk space and delivery failures.
+
+Delivery is **at least once**. A crash after the backend commits but before the
+local file is removed can replay the record with the same `event_id`; consumers
+should deduplicate by that ID if needed. Destination masking happens before
+local persistence. Protect and back up the volume: filesystem or volume loss
+is outside this guarantee. Backend audit TTL applies after delivery; it does
+not evict the pending local buffer. `AUDIT_ENABLED=false` explicitly disables
+these checks and audit recording.
+
 
 #### Templates and observability
 

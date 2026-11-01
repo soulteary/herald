@@ -416,3 +416,14 @@ HMAC/API-key failures use a JSON `reason` value:
 
 ### System Errors
 - `internal_error`: Internal server error
+
+## Audit acceptance failures
+
+With audit enabled, required events must be accepted into the durable local
+buffer. A full or unwritable buffer returns `503` with
+`{"ok":false,"reason":"audit_unavailable"}`. Backend delivery outages alone do
+not reject requests while buffer capacity remains. Verification and revoke
+attempts are recorded before the operation; result events follow it. These are
+not a distributed transaction: an error recording the result can follow a
+completed side effect. A 503 therefore does not imply the code is still usable
+or the message was not sent. Follow the idempotency retry rules above.

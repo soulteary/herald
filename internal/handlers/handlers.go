@@ -499,7 +499,11 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 	span.SetAttributes(attribute.String("result", "success"))
 
 	// Audit: challenge created
-	auditlog.LogChallengeCreated(spanCtx, ch.ID, req.UserID, req.Channel, req.Destination, req.Purpose, peerIP)
+	if err := auditlog.LogChallengeCreated(spanCtx, ch.ID, req.UserID, req.Channel, req.Destination, req.Purpose, peerIP); err != nil {
+		_ = h.challengeManager.RevokePending(spanCtx, ch.ID)
+		failIdem()
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
+	}
 
 	// Metrics: challenge created
 	metrics.RecordChallengeCreated(req.Channel, req.Purpose, "success")
@@ -615,7 +619,9 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 		metrics.RecordOTPSend(req.Channel, providerName, "failure", sendDuration)
 
 		// Audit: send failed
-		auditlog.LogSendFailed(providerCtx, ch.ID, req.UserID, req.Channel, req.Destination, req.Purpose, providerName, errorReason, peerIP)
+		if err := auditlog.LogSendFailed(providerCtx, ch.ID, req.UserID, req.Channel, req.Destination, req.Purpose, providerName, errorReason, peerIP); err != nil {
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
+		}
 
 		// Handle provider failure based on policy
 		if config.NormalizedProviderFailurePolicy() == "strict" {
@@ -650,7 +656,9 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 		if sendResult != nil {
 			messageID = sendResult.MessageID
 		}
-		auditlog.LogSendSuccess(providerCtx, ch.ID, req.UserID, req.Channel, req.Destination, req.Purpose, providerName, messageID, peerIP)
+		if err := auditlog.LogSendSuccess(providerCtx, ch.ID, req.UserID, req.Channel, req.Destination, req.Purpose, providerName, messageID, peerIP); err != nil {
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
+		}
 	}
 
 	// Single active challenge (two-phase activate): now that the create+send
@@ -808,6 +816,10 @@ func (h *Handlers) VerifyChallenge(c fiber.Ctx) error {
 			Msg("verification client_ip differs from trusted peer IP (advisory only)")
 	}
 
+	if err := auditlog.LogVerificationAttempt(verifyCtx, req.ChallengeID, peerIP); err != nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
+	}
+
 	// Verify challenge
 	result, err := h.challengeManager.Verify(verifyCtx, req.ChallengeID, req.Code, peerIP)
 	if err != nil || result == nil || !result.OK {
@@ -836,7 +848,9 @@ func (h *Handlers) VerifyChallenge(c fiber.Ctx) error {
 		}
 
 		// Audit: verification failed
-		auditlog.LogVerificationFailed(verifyCtx, req.ChallengeID, reason, peerIP)
+		if err := auditlog.LogVerificationFailed(verifyCtx, req.ChallengeID, reason, peerIP); err != nil {
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
+		}
 
 		response := fiber.Map{
 			"ok":     false,
@@ -867,7 +881,9 @@ func (h *Handlers) VerifyChallenge(c fiber.Ctx) error {
 	metrics.RecordVerificationContention("acquired")
 
 	// Audit: challenge verified
-	auditlog.LogVerificationSuccess(verifyCtx, ch.ID, ch.UserID, string(ch.Channel), ch.Destination, ch.Purpose, peerIP)
+	if err := auditlog.LogVerificationSuccess(verifyCtx, ch.ID, ch.UserID, string(ch.Channel), ch.Destination, ch.Purpose, peerIP); err != nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
+	}
 
 	// Generate AMR based on channel (use string to avoid depending on challengekit.ChannelDingTalk in v1.0.0)
 	amr := []string{"otp"}
@@ -955,6 +971,10 @@ func (h *Handlers) VerifyChallengeV2(c fiber.Ctx) error {
 			Msg("verification client_ip differs from trusted peer IP (advisory only)")
 	}
 
+	if err := auditlog.LogVerificationAttempt(verifyCtx, req.ChallengeID, peerIP); err != nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
+	}
+
 	opts := challengekit.VerifyOptions{
 		ExpectedUserID:  req.ExpectedUserID,
 		ExpectedPurpose: req.ExpectedPurpose,
@@ -976,7 +996,9 @@ func (h *Handlers) VerifyChallengeV2(c fiber.Ctx) error {
 			attribute.String("reason", reason),
 		)
 		metrics.RecordVerification("failure", reason)
-		auditlog.LogVerificationFailed(verifyCtx, req.ChallengeID, reason, peerIP)
+		if err := auditlog.LogVerificationFailed(verifyCtx, req.ChallengeID, reason, peerIP); err != nil {
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
+		}
 
 		response := fiber.Map{"ok": false, "reason": reason}
 		if result != nil && result.RemainingAttempts != nil {
@@ -997,7 +1019,9 @@ func (h *Handlers) VerifyChallengeV2(c fiber.Ctx) error {
 		attribute.String("purpose", ch.Purpose),
 	)
 	metrics.RecordVerification("success", "")
-	auditlog.LogVerificationSuccess(verifyCtx, ch.ID, ch.UserID, string(ch.Channel), ch.Destination, ch.Purpose, peerIP)
+	if err := auditlog.LogVerificationSuccess(verifyCtx, ch.ID, ch.UserID, string(ch.Channel), ch.Destination, ch.Purpose, peerIP); err != nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
+	}
 
 	amr := []string{"otp"}
 	switch string(ch.Channel) {
@@ -1039,6 +1063,10 @@ func (h *Handlers) RevokeChallenge(c fiber.Ctx) error {
 		})
 	}
 
+	if err := auditlog.LogRevokeAttempt(spanCtx, challengeID, c.IP()); err != nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
+	}
+
 	if err := h.challengeManager.Revoke(spanCtx, challengeID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"ok":     false,
@@ -1048,7 +1076,9 @@ func (h *Handlers) RevokeChallenge(c fiber.Ctx) error {
 	metrics.RecordChallengeState("revoked")
 
 	// Audit: challenge revoked
-	auditlog.LogChallengeRevoked(spanCtx, challengeID, c.IP())
+	if err := auditlog.LogChallengeRevoked(spanCtx, challengeID, c.IP()); err != nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
+	}
 
 	return c.JSON(fiber.Map{
 		"ok": true,

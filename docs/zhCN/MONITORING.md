@@ -308,3 +308,13 @@ groups:
 - [API 文档](API.md) - API 端点详情
 - [部署指南](DEPLOYMENT.md) - 部署和配置
 - [故障排查指南](TROUBLESHOOTING.md) - 常见问题和解决方案
+
+## 审计投递
+
+`herald_audit_write_failure_total` 表示后端投递或清理失败，未投递记录仍留在本地缓冲中重试。
+请同时监控 `AUDIT_SPOOL_DIR` 中的 `*.json` 文件和剩余磁盘空间，持续积压会达到
+`AUDIT_SPOOL_MAX_BYTES` 并拒绝新的审计事件。
+
+`herald_audit_dropped_total` 现在统计持久化接收前被拒绝的事件，对应接口返回
+`503/audit_unavailable`，不再统计可恢复的后端投递失败。存储恢复后应确认缓冲逐步清空，
+不要通过删除待投递文件来消除告警。

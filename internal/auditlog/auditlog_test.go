@@ -32,12 +32,16 @@ func TestAuditLogFunctions(t *testing.T) {
 	// Reset logger for testing
 	auditLogger = nil
 	auditLoggerInit = sync.Once{}
+	auditInitErr = nil
+	config.AuditSpoolDir = t.TempDir()
+	t.Cleanup(func() { _ = Stop() })
 
 	// Initialize with no-op storage for testing
 	storage := audit.NewNoopStorage()
 	cfg := audit.DefaultConfig()
 	cfg.Enabled = true
-	auditLogger = audit.NewLoggerWithWriter(storage, cfg)
+	auditStorage = storage
+	auditLogger = audit.NewLogger(storage, cfg)
 
 	l := GetLogger()
 	assert.NotNil(t, l)
@@ -78,6 +82,9 @@ func TestGetLoggerWithoutInit(t *testing.T) {
 	// Reset logger
 	auditLogger = nil
 	auditLoggerInit = sync.Once{}
+	auditInitErr = nil
+	config.AuditSpoolDir = t.TempDir()
+	t.Cleanup(func() { _ = Stop() })
 
 	// GetLogger should auto-initialize with no-op storage
 	l := GetLogger()
@@ -88,12 +95,16 @@ func TestQuery(t *testing.T) {
 	// Reset logger for testing
 	auditLogger = nil
 	auditLoggerInit = sync.Once{}
+	auditInitErr = nil
+	config.AuditSpoolDir = t.TempDir()
+	t.Cleanup(func() { _ = Stop() })
 
 	// Initialize with no-op storage for testing
 	storage := audit.NewNoopStorage()
 	cfg := audit.DefaultConfig()
 	cfg.Enabled = true
-	auditLogger = audit.NewLoggerWithWriter(storage, cfg)
+	auditStorage = storage
+	auditLogger = audit.NewLogger(storage, cfg)
 
 	ctx := context.Background()
 	filter := audit.DefaultQueryFilter()
@@ -111,6 +122,9 @@ func TestSetLogger(t *testing.T) {
 func TestInit_WithNilRedis(t *testing.T) {
 	auditLogger = nil
 	auditLoggerInit = sync.Once{}
+	auditInitErr = nil
+	config.AuditSpoolDir = t.TempDir()
+	t.Cleanup(func() { _ = Stop() })
 
 	Init(nil)
 	l := GetLogger()
@@ -126,6 +140,9 @@ func TestStop_WhenNil(t *testing.T) {
 func TestInit_WithRedisClient(t *testing.T) {
 	auditLogger = nil
 	auditLoggerInit = sync.Once{}
+	auditInitErr = nil
+	config.AuditSpoolDir = t.TempDir()
+	t.Cleanup(func() { _ = Stop() })
 
 	// Use real Redis from testutil so Init picks Redis storage path
 	redisClient, err := testutil.NewTestRedisClient()
@@ -143,6 +160,9 @@ func TestInit_WithRedisClient(t *testing.T) {
 func TestInit_StorageErrorFallback(t *testing.T) {
 	auditLogger = nil
 	auditLoggerInit = sync.Once{}
+	auditInitErr = nil
+	config.AuditSpoolDir = t.TempDir()
+	t.Cleanup(func() { _ = Stop() })
 
 	origStorageType := config.AuditStorageType
 	origDBURL := config.AuditDatabaseURL
@@ -187,6 +207,9 @@ func TestSetLoggerConcurrent(t *testing.T) {
 func TestStop_KeepsSharedRedisClientOpen(t *testing.T) {
 	auditLogger = nil
 	auditLoggerInit = sync.Once{}
+	auditInitErr = nil
+	config.AuditSpoolDir = t.TempDir()
+	t.Cleanup(func() { _ = Stop() })
 
 	redisClient, err := testutil.NewTestRedisClient()
 	if err != nil {

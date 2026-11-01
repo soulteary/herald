@@ -201,6 +201,8 @@ var (
 	TestMode                     = env.GetBool("HERALD_TEST_MODE", false)
 
 	// Audit logging config
+	AuditSpoolDir        = env.Get("AUDIT_SPOOL_DIR", "./audit-spool")
+	AuditSpoolMaxBytes   = env.GetInt("AUDIT_SPOOL_MAX_BYTES", 64*1024*1024)
 	AuditEnabled         = env.GetBool("AUDIT_ENABLED", true)
 	AuditMaskDestination = env.GetBool("AUDIT_MASK_DESTINATION", false)
 	AuditTTL             = env.GetDuration("AUDIT_TTL", 7*24*time.Hour) // 7 days default
