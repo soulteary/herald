@@ -177,3 +177,13 @@ deleted from your environment.
 The following localized docs were **not** updated for this release and may be
 inaccurate until retranslated: `docs/deDE`, `docs/frFR`, `docs/itIT`,
 `docs/jaJP`, `docs/koKR`. Prefer `docs/enUS` and `docs/zhCN`.
+
+## Required context for v2 OTP verification
+
+`POST /v2/otp/verifications` now requires non-blank `expected_user_id`,
+`expected_purpose`, and `expected_channel`. Previously, omitted or empty fields
+silently disabled the corresponding binding checks. Missing context now returns
+`400/context_required`; mismatched context returns `409/context_mismatch`.
+Neither rejection consumes the challenge. Supply all three values from trusted
+application state before upgrading existing v2 callers. The v1 verification
+endpoint retains its existing unbound semantics.

@@ -7,10 +7,10 @@ import (
 
 // contextBoundVerificationRequestEnvelopeBytes is the size of the smallest
 // compact v2 verification request that carries a 36-character legacy
-// challenge ID and one non-empty context binding. Keep the JSON literal here
+// challenge ID and all three required context bindings. Keep the JSON literal here
 // so changes to the request envelope are visible instead of hidden in a magic
 // number.
-const contextBoundVerificationRequestEnvelopeBytes = len(`{"challenge_id":"00000000-0000-0000-0000-000000000000","code":"","expected_user_id":"x"}`)
+const contextBoundVerificationRequestEnvelopeBytes = len(`{"challenge_id":"00000000-0000-0000-0000-000000000000","code":"","expected_user_id":"x","expected_purpose":"x","expected_channel":"sms"}`)
 
 func normalizedOneOf(value string, allowed ...string) bool {
 	v := strings.ToLower(strings.TrimSpace(value))

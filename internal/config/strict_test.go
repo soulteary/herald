@@ -90,7 +90,7 @@ func TestValidateStrictSettingsRequiresCodeToFitContextBoundV2Body(t *testing.T)
 		CodeLength, MaxBodyBytes = originalCodeLength, originalMaxBodyBytes
 	}()
 
-	MaxBodyBytes = 128
+	MaxBodyBytes = 256
 	CodeLength = MaxBodyBytes - contextBoundVerificationRequestEnvelopeBytes + 1
 	if err := validateStrictSettings(); err == nil {
 		t.Fatal("code that cannot fit in a context-bound v2 verification request must be rejected")
