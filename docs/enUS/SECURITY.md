@@ -130,12 +130,17 @@ Herald configures transport authentication and request authentication independen
    - `REQUEST_AUTH_MODE=api_key`: API key from `X-API-Key` or `Authorization: Bearer ...`
    - `REQUEST_AUTH_MODE=none`: development only; rejected in production
 
-### HMAC v2 Authentication
+### HMAC v3 Authentication
 
-HMAC v2 signs the full request shape and body digest:
+Challenge creation requires v3 even without an idempotency header. Changing,
+adding or removing that header invalidates the signature before nonce use. Older
+HMAC callers must upgrade; other verification routes retain v2 compatibility.
+See [API authentication](API.md#hmac-v3) for the canonical format and upgrade rules.
+
+HMAC v3 signs the request shape, idempotency header digest and body digest:
 
 ```text
-HERALD-HMAC-V2
+HERALD-HMAC-V3
 METHOD
 PATH
 QUERY
@@ -143,11 +148,12 @@ TIMESTAMP
 NONCE
 SERVICE
 KEY_ID
+SHA256_HEX(IDEMPOTENCY_KEY_OR_EMPTY)
 SHA256_HEX(RAW_BODY)
 ```
 
 **Required request headers**:
-- `X-Signature-Version: v2`
+- `X-Signature-Version: v3`
 - `X-Signature`: lowercase hexadecimal HMAC-SHA256 of the canonical string
 - `X-Timestamp`: Unix timestamp in seconds
 - `X-Nonce`: unique value for this request

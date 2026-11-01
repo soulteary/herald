@@ -2,12 +2,14 @@ package router
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,9 +20,9 @@ import (
 	"github.com/soulteary/herald/internal/testutil"
 )
 
-// v2Headers signs a request with the HMAC v2 canonical scheme and returns the
+// v3Sign signs a request with the HMAC v3 canonical scheme and returns the
 // headers to set. nonce must be unique per request.
-func v2Sign(secret, keyID, service, method, path, query, nonce string, ts int64, body []byte) map[string]string {
+func v3Sign(secret, keyID, service, method, path, query, nonce string, ts int64, body []byte) map[string]string {
 	canon := auth.CanonicalRequest{
 		Method:    method,
 		Path:      path,
@@ -31,9 +33,9 @@ func v2Sign(secret, keyID, service, method, path, query, nonce string, ts int64,
 		KeyID:     keyID,
 		Body:      body,
 	}
-	sig := auth.SignV2(secret, canon)
+	sig := auth.SignV3(secret, canon)
 	return map[string]string{
-		auth.HeaderSignatureVersion: auth.SignatureVersionV2,
+		auth.HeaderSignatureVersion: auth.SignatureVersionV3,
 		auth.HeaderSignature:        sig,
 		auth.HeaderTimestamp:        strconv.FormatInt(ts, 10),
 		auth.HeaderNonce:            nonce,
@@ -83,7 +85,7 @@ type fiberResp struct {
 	body   []byte
 }
 
-func TestAuthV2_NoHeaders_Returns401(t *testing.T) {
+func TestAuthV3_NoHeaders_Returns401(t *testing.T) {
 	defer withV2Config(t)()
 	rc, _ := testutil.NewTestRedisClient()
 	defer func() { _ = rc.Close() }()
@@ -96,28 +98,28 @@ func TestAuthV2_NoHeaders_Returns401(t *testing.T) {
 	}
 }
 
-func TestAuthV2_ValidSignature_ReachesHandler(t *testing.T) {
+func TestAuthV3_ValidSignature_ReachesHandler(t *testing.T) {
 	defer withV2Config(t)()
 	rc, _ := testutil.NewTestRedisClient()
 	defer func() { _ = rc.Close() }()
 	rw := NewRouterWithClientAndHandlers(rc, testLogger())
 
 	body := []byte(`{"user_id":"u1","channel":"email","destination":"a@b.com","purpose":"login"}`)
-	h := v2Sign("v2-secret", "", "svc", "POST", "/v1/otp/challenges", "", "nonce-1", time.Now().Unix(), body)
+	h := v3Sign("v2-secret", "", "svc", "POST", "/v1/otp/challenges", "", "nonce-1", time.Now().Unix(), body)
 	r := doReq(t, rw.App, h, body)
 	if r.status == fiber.StatusUnauthorized {
-		t.Errorf("valid v2 signature should pass auth, got 401 body=%s", string(r.body))
+		t.Errorf("valid v3 signature should pass auth, got 401 body=%s", string(r.body))
 	}
 }
 
-func TestAuthV2_TamperedBody_Returns401(t *testing.T) {
+func TestAuthV3_TamperedBody_Returns401(t *testing.T) {
 	defer withV2Config(t)()
 	rc, _ := testutil.NewTestRedisClient()
 	defer func() { _ = rc.Close() }()
 	rw := NewRouterWithClientAndHandlers(rc, testLogger())
 
 	body := []byte(`{"user_id":"u1","channel":"email","destination":"a@b.com","purpose":"login"}`)
-	h := v2Sign("v2-secret", "", "svc", "POST", "/v1/otp/challenges", "", "nonce-tamper", time.Now().Unix(), body)
+	h := v3Sign("v2-secret", "", "svc", "POST", "/v1/otp/challenges", "", "nonce-tamper", time.Now().Unix(), body)
 	tampered := []byte(`{"user_id":"attacker","channel":"email","destination":"a@b.com","purpose":"login"}`)
 	r := doReq(t, rw.App, h, tampered)
 	if r.status != fiber.StatusUnauthorized {
@@ -125,7 +127,7 @@ func TestAuthV2_TamperedBody_Returns401(t *testing.T) {
 	}
 }
 
-func TestAuthV2_ReplayedNonce_Returns401(t *testing.T) {
+func TestAuthV3_ReplayedNonce_Returns401(t *testing.T) {
 	defer withV2Config(t)()
 	rc, _ := testutil.NewTestRedisClient()
 	defer func() { _ = rc.Close() }()
@@ -133,7 +135,7 @@ func TestAuthV2_ReplayedNonce_Returns401(t *testing.T) {
 
 	body := []byte(`{"user_id":"u1","channel":"email","destination":"a@b.com","purpose":"login"}`)
 	ts := time.Now().Unix()
-	h := v2Sign("v2-secret", "", "svc", "POST", "/v1/otp/challenges", "", "nonce-replay", ts, body)
+	h := v3Sign("v2-secret", "", "svc", "POST", "/v1/otp/challenges", "", "nonce-replay", ts, body)
 
 	first := doReq(t, rw.App, h, body)
 	if first.status == fiber.StatusUnauthorized {
@@ -145,7 +147,7 @@ func TestAuthV2_ReplayedNonce_Returns401(t *testing.T) {
 	}
 }
 
-func TestAuthV2_TimestampDrift_Returns401(t *testing.T) {
+func TestAuthV3_TimestampDrift_Returns401(t *testing.T) {
 	defer withV2Config(t)()
 	rc, _ := testutil.NewTestRedisClient()
 	defer func() { _ = rc.Close() }()
@@ -153,17 +155,17 @@ func TestAuthV2_TimestampDrift_Returns401(t *testing.T) {
 
 	body := []byte(`{"user_id":"u1","channel":"email","destination":"a@b.com","purpose":"login"}`)
 	old := time.Now().Add(-10 * time.Minute).Unix()
-	h := v2Sign("v2-secret", "", "svc", "POST", "/v1/otp/challenges", "", "nonce-drift", old, body)
+	h := v3Sign("v2-secret", "", "svc", "POST", "/v1/otp/challenges", "", "nonce-drift", old, body)
 	r := doReq(t, rw.App, h, body)
 	if r.status != fiber.StatusUnauthorized {
 		t.Errorf("stale timestamp status = %d, want 401", r.status)
 	}
 }
 
-// TestAuthV2_InvalidHMAC_NoAPIKeyDowngrade proves that when both an API key is
+// TestAuthV3_InvalidHMAC_NoAPIKeyDowngrade proves that when both an API key is
 // configured and v2 mode is active, an invalid v2 signature is NOT allowed to
 // fall back to API-key auth.
-func TestAuthV2_InvalidHMAC_NoAPIKeyDowngrade(t *testing.T) {
+func TestAuthV3_InvalidHMAC_NoAPIKeyDowngrade(t *testing.T) {
 	defer withV2Config(t)()
 	config.APIKey = "some-api-key"
 	rc, _ := testutil.NewTestRedisClient()
@@ -171,7 +173,7 @@ func TestAuthV2_InvalidHMAC_NoAPIKeyDowngrade(t *testing.T) {
 	rw := NewRouterWithClientAndHandlers(rc, testLogger())
 
 	body := []byte(`{"user_id":"u1","channel":"email","destination":"a@b.com","purpose":"login"}`)
-	h := v2Sign("v2-secret", "", "svc", "POST", "/v1/otp/challenges", "", "nonce-nodown", time.Now().Unix(), body)
+	h := v3Sign("v2-secret", "", "svc", "POST", "/v1/otp/challenges", "", "nonce-nodown", time.Now().Unix(), body)
 	h[auth.HeaderSignature] = "deadbeef" // corrupt signature
 	// Also present a valid API key; must still be rejected.
 	h["X-API-Key"] = "some-api-key"
@@ -181,9 +183,9 @@ func TestAuthV2_InvalidHMAC_NoAPIKeyDowngrade(t *testing.T) {
 	}
 }
 
-// TestAuthV2_V1Rejected_WhenNotEnabled proves that a legacy v1-style request
+// TestAuthV3_V1Rejected_WhenNotEnabled proves that a legacy v1-style request
 // (no X-Signature-Version) is rejected when HMAC_V1_ENABLED is false.
-func TestAuthV2_V1Rejected_WhenNotEnabled(t *testing.T) {
+func TestAuthV3_V1Rejected_WhenNotEnabled(t *testing.T) {
 	defer withV2Config(t)()
 	rc, _ := testutil.NewTestRedisClient()
 	defer func() { _ = rc.Close() }()
@@ -203,9 +205,8 @@ func TestAuthV2_V1Rejected_WhenNotEnabled(t *testing.T) {
 	}
 }
 
-// TestAuthV1_Enabled_ReachesHandler proves the legacy v1 scheme works when
-// explicitly enabled for the migration cycle.
-func TestAuthV1_Enabled_ReachesHandler(t *testing.T) {
+// Creation requires header-bound signatures even when v1 is enabled elsewhere.
+func TestAuthV1_Enabled_CannotCreateChallenge(t *testing.T) {
 	defer withV2Config(t)()
 	config.HMACV1Enabled = true
 	rc, _ := testutil.NewTestRedisClient()
@@ -221,8 +222,8 @@ func TestAuthV1_Enabled_ReachesHandler(t *testing.T) {
 		"X-Signature": sig,
 	}
 	r := doReq(t, rw.App, h, body)
-	if r.status == fiber.StatusUnauthorized {
-		t.Errorf("v1 with HMAC_V1_ENABLED should pass auth, got 401 body=%s", string(r.body))
+	if r.status != fiber.StatusUnauthorized {
+		t.Errorf("v1 must not create a challenge, status=%d body=%s", r.status, string(r.body))
 	}
 }
 
@@ -250,4 +251,39 @@ func computeHMAC(secret, timestamp, service string, body []byte) string {
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(msg))
 	return hex.EncodeToString(mac.Sum(nil))
+}
+
+func TestCreationCannotDowngradeToV2WithOrWithoutIdempotency(t *testing.T) {
+	defer withV2Config(t)()
+	rc, _ := testutil.NewTestRedisClient()
+	defer func() { _ = rc.Close() }()
+	rw := NewRouterWithClientAndHandlers(rc, testLogger())
+	body := []byte(`{"user_id":"u1","channel":"email","destination":"a@b.com","purpose":"login"}`)
+	for _, key := range []string{"client-key", ""} {
+		timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+		headers := map[string]string{auth.HeaderSignatureVersion: auth.SignatureVersionV2, auth.HeaderTimestamp: timestamp, auth.HeaderNonce: "old-nonce", auth.HeaderService: "svc", "Idempotency-Key": key}
+		headers[auth.HeaderSignature] = auth.SignV2("v2-secret", auth.CanonicalRequest{Method: "POST", Path: "/v1/otp/challenges", Timestamp: timestamp, Nonce: "old-nonce", Service: "svc", Body: body})
+		r := doReq(t, rw.App, headers, body)
+		if r.status != 401 || !strings.Contains(string(r.body), "signature_version_required") {
+			t.Fatalf("legacy creation accepted: %d %s", r.status, r.body)
+		}
+	}
+	if keys, err := rc.Keys(context.Background(), "*").Result(); err != nil || len(keys) != 0 {
+		t.Fatalf("rejected signatures changed Redis: %v err=%v", keys, err)
+	}
+	// Existing v2 verification clients retain their authentication contract.
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	req := httptest.NewRequest("POST", "/v2/otp/verifications", strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	for k, v := range map[string]string{auth.HeaderSignatureVersion: auth.SignatureVersionV2, auth.HeaderTimestamp: timestamp, auth.HeaderNonce: "verify-nonce", auth.HeaderService: "svc", auth.HeaderSignature: auth.SignV2("v2-secret", auth.CanonicalRequest{Method: "POST", Path: "/v2/otp/verifications", Timestamp: timestamp, Nonce: "verify-nonce", Service: "svc", Body: []byte(`{}`)})} {
+		req.Header.Set(k, v)
+	}
+	resp, err := rw.App.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != 400 {
+		t.Fatalf("v2 verification auth rejected: %d", resp.StatusCode)
+	}
 }

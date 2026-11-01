@@ -12,14 +12,14 @@ http://localhost:8082
 
 请求认证与客户端证书策略彼此独立：
 
-- `REQUEST_AUTH_MODE=hmac_v2`（默认）要求使用防重放 HMAC v2。
+- `REQUEST_AUTH_MODE=hmac_v2`（默认）选择 HMAC 认证（保留原配置名称）；创建验证码必须使用 v3。
 - `REQUEST_AUTH_MODE=api_key` 要求 `X-API-Key` 或 `Authorization: Bearer …`。
 - `REQUEST_AUTH_MODE=none` 仅供开发使用，生产环境会拒绝启动。
 - `CLIENT_CERT_MODE=off|optional|require` 控制 TLS 客户端证书。客户端证书校验通过也不会绕过所选的请求认证模式。
 
-### HMAC v2
+### HMAC v3
 
-发送 `X-Signature-Version: v2`、`X-Signature`、`X-Timestamp`、`X-Nonce`、`X-Service`；多密钥且未配置默认密钥时还必须发送 `X-Key-Id`。
+发送 `X-Signature-Version: v3`、`X-Signature`、`X-Timestamp`、`X-Nonce`、`X-Service`；多密钥且未配置默认密钥时还必须发送 `X-Key-Id`。
 
 `X-Service` 和 `X-Key-Id` 不能包含保留文本 `|kid:`。所有请求认证模式（包括旧版 v1
 回退）都会在认证、nonce 使用和业务写入前返回 `401/invalid_auth_headers`。
@@ -30,7 +30,7 @@ http://localhost:8082
 签名的规范字符串以换行符分隔：
 
 ```text
-HERALD-HMAC-V2
+HERALD-HMAC-V3
 METHOD
 /path
 raw=query
@@ -38,8 +38,23 @@ unix_timestamp
 single_use_nonce
 service_name
 key_id
+sha256_hex_of_idempotency_key
 sha256_hex_of_raw_body
 ```
+
+幂等键行是 `Idempotency-Key` 请求头原始值的 SHA-256 小写十六进制摘要。
+请求头缺失或为空时，对空字节串计算摘要。正文摘要后没有结尾换行。
+v3 同时绑定幂等键的值与缺失状态；增加、删除或修改该请求头都会导致签名失败，且不消费 nonce。
+
+HMAC 模式下，`POST /v1/otp/challenges` 无论是否带幂等键都要求 v3。
+v1/v2 返回 `401/signature_version_required`，即使设置了 `HMAC_V1_ENABLED=true`。
+如果允许不带键的 v2，中间层仍可通过删除请求头绕过保护。其他接口保留 v2 兼容性。
+API key 模式和仅供开发使用的无认证模式不变。
+
+Go SDK 默认使用 v3。需协调服务端和调用方升级：旧服务端不能验证 v3，
+新服务端的创建接口不再接受旧 HMAC 签名。升级时不要更换幂等键或身份命名空间。
+已有 Redis 记录、缓存响应、TTL 和未确认发送记录不变；使用相同幂等键及新的时间戳和 nonce 重试，
+对未确认的发送先核对 provider 结果。
 
 `key_id` 行必须使用 `X-Key-Id` 请求头的原始值。如果因已配置或隐式默认密钥而省略该请求头，签名时此行必须为空，不能填入默认密钥 ID。对上述内容计算小写十六进制 HMAC-SHA256。默认时间偏差窗口为 60 秒（`HMAC_MAX_DRIFT`），每个有效 nonce 只能在 Redis 中消费一次。使用多个 `HERALD_HMAC_KEYS` 时，请设置 `HERALD_HMAC_DEFAULT_KEY_ID` 或发送 `X-Key-Id`；Herald 不会使用 Go map 中的“第一个”密钥。旧版 v1 仅在 `HMAC_V1_ENABLED=true` 时启用。
 
@@ -392,8 +407,8 @@ Herald 实现多维速率限制：
 
 ### 认证错误
 HMAC/API Key 失败会返回 JSON `reason`：
-- `signature_version_required`：HMAC v2 要求 `X-Signature-Version: v2`
-- `missing_auth_headers`：缺少一个或多个 HMAC v2 请求头
+- `signature_version_required`：创建接口要求 `X-Signature-Version: v3`；其他 HMAC 接口接受 v2/v3
+- `missing_auth_headers`：缺少一个或多个 HMAC 请求头
 - `key_id_required` / `invalid_key_id`：未提供可用的 HMAC 密钥 ID
 - `timestamp_out_of_range`：时间戳超出配置的偏差窗口
 - `invalid_signature`：HMAC 签名验证失败

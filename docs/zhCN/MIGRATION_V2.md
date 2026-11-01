@@ -1,5 +1,9 @@
 # Herald v2 迁移与安全加固指南（zhCN）
 
+> 安全更新：Go SDK 现默认使用 HMAC v3；创建验证码必须使用 v3，包括不带幂等键的请求。
+> 下文 v2 签名格式仅用于保留兼容性的验证接口。需协调服务端和调用方升级，
+> 详见 [API 认证](API.md#hmac-v3)。
+
 本文档说明安全加固版本引入的破坏性变更、迁移方式与回滚方法，是 v1 → v2 认证
 变更、幂等/并发语义、Provider 投递策略、环境变量迁移与生产部署的权威说明。
 
@@ -63,7 +67,7 @@ nonce 通过 Redis `SET NX EX` 在（`service|key-id|nonce`）的 keyed digest �
 
 ### 1.6 SDK
 
-Go SDK 默认使用 v2 签名。设置 key id（测试可注入固定时钟/nonce）：
+Go SDK 默认使用 v3 签名。设置 key id（测试可注入固定时钟/nonce）：
 
 ```go
 c, _ := herald.NewClient(herald.DefaultOptions().

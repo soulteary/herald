@@ -12,14 +12,14 @@ http://localhost:8082
 
 Request authentication and client-certificate policy are independent:
 
-- `REQUEST_AUTH_MODE=hmac_v2` (default) requires replay-resistant HMAC v2.
+- `REQUEST_AUTH_MODE=hmac_v2` (default) selects HMAC authentication (the configuration name is retained); challenge creation requires v3.
 - `REQUEST_AUTH_MODE=api_key` requires `X-API-Key` or `Authorization: Bearer …`.
 - `REQUEST_AUTH_MODE=none` is for development only and is rejected in production.
 - `CLIENT_CERT_MODE=off|optional|require` controls TLS client certificates. A verified certificate does not bypass the selected request-auth mode.
 
-### HMAC v2
+### HMAC v3
 
-Send `X-Signature-Version: v2`, `X-Signature`, `X-Timestamp`, `X-Nonce`, `X-Service`, and, for multi-key configurations without a configured default, `X-Key-Id`.
+Send `X-Signature-Version: v3`, `X-Signature`, `X-Timestamp`, `X-Nonce`, `X-Service`, and, for multi-key configurations without a configured default, `X-Key-Id`.
 
 `X-Service` and `X-Key-Id` must not contain the reserved text `|kid:`. Such
 values return `401/invalid_auth_headers` before authentication, nonce use, or
@@ -33,7 +33,7 @@ namespace or retrying them with a new idempotency key.
 The signed canonical value is newline-delimited:
 
 ```text
-HERALD-HMAC-V2
+HERALD-HMAC-V3
 METHOD
 /path
 raw=query
@@ -41,8 +41,27 @@ unix_timestamp
 single_use_nonce
 service_name
 key_id
+sha256_hex_of_idempotency_key
 sha256_hex_of_raw_body
 ```
+
+The idempotency line is the lowercase SHA-256 hex digest of the exact
+`Idempotency-Key` header value. Hash an empty byte string when it is absent or
+empty. There is no trailing newline after the body digest. Version 3 binds both
+the value and its absence, so adding, removing, or changing the header invalidates
+the signature before nonce consumption.
+
+`POST /v1/otp/challenges` requires v3 in HMAC mode, with or without an idempotency
+key. It rejects v1/v2 with `401/signature_version_required`, even when
+`HMAC_V1_ENABLED=true`; allowing v2 without a key would let an intermediary strip
+the header from an old signed request. Other routes retain v2 compatibility.
+API key and development-only unauthenticated modes are unchanged.
+
+The Go SDK defaults to v3. Coordinate server and caller upgrades: older servers
+cannot verify v3, and updated servers reject older HMAC signatures for creation.
+Do not switch idempotency keys or identity namespaces while upgrading. Existing
+Redis records, response replays, TTLs and unresolved sending records are unchanged.
+Retry the same signed key with a fresh timestamp/nonce; reconcile uncertain sends.
 
 The `key_id` line is the literal `X-Key-Id` header value. When the header is omitted because a configured or implicit default selects the secret, sign an empty `key_id` line—not the default key ID. Compute the lowercase hexadecimal HMAC-SHA256 of that value. The default timestamp drift is 60 seconds (`HMAC_MAX_DRIFT`), and each valid nonce is consumed once in Redis. With multiple `HERALD_HMAC_KEYS`, set `HERALD_HMAC_DEFAULT_KEY_ID` or send `X-Key-Id`; Herald never selects the first Go map entry. Legacy v1 is disabled unless `HMAC_V1_ENABLED=true`.
 
@@ -408,8 +427,8 @@ This section lists all possible error codes returned by the API.
 
 ### Authentication Errors
 HMAC/API-key failures use a JSON `reason` value:
-- `signature_version_required`: HMAC v2 requires `X-Signature-Version: v2`
-- `missing_auth_headers`: One or more HMAC v2 headers are missing
+- `signature_version_required`: Challenge creation requires `X-Signature-Version: v3`; other HMAC routes accept v2/v3
+- `missing_auth_headers`: One or more HMAC headers are missing
 - `key_id_required` / `invalid_key_id`: A usable HMAC key ID was not supplied
 - `timestamp_out_of_range`: Timestamp is outside the configured drift window
 - `invalid_signature`: HMAC signature verification failed
