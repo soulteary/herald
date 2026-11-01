@@ -860,15 +860,12 @@ func (h *Handlers) deliverChallenge(c fiber.Ctx, spanCtx context.Context, req Cr
 	sendDuration := time.Since(sendStart)
 
 	if err != nil || (sendResult != nil && !sendResult.OK) {
-		tracing.RecordError(providerSpan, err)
+		// Provider errors may echo OTP bodies, destinations or credentials. Keep
+		// only a bounded reason code in logs, span status/events and audit data.
+		errorReason := providerFailureReason(sendResult, err)
+		tracing.RecordError(providerSpan, errors.New("provider send failed: "+errorReason))
 		providerSpan.End()
-		h.log.Error().Err(err).Msg("Failed to send verification code via provider")
-
-		// Get error reason from provider-kit result
-		errorReason := "send_failed"
-		if sendResult != nil && sendResult.Error != nil {
-			errorReason = string(sendResult.Error.Reason)
-		}
+		h.log.Error().Str("reason", errorReason).Msg("Failed to send verification code via provider")
 		// Record provider timeouts distinctly for reliability dashboards.
 		if errors.Is(err, context.DeadlineExceeded) || errorReason == "timeout" {
 			metrics.RecordProviderTimeout(req.Channel)
