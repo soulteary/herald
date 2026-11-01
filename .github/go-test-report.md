@@ -4,11 +4,11 @@
 
 | Metric | Value |
 | --- | --- |
-| Total | 313 |
-| Passed | 312 |
+| Total | 320 |
+| Passed | 318 |
 | Failed | 0 |
-| Skipped | 1 |
-| Coverage | 95.45% |
+| Skipped | 2 |
+| Coverage | 95.60% |
 | Threshold | 95.00% |
 
 ### Packages
@@ -20,7 +20,7 @@
 | internal/auth | pass | 18 | 0 | 97.89% |
 | internal/config | pass | 43 | 0 | 97.93% |
 | internal/destination | pass | 4 | 0 | 90.00% |
-| internal/handlers | pass | 83 | 0 | 93.91% |
+| internal/handlers | pass | 90 | 0 | 94.50% |
 | internal/idempotency | pass | 13 | 0 | 98.17% |
 | internal/metrics | pass | 11 | 0 | 100.00% |
 | internal/ratelimit | pass | 12 | 0 | 100.00% |
