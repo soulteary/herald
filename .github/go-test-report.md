@@ -4,30 +4,30 @@
 
 | Metric | Value |
 | --- | --- |
-| Total | 258 |
-| Passed | 257 |
+| Total | 306 |
+| Passed | 305 |
 | Failed | 0 |
 | Skipped | 1 |
-| Coverage | 79.06% |
-| Threshold | 74.00% |
+| Coverage | 95.26% |
+| Threshold | 95.00% |
 
 ### Packages
 
 | Package | Status | Tests | Failed | Coverage |
 | --- | --- | --- | --- | --- |
-| . | pass | 3 | 0 | 9.64% |
-| internal/auditlog | pass | 16 | 0 | 75.58% |
-| internal/auth | pass | 14 | 0 | 98.35% |
-| internal/config | pass | 35 | 0 | 84.36% |
+| . | pass | 6 | 0 | 78.57% |
+| internal/auditlog | pass | 22 | 0 | 96.12% |
+| internal/auth | pass | 16 | 0 | 98.37% |
+| internal/config | pass | 43 | 0 | 97.63% |
 | internal/destination | pass | 4 | 0 | 89.47% |
-| internal/handlers | pass | 70 | 0 | 80.16% |
-| internal/idempotency | pass | 11 | 0 | 86.24% |
-| internal/metrics | pass | 10 | 0 | 58.82% |
-| internal/ratelimit | pass | 11 | 0 | 90.32% |
-| internal/router | pass | 26 | 0 | 76.81% |
-| internal/security | pass | 3 | 0 | 100.00% |
-| internal/server | pass | 10 | 0 | 54.64% |
-| internal/template | pass | 13 | 0 | 88.03% |
+| internal/handlers | pass | 82 | 0 | 93.55% |
+| internal/idempotency | pass | 13 | 0 | 98.17% |
+| internal/metrics | pass | 11 | 0 | 100.00% |
+| internal/ratelimit | pass | 12 | 0 | 100.00% |
+| internal/router | pass | 30 | 0 | 93.48% |
+| internal/security | pass | 5 | 0 | 100.00% |
+| internal/server | pass | 12 | 0 | 94.85% |
+| internal/template | pass | 14 | 0 | 99.15% |
 | internal/testutil | pass | 1 | 0 | 80.00% |
 | internal/tracing | pass | 2 | 0 | 97.44% |
-| pkg/herald | pass | 29 | 0 | 85.80% |
+| pkg/herald | pass | 33 | 0 | 97.16% |
