@@ -131,6 +131,19 @@ The implementation calls an external SMS HTTP API; Aliyun/etc. credentials are h
 
 When enabled, Herald proxies TOTP (Authenticator) requests to [herald-totp](https://github.com/soulteary/herald-totp). TOTP routes are available under `/v1/totp/*` (status, verify, enroll/start, enroll/confirm, revoke).
 
+TOTP calls use a 10-second timeout and verified TLS (TLS 1.2 or later). Production
+requires HTTPS. Configure the final service URL: redirects are never followed,
+including redirects to the same origin. Base URLs may contain a path prefix,
+but must not contain user credentials, query parameters, or fragments.
+
+`PROVIDER_MAX_RESPONSE_BYTES` also limits TOTP response bodies (default 1 MiB).
+Responses must be complete JSON objects with HTTP 200. Redirects, other HTTP
+statuses, oversized bodies, and malformed or interrupted responses return
+`502/proxy_failed`; an upstream error body cannot establish successful
+verification. Valid HTTP 200 verification failures remain `200/ok:false`, and
+enrollment confirmation retains `400/invalid` for complete upstream HTTP 400
+responses. API Key and HMAC wire formats are unchanged.
+
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
 | `HERALD_TOTP_ENABLED` | Enable TOTP proxy | `false` | No |

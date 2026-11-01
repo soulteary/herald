@@ -39,7 +39,7 @@ type Handlers struct {
 	redis            *redis.Client
 	testCodeCache    rediskitcache.Cache // For test mode code storage
 	idempotencyStore *idempotency.Store  // Atomic, principal-namespaced idempotency store
-	totpClient       *heraldtotp.Client  // Optional: nil when TOTP is not enabled
+	totpClient       *totpProxyClient    // Optional: nil when TOTP is not enabled
 	digester         *security.Digester  // Peppered digester for privacy-preserving keys
 	log              *logger.Logger
 }
@@ -179,7 +179,7 @@ func NewHandlersWithError(redisClient *redis.Client, log *logger.Logger) (*Handl
 	idempotencyStore := idempotency.NewStore(redisClient, "otp:idem2:", []byte(config.IdempotencySecret), config.IdempotencyKeyTTL)
 
 	// TOTP client: when Herald proxies TOTP to herald-totp
-	var totpClient *heraldtotp.Client
+	var totpClient *totpProxyClient
 	if config.TOTPEnabled && config.TOTPBaseURL != "" {
 		opts := heraldtotp.DefaultOptions().
 			WithBaseURL(strings.TrimSuffix(config.TOTPBaseURL, "/")).
@@ -188,7 +188,7 @@ func NewHandlersWithError(redisClient *redis.Client, log *logger.Logger) (*Handl
 		if config.TOTPHMACSecret != "" {
 			opts = opts.WithHMACSecret(config.TOTPHMACSecret)
 		}
-		if c, err := heraldtotp.NewClient(opts); err != nil {
+		if c, err := newTOTPProxyClient(opts, int64(config.ProviderMaxResponseBytes), config.IsProduction()); err != nil {
 			if config.IsProduction() {
 				return nil, fmt.Errorf("herald-totp client init failed: %w", err)
 			}
