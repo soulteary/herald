@@ -85,8 +85,9 @@ c, _ := herald.NewClient(herald.DefaultOptions().
 ## 2. 幂等与并发语义
 
 - 在 `POST /v1/otp/challenges` 上携带 `Idempotency-Key`。
-- principal 使用 `X-Service` 与 `X-Key-Id` 的原始值，两者均缺失时使用客户端 IP。
-  API key 本身不构成命名空间；重试时保持身份头不变，两种头均不得含 `|kid:`。
+- HMAC principal 使用已签名的服务标识和实际验签密钥 ID。省略 Key ID 与显式默认 ID
+  使用同一命名空间。API Key/开发模式保留原始调用头，两者均缺失时使用客户端 IP；
+  API key 本身不构成命名空间。服务及密钥 ID（含解析后的默认 ID）均不得含 `|kid:`。
 - 首个请求**原子占位**（`SET NX`）。发送前相同指纹字段的并发请求返回
   `409/idempotency_in_flight`，已完成请求在 TTL 内重放响应。
 - 相同键 + **不同指纹字段** → `409 Conflict`。

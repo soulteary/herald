@@ -22,6 +22,7 @@ import (
 	"github.com/soulteary/tracing-kit/v2"
 
 	"github.com/soulteary/herald/internal/auditlog"
+	"github.com/soulteary/herald/internal/auth"
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/destination"
 	"github.com/soulteary/herald/internal/idempotency"
@@ -354,11 +355,15 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 }
 
 // idempotencyPrincipal derives a per-caller principal for idempotency
-// namespacing from the authenticated service/key headers, falling back to the
+// namespacing from the verified HMAC service/resolved key ID, otherwise the
+// caller headers, falling back to the
 // client IP when unauthenticated. It never returns an empty string.
 // Request auth rejects the reserved |kid: delimiter in either header before
 // this function is reached, so distinct component pairs cannot alias.
 func idempotencyPrincipal(c fiber.Ctx) string {
+	if svc, keyID, ok := auth.VerifiedHMACIdentity(c); ok {
+		return "svc:" + svc + "|kid:" + keyID
+	}
 	svc := c.Get("X-Service")
 	keyID := c.Get("X-Key-Id")
 	if svc != "" || keyID != "" {
@@ -962,12 +967,15 @@ func (h *Handlers) activateChallenge(c fiber.Ctx, spanCtx context.Context, ch *c
 
 func (h *Handlers) beginCreation(c fiber.Ctx, spanCtx context.Context, principal, idempotencyKey, fingerprint string) (string, bool, error) {
 	if idempotencyKey != "" {
-		replay, owner, err := h.idempotencyStore.Begin(spanCtx, principal, idempotencyKey, fingerprint)
+		replay, owner, err := h.beginIdempotency(c, spanCtx, principal, idempotencyKey, fingerprint)
 		switch {
 		case err == nil && owner == "" && replay != nil:
 			metrics.RecordIdempotency("replay")
 			c.Set("Content-Type", "application/json")
 			return "", true, c.Status(fiber.StatusOK).Send(replay)
+		case err == idempotency.ErrNamespaceConflict:
+			metrics.RecordIdempotency("conflict")
+			return "", true, c.Status(fiber.StatusConflict).JSON(fiber.Map{"ok": false, "reason": "idempotency_namespace_conflict"})
 		case err == idempotency.ErrConflict:
 			metrics.RecordIdempotency("conflict")
 			return "", true, c.Status(fiber.StatusConflict).JSON(fiber.Map{"ok": false, "reason": "idempotency_conflict"})

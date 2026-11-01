@@ -97,9 +97,11 @@ c, _ := herald.NewClient(herald.DefaultOptions().
 ## 2. Idempotency & concurrency semantics
 
 - Send `Idempotency-Key` on `POST /v1/otp/challenges`.
-- Keys are namespaced by the literal `X-Service` and `X-Key-Id` headers, or the
-  client IP when both headers are absent. An API key is not itself a namespace.
-  Keep caller headers stable across retries; `|kid:` is forbidden in either header.
+- HMAC keys are namespaced by the signed service and actual verified key ID.
+  An omitted key ID and its explicit default refer to the same namespace.
+  API-key/development modes retain literal caller headers, or client IP when
+  both headers are absent. An API key is not itself a namespace. `|kid:` remains
+  forbidden in service and key IDs, including resolved defaults.
 - The first request **atomically claims** the key (`SET NX`). Concurrent
   duplicates with the **same fingerprinted fields** return `409/idempotency_in_flight` before
   sending, or replay a completed response within its TTL.

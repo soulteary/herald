@@ -355,3 +355,14 @@ also limits creation, which previously had no global work cap. This protects
 against memory exhaustion when authenticated traffic is otherwise within the
 configured rate limits. It is not a replacement for those limits or for process
 resource limits. See [deployment](DEPLOYMENT.md#otp-hash-work-admission).
+
+## Verified HMAC identity
+
+A key-ID spelling is not a separate credential: omitted and explicit default IDs
+must share idempotency protection. Herald derives this identity only after valid
+HMAC verification and nonce handling; raw signed fields are not rewritten.
+Unattributable legacy records fail closed without exposing their response.
+This prevents duplicate sends after success-record failures and replay of a
+previous credential's response after default-key rotation. It does not involve
+HMAC forgery.
+See [upgrade requirements](DEPLOYMENT.md#hmac-identity-upgrade).

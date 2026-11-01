@@ -3,7 +3,6 @@ package idempotency
 import (
 	"context"
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -39,6 +38,9 @@ var (
 	ErrInFlight = errors.New("idempotency: request in flight")
 	// ErrDeliveryUnknown means delivery may have happened and cannot be retried safely.
 	ErrDeliveryUnknown = errors.New("idempotency: delivery outcome unknown")
+	// ErrNamespaceConflict indicates an unattributable legacy implicit-key record.
+	ErrNamespaceConflict = errors.New("idempotency: legacy namespace conflict")
+
 	// ErrConflict indicates the same key was used with a different request
 	// fingerprint (different body). This maps to HTTP 409.
 	ErrConflict = errors.New("idempotency: key reused with a different request")
@@ -136,14 +138,10 @@ func Fingerprint(parts ...string) string {
 //   - nil, "", ErrBackendUnavailable -> Redis failure; caller fails closed.
 func (s *Store) Begin(ctx context.Context, principal, clientKey, fingerprint string) (replay json.RawMessage, owner string, err error) {
 	key := s.redisKey(principal, clientKey)
-	ownerBytes := make([]byte, 16)
-	if _, err := rand.Read(ownerBytes); err != nil {
-		return nil, "", ErrBackendUnavailable
+	pendingJSON, owner, err := newPendingClaim(fingerprint)
+	if err != nil {
+		return nil, "", err
 	}
-	owner = hex.EncodeToString(ownerBytes)
-
-	pending := Record{State: StatePending, Fingerprint: fingerprint, Owner: owner, CreatedAt: time.Now().Unix()}
-	pendingJSON, _ := json.Marshal(pending)
 
 	// Atomic claim: only the first caller sets the pending placeholder.
 	set, serr := s.client.SetNX(ctx, key, pendingJSON, s.ttl).Result()
@@ -164,6 +162,10 @@ func (s *Store) Begin(ctx context.Context, principal, clientKey, fingerprint str
 		}
 		return nil, "", ErrBackendUnavailable
 	}
+	return classifyExistingRecord(raw, fingerprint)
+}
+
+func classifyExistingRecord(raw []byte, fingerprint string) (json.RawMessage, string, error) {
 	var existing Record
 	if json.Unmarshal(raw, &existing) != nil {
 		return nil, "", ErrBackendUnavailable

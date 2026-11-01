@@ -175,7 +175,7 @@ func verifyHMACV2(c fiber.Ctx, cfg Config) error {
 	// secret, which may fall back to a configured default.
 	lookupKeyID, validKey := effectiveHMACKeyID(keyID, cfg.DefaultKeyID)
 	if !validKey {
-		return deny(c, "key_id_required")
+		return deny(c, unusableHMACKeyReason(lookupKeyID))
 	}
 
 	if !TimestampWithinDrift(timestamp, cfg.Clock(), cfg.MaxDrift) {
@@ -230,14 +230,14 @@ func consumeVerifiedNonce(c fiber.Ctx, cfg Config, service, lookupKeyID, nonce s
 		if cfg.Logger != nil {
 			cfg.Logger.Warn().Msg("nonce store unavailable; allowing request (non-production)")
 		}
-		return c.Next()
+		return continueVerifiedHMAC(c, service, lookupKeyID)
 	}
 	if !fresh {
 		metrics.RecordNonceReplay()
 		return deny(c, "replayed_nonce")
 	}
 
-	return c.Next()
+	return continueVerifiedHMAC(c, service, lookupKeyID)
 }
 
 func missingHMACHeaders(signature, timestamp, nonce, service string) bool {
@@ -245,7 +245,7 @@ func missingHMACHeaders(signature, timestamp, nonce, service string) bool {
 }
 func effectiveHMACKeyID(keyID, defaultKeyID string) (string, bool) {
 	if keyID == "" {
-		return defaultKeyID, defaultKeyID != ""
+		keyID = defaultKeyID
 	}
-	return keyID, true
+	return keyID, keyID != "" && !strings.Contains(keyID, "|kid:")
 }

@@ -409,3 +409,22 @@ retryable `409/lock_contention` result rather than polling while holding this bu
 Provider delivery starts after the creation slot is released, so a slow provider
 does not reserve hash capacity. Retry with the same idempotency key and a fresh
 HMAC timestamp/nonce. Existing Redis records and client signatures are unchanged.
+
+## HMAC identity upgrade
+
+For HMAC deployments, pause creation traffic and drain in-flight creation requests,
+then replace every old instance before resuming. Mixed versions can still split
+implicit and explicit key-ID namespaces because old code does not check the new
+canonical record. Keep Redis data, key mappings and `HERALD_IDEMPOTENCY_SECRET`
+stable. Changing the derivation secret bypasses all existing idempotency records.
+
+Legacy empty-key-ID records are retained. A matching service/client key returns
+`409/idempotency_namespace_conflict`; this is an operator-reconciliation condition,
+not permission to retry with another key. Non-expiring sending records remain
+non-expiring. Do not infer the original credential from the current default or
+blindly replay/migrate old responses after key rotation. Explicit-key records
+continue normally when there is no conflicting legacy record.
+
+Older releases cannot enforce this guard. Before rollback, keep creation disabled
+until affected records and caller identities have been reconciled, and do not
+resume implicit-key callers on old code. See [API](API.md#hmac-identity-and-legacy-idempotency-records).
