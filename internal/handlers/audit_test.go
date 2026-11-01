@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -128,4 +129,91 @@ func TestAuditUnavailableRejectsBusinessSuccess(t *testing.T) {
 		}
 	}
 
+}
+
+// Move the spool out of reach only after the initial creation audit succeeded.
+type auditFailureProvider struct {
+	failingProvider
+	spool       string
+	mu          sync.Mutex
+	challengeID string
+	calls       int
+}
+
+func (p *auditFailureProvider) Send(ctx context.Context, msg *provider.Message) (*provider.SendResult, error) {
+	p.mu.Lock()
+	p.challengeID = msg.IdempotencyKey
+	p.calls++
+	p.mu.Unlock()
+	if err := os.Rename(p.spool, p.spool+"-offline"); err != nil {
+		return nil, err
+	}
+	return p.failingProvider.Send(ctx, msg)
+}
+
+func TestStrictRevocationSurvivesAuditFailure(t *testing.T) {
+	if os.Getenv("HERALD_AUDIT_REVOKE_REGRESSION") != "1" {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestStrictRevocationSurvivesAuditFailure$")
+		cmd.Env = append(os.Environ(), "HERALD_AUDIT_REVOKE_REGRESSION=1")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("strict audit subprocess: %v\n%s", err, out)
+		}
+		return
+	}
+	config.AuditEnabled = true
+	config.AuditSpoolDir = t.TempDir()
+	config.AuditSpoolMaxBytes = 1 << 20
+	rc := testRedisClient(t)
+	t.Cleanup(func() { _ = rc.Close() })
+	h := newIdemHandlers(t, rc)
+	t.Cleanup(func() { _ = h.StopAuditWriter() })
+	t.Cleanup(func() {
+		if _, err := os.Stat(config.AuditSpoolDir + "-offline"); err == nil {
+			_ = os.Rename(config.AuditSpoolDir+"-offline", config.AuditSpoolDir)
+		}
+	})
+	p := &auditFailureProvider{failingProvider: failingProvider{channel: provider.ChannelEmail}, spool: config.AuditSpoolDir}
+	h.providerRegistry = provider.NewRegistry()
+	if err := h.providerRegistry.Register(p); err != nil {
+		t.Fatal(err)
+	}
+	app := fiber.New()
+	app.Post("/v1/otp/challenges", h.CreateChallenge)
+	r, err := idemRequest(app, "strict-audit-failure", faultBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.status != 503 || !strings.Contains(string(r.body), "audit_unavailable") {
+		t.Fatalf("status=%d body=%s", r.status, r.body)
+	}
+	p.mu.Lock()
+	id := p.challengeID
+	p.mu.Unlock()
+	if id == "" {
+		t.Fatal("provider was not called after the initial audit")
+	}
+	exists, err := rc.Exists(context.Background(), "otp:ch:"+id).Result()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exists != 0 {
+		t.Fatalf("strict-policy challenge %s survived failed result auditing", id)
+	}
+	if err = os.Rename(config.AuditSpoolDir+"-offline", config.AuditSpoolDir); err != nil {
+		t.Fatal(err)
+	}
+	retry, err := idemRequest(app, "strict-audit-failure", faultBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retry.status != 409 || !strings.Contains(string(retry.body), "delivery_unknown") {
+		t.Fatalf("retry status=%d body=%s", retry.status, retry.body)
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.calls != 1 {
+		t.Fatalf("provider called %d times", p.calls)
+	}
 }

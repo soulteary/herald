@@ -50,27 +50,27 @@ func TestAuditLogFunctions(t *testing.T) {
 
 	// Test all logging functions (should not panic)
 	t.Run("LogChallengeCreated", func(t *testing.T) {
-		LogChallengeCreated(ctx, "ch_123", "user1", "email", "test@example.com", "login", "127.0.0.1")
+		assert.NoError(t, LogChallengeCreated(ctx, "ch_123", "user1", "email", "test@example.com", "login", "127.0.0.1"))
 	})
 
 	t.Run("LogSendSuccess", func(t *testing.T) {
-		LogSendSuccess(ctx, "ch_123", "user1", "email", "test@example.com", "login", "smtp", "msg_123", "127.0.0.1")
+		assert.NoError(t, LogSendSuccess(ctx, "ch_123", "user1", "email", "test@example.com", "login", "smtp", "msg_123", "127.0.0.1"))
 	})
 
 	t.Run("LogSendFailed", func(t *testing.T) {
-		LogSendFailed(ctx, "ch_123", "user1", "email", "test@example.com", "login", "smtp", "connection_failed", "127.0.0.1")
+		assert.NoError(t, LogSendFailed(ctx, "ch_123", "user1", "email", "test@example.com", "login", "smtp", "connection_failed", "127.0.0.1"))
 	})
 
 	t.Run("LogVerificationSuccess", func(t *testing.T) {
-		LogVerificationSuccess(ctx, "ch_123", "user1", "email", "test@example.com", "login", "127.0.0.1")
+		assert.NoError(t, LogVerificationSuccess(ctx, "ch_123", "user1", "email", "test@example.com", "login", "127.0.0.1"))
 	})
 
 	t.Run("LogVerificationFailed", func(t *testing.T) {
-		LogVerificationFailed(ctx, "ch_123", "invalid", "127.0.0.1")
+		assert.NoError(t, LogVerificationFailed(ctx, "ch_123", "invalid", "127.0.0.1"))
 	})
 
 	t.Run("LogChallengeRevoked", func(t *testing.T) {
-		LogChallengeRevoked(ctx, "ch_123", "127.0.0.1")
+		assert.NoError(t, LogChallengeRevoked(ctx, "ch_123", "127.0.0.1"))
 	})
 
 	// Test Stop

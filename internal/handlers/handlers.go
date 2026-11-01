@@ -619,9 +619,7 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 		metrics.RecordOTPSend(req.Channel, providerName, "failure", sendDuration)
 
 		// Audit: send failed
-		if err := auditlog.LogSendFailed(providerCtx, ch.ID, req.UserID, req.Channel, req.Destination, req.Purpose, providerName, errorReason, peerIP); err != nil {
-			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
-		}
+		auditErr := auditlog.LogSendFailed(providerCtx, ch.ID, req.UserID, req.Channel, req.Destination, req.Purpose, providerName, errorReason, peerIP)
 
 		// Handle provider failure based on policy
 		if config.NormalizedProviderFailurePolicy() == "strict" {
@@ -630,11 +628,18 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 			metrics.RecordChallengeState("revoked")
 			// The provider may have delivered before reporting an error. Keep
 			// the sending record so a retry cannot send a second code.
+			// Audit failure must not skip strict-policy revocation.
+			if auditErr != nil {
+				return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
+			}
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"ok":     false,
 				"reason": "send_failed",
 				"error":  "Failed to send verification code",
 			})
+		}
+		if auditErr != nil {
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
 		}
 		// Soft mode (only permitted outside production / degraded): the challenge
 		// stays created but we surface delivery_status=failed so the caller knows
