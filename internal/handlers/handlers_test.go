@@ -1621,179 +1621,13 @@ func TestHandlers_VerifyChallenge_FailureReasons(t *testing.T) {
 	app.Post("/verify", handlers.VerifyChallenge)
 
 	// Test expired challenge
-	t.Run("expired challenge", func(t *testing.T) {
-		challengeMgr := testChallengeManager(t, redisClient)
-
-		ctx := context.Background()
-		createReq := challengekit.CreateRequest{
-			UserID:      "user123",
-			Channel:     challengekit.ChannelEmail,
-			Destination: "test@example.com",
-			Purpose:     "login",
-			ClientIP:    "127.0.0.1",
-		}
-		ch, code, err := challengeMgr.Create(ctx, createReq)
-		if err != nil {
-			t.Fatalf("Failed to create challenge: %v", err)
-		}
-
-		// Wait for expiry
-		time.Sleep(10 * time.Millisecond)
-
-		reqBody := VerifyChallengeRequest{
-			ChallengeID: ch.ID,
-			Code:        code,
-			ClientIP:    "127.0.0.1",
-		}
-
-		bodyBytes, _ := json.Marshal(reqBody)
-		req := httptest.NewRequest("POST", "/verify", bytes.NewBuffer(bodyBytes))
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, err := app.Test(req)
-		if err != nil {
-			t.Fatalf("Test request failed: %v", err)
-		}
-
-		if resp.StatusCode != fiber.StatusUnauthorized {
-			body, _ := io.ReadAll(resp.Body)
-			t.Errorf("Expected unauthorized, got status=%d, body=%s", resp.StatusCode, string(body))
-		}
-
-		body, _ := io.ReadAll(resp.Body)
-		var result map[string]interface{}
-		if err := json.Unmarshal(body, &result); err != nil {
-			t.Fatalf("Failed to unmarshal response: %v", err)
-		}
-
-		if result["reason"] != "expired" {
-			t.Errorf("Expected reason=expired, got %v", result["reason"])
-		}
-	})
+	t.Run("expired challenge", func(t *testing.T) { checkVerificationExpiredChallenge(t, redisClient, app) })
 
 	// Test locked challenge
-	t.Run("locked challenge", func(t *testing.T) {
-		config.ChallengeExpiry = 5 * time.Minute
-		challengeConfig := challengekit.Config{
-			Expiry:          config.ChallengeExpiry,
-			MaxAttempts:     3, // Max attempts = 3
-			LockoutDuration: config.LockoutDuration,
-			CodeLength:      config.CodeLength,
-		}
-		challengeMgr := challengekit.NewManager(redisClient, challengeConfig)
-
-		ctx := context.Background()
-		createReq := challengekit.CreateRequest{
-			UserID:      "user789",
-			Channel:     challengekit.ChannelEmail,
-			Destination: "test3@example.com",
-			Purpose:     "login",
-			ClientIP:    "127.0.0.1",
-		}
-		ch, _, err := challengeMgr.Create(ctx, createReq)
-		if err != nil {
-			t.Fatalf("Failed to create challenge: %v", err)
-		}
-
-		// Fail verification 3 times to lock
-		for i := 0; i < 3; i++ {
-			_, _ = challengeMgr.Verify(ctx, ch.ID, "000000", "127.0.0.1")
-		}
-
-		// Create new challenge for locked user
-		createReq2 := challengekit.CreateRequest{
-			UserID:      "user789",
-			Channel:     challengekit.ChannelEmail,
-			Destination: "test3@example.com",
-			Purpose:     "login",
-			ClientIP:    "127.0.0.1",
-		}
-		ch2, _, err := challengeMgr.Create(ctx, createReq2)
-		if err != nil {
-			t.Fatalf("Failed to create challenge: %v", err)
-		}
-
-		reqBody := VerifyChallengeRequest{
-			ChallengeID: ch2.ID,
-			Code:        "123456",
-			ClientIP:    "127.0.0.1",
-		}
-
-		bodyBytes, _ := json.Marshal(reqBody)
-		req := httptest.NewRequest("POST", "/verify", bytes.NewBuffer(bodyBytes))
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, err := app.Test(req)
-		if err != nil {
-			t.Fatalf("Test request failed: %v", err)
-		}
-
-		if resp.StatusCode != fiber.StatusUnauthorized {
-			body, _ := io.ReadAll(resp.Body)
-			t.Errorf("Expected unauthorized, got status=%d, body=%s", resp.StatusCode, string(body))
-		}
-
-		body, _ := io.ReadAll(resp.Body)
-		var result map[string]interface{}
-		if err := json.Unmarshal(body, &result); err != nil {
-			t.Fatalf("Failed to unmarshal response: %v", err)
-		}
-
-		// Should return user_locked reason (user was locked before verification)
-		reason := result["reason"].(string)
-		if reason != "user_locked" {
-			t.Errorf("Expected reason=user_locked, got %v", reason)
-		}
-	})
+	t.Run("locked challenge", func(t *testing.T) { checkVerificationLockedChallenge(t, redisClient, app) })
 
 	// Test invalid code
-	t.Run("invalid code", func(t *testing.T) {
-		config.ChallengeExpiry = 5 * time.Minute
-		challengeMgr := testChallengeManager(t, redisClient)
-
-		ctx := context.Background()
-		createReq := challengekit.CreateRequest{
-			UserID:      "user456",
-			Channel:     challengekit.ChannelEmail,
-			Destination: "test2@example.com",
-			Purpose:     "login",
-			ClientIP:    "127.0.0.1",
-		}
-		ch, _, err := challengeMgr.Create(ctx, createReq)
-		if err != nil {
-			t.Fatalf("Failed to create challenge: %v", err)
-		}
-
-		reqBody := VerifyChallengeRequest{
-			ChallengeID: ch.ID,
-			Code:        "000000",
-			ClientIP:    "127.0.0.1",
-		}
-
-		bodyBytes, _ := json.Marshal(reqBody)
-		req := httptest.NewRequest("POST", "/verify", bytes.NewBuffer(bodyBytes))
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, err := app.Test(req)
-		if err != nil {
-			t.Fatalf("Test request failed: %v", err)
-		}
-
-		if resp.StatusCode != fiber.StatusUnauthorized {
-			body, _ := io.ReadAll(resp.Body)
-			t.Errorf("Expected unauthorized, got status=%d, body=%s", resp.StatusCode, string(body))
-		}
-
-		body, _ := io.ReadAll(resp.Body)
-		var result map[string]interface{}
-		if err := json.Unmarshal(body, &result); err != nil {
-			t.Fatalf("Failed to unmarshal response: %v", err)
-		}
-
-		if result["reason"] != "invalid" {
-			t.Errorf("Expected reason=invalid, got %v", result["reason"])
-		}
-	})
+	t.Run("invalid code", func(t *testing.T) { checkVerificationInvalidCode(t, redisClient, app) })
 }
 
 func TestHandlers_CreateChallenge_TemplateErrorFallback(t *testing.T) {
@@ -2152,4 +1986,179 @@ func TestMaskDestination(t *testing.T) {
 			t.Errorf("maskDestination(empty) = %q, want empty", out)
 		}
 	})
+}
+
+func checkVerificationExpiredChallenge(t *testing.T, redisClient *redis.Client, app *fiber.App) {
+	t.Helper()
+	challengeMgr := testChallengeManager(t, redisClient)
+
+	ctx := context.Background()
+	createReq := challengekit.CreateRequest{
+		UserID:      "user123",
+		Channel:     challengekit.ChannelEmail,
+		Destination: "test@example.com",
+		Purpose:     "login",
+		ClientIP:    "127.0.0.1",
+	}
+	ch, code, err := challengeMgr.Create(ctx, createReq)
+	if err != nil {
+		t.Fatalf("Failed to create challenge: %v", err)
+	}
+
+	// Wait for expiry
+	time.Sleep(10 * time.Millisecond)
+
+	reqBody := VerifyChallengeRequest{
+		ChallengeID: ch.ID,
+		Code:        code,
+		ClientIP:    "127.0.0.1",
+	}
+
+	bodyBytes, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest("POST", "/verify", bytes.NewBuffer(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Test request failed: %v", err)
+	}
+
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		body, _ := io.ReadAll(resp.Body)
+		t.Errorf("Expected unauthorized, got status=%d, body=%s", resp.StatusCode, string(body))
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
+
+	if result["reason"] != "expired" {
+		t.Errorf("Expected reason=expired, got %v", result["reason"])
+	}
+}
+
+func checkVerificationLockedChallenge(t *testing.T, redisClient *redis.Client, app *fiber.App) {
+	t.Helper()
+	config.ChallengeExpiry = 5 * time.Minute
+	challengeConfig := challengekit.Config{
+		Expiry:          config.ChallengeExpiry,
+		MaxAttempts:     3, // Max attempts = 3
+		LockoutDuration: config.LockoutDuration,
+		CodeLength:      config.CodeLength,
+	}
+	challengeMgr := challengekit.NewManager(redisClient, challengeConfig)
+
+	ctx := context.Background()
+	createReq := challengekit.CreateRequest{
+		UserID:      "user789",
+		Channel:     challengekit.ChannelEmail,
+		Destination: "test3@example.com",
+		Purpose:     "login",
+		ClientIP:    "127.0.0.1",
+	}
+	ch, _, err := challengeMgr.Create(ctx, createReq)
+	if err != nil {
+		t.Fatalf("Failed to create challenge: %v", err)
+	}
+
+	// Fail verification 3 times to lock
+	for i := 0; i < 3; i++ {
+		_, _ = challengeMgr.Verify(ctx, ch.ID, "000000", "127.0.0.1")
+	}
+
+	// Create new challenge for locked user
+	createReq2 := challengekit.CreateRequest{
+		UserID:      "user789",
+		Channel:     challengekit.ChannelEmail,
+		Destination: "test3@example.com",
+		Purpose:     "login",
+		ClientIP:    "127.0.0.1",
+	}
+	ch2, _, err := challengeMgr.Create(ctx, createReq2)
+	if err != nil {
+		t.Fatalf("Failed to create challenge: %v", err)
+	}
+
+	reqBody := VerifyChallengeRequest{
+		ChallengeID: ch2.ID,
+		Code:        "123456",
+		ClientIP:    "127.0.0.1",
+	}
+
+	bodyBytes, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest("POST", "/verify", bytes.NewBuffer(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Test request failed: %v", err)
+	}
+
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		body, _ := io.ReadAll(resp.Body)
+		t.Errorf("Expected unauthorized, got status=%d, body=%s", resp.StatusCode, string(body))
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
+
+	// Should return user_locked reason (user was locked before verification)
+	reason := result["reason"].(string)
+	if reason != "user_locked" {
+		t.Errorf("Expected reason=user_locked, got %v", reason)
+	}
+}
+
+func checkVerificationInvalidCode(t *testing.T, redisClient *redis.Client, app *fiber.App) {
+	t.Helper()
+	config.ChallengeExpiry = 5 * time.Minute
+	challengeMgr := testChallengeManager(t, redisClient)
+
+	ctx := context.Background()
+	createReq := challengekit.CreateRequest{
+		UserID:      "user456",
+		Channel:     challengekit.ChannelEmail,
+		Destination: "test2@example.com",
+		Purpose:     "login",
+		ClientIP:    "127.0.0.1",
+	}
+	ch, _, err := challengeMgr.Create(ctx, createReq)
+	if err != nil {
+		t.Fatalf("Failed to create challenge: %v", err)
+	}
+
+	reqBody := VerifyChallengeRequest{
+		ChallengeID: ch.ID,
+		Code:        "000000",
+		ClientIP:    "127.0.0.1",
+	}
+
+	bodyBytes, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest("POST", "/verify", bytes.NewBuffer(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Test request failed: %v", err)
+	}
+
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		body, _ := io.ReadAll(resp.Body)
+		t.Errorf("Expected unauthorized, got status=%d, body=%s", resp.StatusCode, string(body))
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
+
+	if result["reason"] != "invalid" {
+		t.Errorf("Expected reason=invalid, got %v", result["reason"])
+	}
 }

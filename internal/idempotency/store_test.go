@@ -3,6 +3,7 @@ package idempotency
 import (
 	"context"
 	"encoding/json"
+	"github.com/stretchr/testify/require"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -99,21 +100,15 @@ func TestStore_SendingSurvivesRestartAndCannotBeCleared(t *testing.T) {
 	s := NewStore(rc, "test:idem:", []byte("secret"), time.Minute)
 	ctx := context.Background()
 	_, owner, err := s.Begin(ctx, "p", "key", "fp")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	if err := s.MarkSending(ctx, "p", "key", "fp", "stale-owner", "ch"); err != ErrOwnershipLost {
 		t.Fatalf("stale MarkSending: %v", err)
 	}
-	if err := s.MarkSending(ctx, "p", "key", "fp", owner, "ch"); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, s.MarkSending(ctx, "p", "key", "fp", owner, "ch"))
 	if err := s.Fail(ctx, "p", "key", "fp", owner); err != ErrDeliveryUnknown {
 		t.Fatalf("Fail after send: %v", err)
 	}
-	if err := s.Refresh(ctx, "p", "key", "fp", owner); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, s.Refresh(ctx, "p", "key", "fp", owner))
 	if ttl := mr.TTL(s.redisKey("p", "key")); ttl != 0 {
 		t.Fatalf("sending TTL=%s, want no expiry", ttl)
 	}
@@ -127,19 +122,13 @@ func TestStore_SendingSurvivesRestartAndCannotBeCleared(t *testing.T) {
 	}
 	var rec Record
 	raw, err := rc.Get(ctx, s.redisKey("p", "key")).Bytes()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal(raw, &rec); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(raw, &rec))
 	if rec.ChallengeID != "ch" {
 		t.Fatalf("reconciliation challenge ID=%q", rec.ChallengeID)
 	}
 	response := json.RawMessage(`{"challenge_id":"ch"}`)
-	if err := s.Succeed(ctx, "p", "key", "fp", owner, response); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, s.Succeed(ctx, "p", "key", "fp", owner, response))
 	replay, newOwner, err := restarted.Begin(ctx, "p", "key", "fp")
 	if err != nil || newOwner != "" || string(replay) != string(response) {
 		t.Fatalf("completion: replay=%s owner=%q err=%v", replay, newOwner, err)

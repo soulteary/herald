@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"github.com/stretchr/testify/require"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -28,9 +29,7 @@ func TestIdempotencyPrincipalCannotAliasDifferentHMACKeys(t *testing.T) {
 	h := newIdemHandlers(t, rc)
 	p := &countingProvider{channel: provider.ChannelEmail}
 	h.providerRegistry = provider.NewRegistry()
-	if err := h.providerRegistry.Register(p); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, h.providerRegistry.Register(p))
 	credentials := []struct{ service, keyID, secret string }{
 		{"service|kid:first", "second", "first-test-secret"},
 		{"service", "first|kid:second", "second-test-secret"},
@@ -66,23 +65,17 @@ func TestIdempotencyPrincipalCannotAliasDifferentHMACKeys(t *testing.T) {
 			Nonce: nonce, Service: credential.service, KeyID: credential.keyID, Body: []byte(body),
 		}))
 		resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		data, err := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		statuses, responses = append(statuses, resp.StatusCode), append(responses, string(data))
 	}
 	for i, status := range statuses {
 		var result struct {
 			Reason string `json:"reason"`
 		}
-		if err := json.Unmarshal([]byte(responses[i]), &result); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, json.Unmarshal([]byte(responses[i]), &result))
 		if status != http.StatusUnauthorized || result.Reason != "invalid_auth_headers" {
 			t.Errorf("ambiguous principal accepted: statuses=%v responses=%v provider calls=%d", statuses, responses, atomic.LoadInt64(&p.calls))
 		}
@@ -101,36 +94,27 @@ func TestIdempotencyPrincipalRetainsExistingOrdinaryRecords(t *testing.T) {
 			h := newIdemHandlers(t, rc)
 			p := &countingProvider{channel: provider.ChannelEmail}
 			h.providerRegistry = provider.NewRegistry()
-			if err := h.providerRegistry.Register(p); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, h.providerRegistry.Register(p))
 			ctx := context.Background()
 			// Seed the literal namespace used before the header validation fix.
 			const principal, key = "svc:caller|kid:key", "existing-key"
 			fp := idempotency.Fingerprint("user", "email", "a@example.com", "login", "")
 			_, owner, err := h.idempotencyStore.Begin(ctx, principal, key, fp)
-			if err != nil || owner == "" {
-				t.Fatalf("seed claim: owner=%q err=%v", owner, err)
-			}
+			require.NoError(t, err)
+			require.NotEmpty(t, owner)
 			if state != idempotency.StatePending {
-				if err := h.idempotencyStore.MarkSending(ctx, principal, key, fp, owner, "existing-challenge"); err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, h.idempotencyStore.MarkSending(ctx, principal, key, fp, owner, "existing-challenge"))
 			}
 			cached := json.RawMessage(`{"challenge_id":"existing-challenge"}`)
 			if state == idempotency.StateSucceeded {
-				if err := h.idempotencyStore.Succeed(ctx, principal, key, fp, owner, cached); err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, h.idempotencyStore.Succeed(ctx, principal, key, fp, owner, cached))
 			}
 			keys := mr.Keys()
 			if len(keys) != 1 {
 				t.Fatalf("unexpected seed keys: %v", keys)
 			}
 			before, err := rc.Get(ctx, keys[0]).Result()
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			ttl := mr.TTL(keys[0])
 			app := fiber.New()
 			app.Post("/v1/otp/challenges", auth.New(auth.Config{Mode: auth.ModeAPIKey, APIKey: "test-key"}), h.CreateChallenge)
@@ -141,14 +125,10 @@ func TestIdempotencyPrincipalRetainsExistingOrdinaryRecords(t *testing.T) {
 			req.Header.Set(auth.HeaderKeyID, "key")
 			req.Header.Set("Idempotency-Key", key)
 			resp, err := app.Test(req)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			data, err := io.ReadAll(resp.Body)
 			_ = resp.Body.Close()
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			wantStatus, wantBody := http.StatusConflict, "idempotency_in_flight"
 			if state == idempotency.StateSending {
 				wantBody = "delivery_unknown"
@@ -156,13 +136,15 @@ func TestIdempotencyPrincipalRetainsExistingOrdinaryRecords(t *testing.T) {
 			if state == idempotency.StateSucceeded {
 				wantStatus, wantBody = http.StatusOK, string(cached)
 			}
-			if resp.StatusCode != wantStatus || !strings.Contains(string(data), wantBody) || atomic.LoadInt64(&p.calls) != 0 {
-				t.Fatalf("legacy namespace changed: status=%d body=%s provider calls=%d", resp.StatusCode, data, atomic.LoadInt64(&p.calls))
-			}
+			require.Equal(t, wantStatus, resp.StatusCode)
+			require.Contains(t, string(data), wantBody)
+			require.Zero(t, atomic.LoadInt64(&p.calls))
+
 			after, err := rc.Get(ctx, keys[0]).Result()
-			if err != nil || after != before || mr.TTL(keys[0]) != ttl || len(mr.Keys()) != 1 {
-				t.Fatalf("legacy record changed: err=%v ttl=%s keys=%v", err, mr.TTL(keys[0]), mr.Keys())
-			}
+			require.NoError(t, err)
+			require.Equal(t, before, after)
+			require.Equal(t, ttl, mr.TTL(keys[0]))
+			require.Len(t, mr.Keys(), 1)
 		})
 	}
 }

@@ -46,7 +46,7 @@ func serverCertificateFiles(t *testing.T) (string, string) {
 	return certFile, keyFile
 }
 
-func TestTLSListenerPolicyAndFailures(t *testing.T) {
+func TestTLSListenerPolicy(t *testing.T) {
 	cert, key := serverCertificateFiles(t)
 	for _, mode := range []string{"off", "optional", "require"} {
 		cfg := Config{Addr: "127.0.0.1:0", TLSCertFile: cert, TLSKeyFile: key, ClientCertMode: mode}
@@ -85,6 +85,10 @@ func TestTLSListenerPolicyAndFailures(t *testing.T) {
 		}
 		_ = ln.Close()
 	}
+}
+
+func TestTLSListenerFailures(t *testing.T) {
+	cert, key := serverCertificateFiles(t)
 	busy, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)

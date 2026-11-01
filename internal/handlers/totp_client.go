@@ -105,29 +105,7 @@ func (c *totpProxyClient) call(ctx context.Context, method, endpoint string, que
 		return fmt.Errorf("TOTP request failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	readLimit := c.maxResponseBytes
-	if readLimit < 1<<63-1 {
-		readLimit++
-	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, readLimit))
-	if err != nil {
-		return fmt.Errorf("read TOTP response: %w", err)
-	}
-	if int64(len(data)) > c.maxResponseBytes {
-		return errors.New("TOTP response exceeds size limit")
-	}
-	// All five SDK endpoints use HTTP 200 for their normal response contract.
-	// Never decode a success result from a failed HTTP response.
-	if resp.StatusCode != http.StatusOK {
-		return &heraldtotp.HTTPError{StatusCode: resp.StatusCode}
-	}
-	if trimmed := bytes.TrimSpace(data); len(trimmed) == 0 || trimmed[0] != '{' {
-		return errors.New("TOTP response must be a JSON object")
-	}
-	if err := json.Unmarshal(data, result); err != nil {
-		return fmt.Errorf("invalid TOTP response: %w", err)
-	}
-	return nil
+	return c.decodeResponse(resp, result)
 }
 
 func totpResponse[T any](c *totpProxyClient, ctx context.Context, method, path string, query url.Values, payload interface{}) (*T, error) {
@@ -156,4 +134,30 @@ func (c *totpProxyClient) EnrollConfirm(ctx context.Context, req *heraldtotp.Enr
 
 func (c *totpProxyClient) Revoke(ctx context.Context, subject string) (*heraldtotp.RevokeResponse, error) {
 	return totpResponse[heraldtotp.RevokeResponse](c, ctx, http.MethodPost, "/v1/revoke", nil, heraldtotp.RevokeRequest{Subject: subject})
+}
+
+func (c *totpProxyClient) decodeResponse(resp *http.Response, result interface{}) error {
+	readLimit := c.maxResponseBytes
+	if readLimit < 1<<63-1 {
+		readLimit++
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, readLimit))
+	if err != nil {
+		return fmt.Errorf("read TOTP response: %w", err)
+	}
+	if int64(len(data)) > c.maxResponseBytes {
+		return errors.New("TOTP response exceeds size limit")
+	}
+	// All five SDK endpoints use HTTP 200 for their normal response contract.
+	// Never decode a success result from a failed HTTP response.
+	if resp.StatusCode != http.StatusOK {
+		return &heraldtotp.HTTPError{StatusCode: resp.StatusCode}
+	}
+	if trimmed := bytes.TrimSpace(data); len(trimmed) == 0 || trimmed[0] != '{' {
+		return errors.New("TOTP response must be a JSON object")
+	}
+	if err := json.Unmarshal(data, result); err != nil {
+		return fmt.Errorf("invalid TOTP response: %w", err)
+	}
+	return nil
 }

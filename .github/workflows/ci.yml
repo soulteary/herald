@@ -104,6 +104,10 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      - name: Check report spelling scope and regenerate quality evidence
+        if: "!cancelled() && steps.go_report_card.outcome == 'success'"
+        run: sh scripts/regenerate-report-card.sh
+
       - name: Reuse GTR coverage profile
         if: github.event_name == 'pull_request'
         shell: bash

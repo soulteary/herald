@@ -261,37 +261,8 @@ func Initialize(l *logger.Logger) error {
 		IdempotencyKeyTTL = ChallengeExpiry
 	}
 
-	// Derive an idempotency secret if not explicitly configured. Prefer a
-	// dedicated secret; otherwise reuse an existing service secret so keys are
-	// still opaque and principal-namespaced.
-	if IdempotencySecret == "" {
-		switch {
-		case HMACSecret != "":
-			IdempotencySecret = HMACSecret
-		case APIKey != "":
-			IdempotencySecret = APIKey
-		case len(hmacKeysMap) > 0 && Env == EnvProduction:
-			return fmt.Errorf("HERALD_IDEMPOTENCY_SECRET must be set in production when only HERALD_HMAC_KEYS is configured")
-		default:
-			IdempotencySecret = "herald-idempotency-fallback"
-		}
-	}
-
-	// Derive a PII pepper if not explicitly configured so rate-limit keys and
-	// audit fingerprints are still non-reversible. Production SHOULD set
-	// HERALD_PII_PEPPER explicitly (recommended, warned in Validate).
-	if PIIPepper == "" {
-		PIIPepper = IdempotencySecret
-	}
-
-	// Privacy default: in production, mask destinations in audit records unless
-	// the operator has explicitly opted out. This prevents raw phone/email from
-	// landing in the audit store by default.
-	if Env == EnvProduction && AuditEnabled {
-		if _, set := os.LookupEnv("AUDIT_MASK_DESTINATION"); !set {
-			AuditMaskDestination = true
-			log.Info().Msg("Production default: AUDIT_MASK_DESTINATION=true (set it explicitly to override)")
-		}
+	if err := initializeSecretsAndPrivacy(); err != nil {
+		return err
 	}
 
 	// Log configuration (excluding sensitive data)
@@ -331,48 +302,7 @@ func Validate() error {
 
 	var problems []string
 
-	// TLS must be configured coherently regardless of environment: a cert
-	// without a key (or vice versa) is a misconfiguration that would otherwise
-	// silently fall back to plaintext.
-	if (TLSCertFile == "") != (TLSKeyFile == "") {
-		problems = append(problems, "half-configured TLS: both TLS_CERT_FILE and TLS_KEY_FILE must be set together")
-	}
-	// A client CA (mTLS) requires a server cert/key to terminate TLS.
-	if TLSCACertFile != "" && (TLSCertFile == "" || TLSKeyFile == "") {
-		problems = append(problems, "TLS client CA configured without server certificate/key")
-	}
-	switch ClientCertMode {
-	case "off":
-		if TLSCACertFile != "" {
-			problems = append(problems, "TLS client CA configured while CLIENT_CERT_MODE=off")
-		}
-	case "optional", "require":
-		if TLSCACertFile == "" {
-			problems = append(problems, "CLIENT_CERT_MODE="+ClientCertMode+" requires TLS_CA_CERT_FILE")
-		}
-	default:
-		problems = append(problems, "CLIENT_CERT_MODE must be one of: off, optional, require")
-	}
-
-	// AUDIT_STORAGE_TYPE=loki has no backend implementation in audit-kit, so a
-	// request for it would silently degrade to no-op storage. Flag it explicitly
-	// (fatal in production, warning otherwise) rather than dropping audit records
-	// without notice.
-	if strings.Contains(strings.ToLower(AuditStorageType), "loki") {
-		problems = append(problems, "AUDIT_STORAGE_TYPE=loki is not supported (no Loki audit backend); use database, file, or redis")
-	}
-
-	// Provider transport hardening: reject plaintext provider URLs in production.
-	for _, u := range []struct{ name, url string }{
-		{"HERALD_SMTP_API_URL", HeraldSMTPAPIURL},
-		{"SMS_API_BASE_URL", SMSAPIBaseURL},
-		{"HERALD_DINGTALK_API_URL", HeraldDingtalkAPIURL},
-		{"HERALD_TOTP_BASE_URL", TOTPBaseURL},
-	} {
-		if u.url != "" && !strings.HasPrefix(strings.ToLower(u.url), "https://") {
-			problems = append(problems, u.name+" must use https:// in production")
-		}
-	}
+	problems = append(problems, listenerAndProviderProblems()...)
 
 	if Env != EnvProduction {
 		// Non-production: surface issues as warnings and continue, but never
@@ -385,53 +315,7 @@ func Validate() error {
 		return nil
 	}
 
-	// Production-only fail-closed checks.
-	problems = append(problems, validateProductionSecretMaterial()...)
-	if !authConfigured() {
-		problems = append(problems, "no service-to-service authentication configured (set API_KEY, HMAC_SECRET, or HERALD_HMAC_KEYS)")
-	}
-	// Validate the credentials required by the selected request-auth mode. Merely
-	// having a credential for a different mode must not let production start in a
-	// permanently unhealthy state where every business request is rejected.
-	switch strings.ToLower(strings.TrimSpace(RequestAuthMode)) {
-	case "api_key", "apikey":
-		if APIKey == "" {
-			problems = append(problems, "REQUEST_AUTH_MODE=api_key requires API_KEY")
-		}
-	case "hmac_v2", "hmac-v2", "hmac":
-		if HMACSecret == "" && len(hmacKeysMap) == 0 {
-			problems = append(problems, "REQUEST_AUTH_MODE=hmac_v2 requires HMAC_SECRET or HERALD_HMAC_KEYS")
-		}
-	}
-	if TestMode {
-		problems = append(problems, "HERALD_TEST_MODE=true is forbidden in production")
-	}
-	if NormalizedProviderFailurePolicy() == "soft" {
-		problems = append(problems, "PROVIDER_FAILURE_POLICY=soft is forbidden in production; use strict")
-	}
-	if RedisPassword == "" && !RiskAckPasswordlessRedis {
-		problems = append(problems, "passwordless Redis in production (set REDIS_PASSWORD or HERALD_RISK_ACK_PASSWORDLESS_REDIS=true to override)")
-	}
-	if strings.TrimSpace(CORSAllowOrigins) == "*" {
-		problems = append(problems, "CORS wildcard (HERALD_CORS_ALLOW_ORIGINS=*) is forbidden in production")
-	}
-	switch strings.ToLower(strings.TrimSpace(RequestAuthMode)) {
-	case "none", "off", "disabled":
-		problems = append(problems, "REQUEST_AUTH_MODE="+RequestAuthMode+" is forbidden in production")
-	}
-	if HMACV1Enabled {
-		// Not fatal, but the legacy scheme is not replay-resistant; warn loudly.
-		if log != nil {
-			log.Warn().Str("check", "config.validate").Msg("HMAC_V1_ENABLED=true in production: the legacy v1 scheme is not replay-resistant; disable after migration")
-		}
-	}
-
-	// Recommendation (non-fatal): an explicit PII pepper distinct from the auth
-	// secret keeps rate-limit keys / audit fingerprints non-reversible even if
-	// an auth secret is rotated. Warn rather than refuse start.
-	if env.Get("HERALD_PII_PEPPER", "") == "" && log != nil {
-		log.Warn().Str("check", "config.validate").Msg("HERALD_PII_PEPPER not set; deriving PII pepper from an existing secret (set an explicit pepper in production)")
-	}
+	problems = append(problems, productionPolicyProblems()...)
 
 	if len(problems) > 0 {
 		return fmt.Errorf("production config validation failed: %s", strings.Join(problems, "; "))
@@ -554,4 +438,156 @@ func HasHMACKeys() bool {
 // explicit X-Key-Id header.
 func GetHMACDefaultKeyID() string {
 	return hmacDefaultKeyID
+}
+
+func initializeSecretsAndPrivacy() error {
+	// Derive an idempotency secret if not explicitly configured. Prefer a
+	// dedicated secret; otherwise reuse an existing service secret so keys are
+	// still opaque and principal-namespaced.
+	if IdempotencySecret == "" {
+		switch {
+		case HMACSecret != "":
+			IdempotencySecret = HMACSecret
+		case APIKey != "":
+			IdempotencySecret = APIKey
+		case len(hmacKeysMap) > 0 && Env == EnvProduction:
+			return fmt.Errorf("HERALD_IDEMPOTENCY_SECRET must be set in production when only HERALD_HMAC_KEYS is configured")
+		default:
+			IdempotencySecret = "herald-idempotency-fallback"
+		}
+	}
+
+	// Derive a PII pepper if not explicitly configured so rate-limit keys and
+	// audit fingerprints are still non-reversible. Production SHOULD set
+	// HERALD_PII_PEPPER explicitly (recommended, warned in Validate).
+	if PIIPepper == "" {
+		PIIPepper = IdempotencySecret
+	}
+
+	// Privacy default: in production, mask destinations in audit records unless
+	// the operator has explicitly opted out. This prevents raw phone/email from
+	// landing in the audit store by default.
+	if Env == EnvProduction && AuditEnabled {
+		if _, set := os.LookupEnv("AUDIT_MASK_DESTINATION"); !set {
+			AuditMaskDestination = true
+			log.Info().Msg("Production default: AUDIT_MASK_DESTINATION=true (set it explicitly to override)")
+		}
+	}
+
+	return nil
+}
+
+func listenerAndProviderProblems() []string {
+	var problems []string
+	// TLS must be configured coherently regardless of environment: a cert
+	// without a key (or vice versa) is a misconfiguration that would otherwise
+	// silently fall back to plaintext.
+	if (TLSCertFile == "") != (TLSKeyFile == "") {
+		problems = append(problems, "half-configured TLS: both TLS_CERT_FILE and TLS_KEY_FILE must be set together")
+	}
+	// A client CA (mTLS) requires a server cert/key to terminate TLS.
+	if TLSCACertFile != "" && (TLSCertFile == "" || TLSKeyFile == "") {
+		problems = append(problems, "TLS client CA configured without server certificate/key")
+	}
+	switch ClientCertMode {
+	case "off":
+		if TLSCACertFile != "" {
+			problems = append(problems, "TLS client CA configured while CLIENT_CERT_MODE=off")
+		}
+	case "optional", "require":
+		if TLSCACertFile == "" {
+			problems = append(problems, "CLIENT_CERT_MODE="+ClientCertMode+" requires TLS_CA_CERT_FILE")
+		}
+	default:
+		problems = append(problems, "CLIENT_CERT_MODE must be one of: off, optional, require")
+	}
+
+	// AUDIT_STORAGE_TYPE=loki has no backend implementation in audit-kit, so a
+	// request for it would silently degrade to no-op storage. Flag it explicitly
+	// (fatal in production, warning otherwise) rather than dropping audit records
+	// without notice.
+	if strings.Contains(strings.ToLower(AuditStorageType), "loki") {
+		problems = append(problems, "AUDIT_STORAGE_TYPE=loki is not supported (no Loki audit backend); use database, file, or redis")
+	}
+
+	problems = append(problems, providerTransportProblems()...)
+
+	return problems
+}
+
+func productionPolicyProblems() []string {
+	var problems []string
+	// Production-only fail-closed checks.
+	problems = append(problems, productionAuthProblems()...)
+	if TestMode {
+		problems = append(problems, "HERALD_TEST_MODE=true is forbidden in production")
+	}
+	if NormalizedProviderFailurePolicy() == "soft" {
+		problems = append(problems, "PROVIDER_FAILURE_POLICY=soft is forbidden in production; use strict")
+	}
+	if RedisPassword == "" && !RiskAckPasswordlessRedis {
+		problems = append(problems, "passwordless Redis in production (set REDIS_PASSWORD or HERALD_RISK_ACK_PASSWORDLESS_REDIS=true to override)")
+	}
+	if strings.TrimSpace(CORSAllowOrigins) == "*" {
+		problems = append(problems, "CORS wildcard (HERALD_CORS_ALLOW_ORIGINS=*) is forbidden in production")
+	}
+	switch strings.ToLower(strings.TrimSpace(RequestAuthMode)) {
+	case "none", "off", "disabled":
+		problems = append(problems, "REQUEST_AUTH_MODE="+RequestAuthMode+" is forbidden in production")
+	}
+	if HMACV1Enabled {
+		// Not fatal, but the legacy scheme is not replay-resistant; warn loudly.
+		if log != nil {
+			log.Warn().Str("check", "config.validate").Msg("HMAC_V1_ENABLED=true in production: the legacy v1 scheme is not replay-resistant; disable after migration")
+		}
+	}
+
+	// Recommendation (non-fatal): an explicit PII pepper distinct from the auth
+	// secret keeps rate-limit keys / audit fingerprints non-reversible even if
+	// an auth secret is rotated. Warn rather than refuse start.
+	if env.Get("HERALD_PII_PEPPER", "") == "" && log != nil {
+		log.Warn().Str("check", "config.validate").Msg("HERALD_PII_PEPPER not set; deriving PII pepper from an existing secret (set an explicit pepper in production)")
+	}
+
+	return problems
+}
+
+func providerTransportProblems() []string {
+	var problems []string
+	// Provider transport hardening: reject plaintext provider URLs in production.
+	for _, u := range []struct{ name, url string }{
+		{"HERALD_SMTP_API_URL", HeraldSMTPAPIURL},
+		{"SMS_API_BASE_URL", SMSAPIBaseURL},
+		{"HERALD_DINGTALK_API_URL", HeraldDingtalkAPIURL},
+		{"HERALD_TOTP_BASE_URL", TOTPBaseURL},
+	} {
+		if u.url != "" && !strings.HasPrefix(strings.ToLower(u.url), "https://") {
+			problems = append(problems, u.name+" must use https:// in production")
+		}
+	}
+
+	return problems
+}
+
+func productionAuthProblems() []string {
+	var problems []string
+	problems = append(problems, validateProductionSecretMaterial()...)
+	if !authConfigured() {
+		problems = append(problems, "no service-to-service authentication configured (set API_KEY, HMAC_SECRET, or HERALD_HMAC_KEYS)")
+	}
+	// Validate the credentials required by the selected request-auth mode. Merely
+	// having a credential for a different mode must not let production start in a
+	// permanently unhealthy state where every business request is rejected.
+	switch strings.ToLower(strings.TrimSpace(RequestAuthMode)) {
+	case "api_key", "apikey":
+		if APIKey == "" {
+			problems = append(problems, "REQUEST_AUTH_MODE=api_key requires API_KEY")
+		}
+	case "hmac_v2", "hmac-v2", "hmac":
+		if HMACSecret == "" && len(hmacKeysMap) == 0 {
+			problems = append(problems, "REQUEST_AUTH_MODE=hmac_v2 requires HMAC_SECRET or HERALD_HMAC_KEYS")
+		}
+	}
+
+	return problems
 }

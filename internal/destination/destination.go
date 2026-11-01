@@ -71,36 +71,9 @@ func Validate(channel, dest string) (string, error) {
 	}
 	switch strings.ToLower(channel) {
 	case ChannelEmail:
-		if len(n) > MaxEmailLen {
-			return "", ErrInvalidDestination
-		}
-		addr, err := mail.ParseAddress(n)
-		if err != nil {
-			return "", ErrInvalidDestination
-		}
-		// Reject display-name forms ("Foo <a@b.com>"); require bare address.
-		if addr.Address != n {
-			return "", ErrInvalidDestination
-		}
-		at := strings.LastIndexByte(n, '@')
-		if at <= 0 || at == len(n)-1 {
-			return "", ErrInvalidDestination
-		}
-		if !strings.Contains(n[at+1:], ".") {
-			return "", ErrInvalidDestination
-		}
-		return n, nil
+		return validateEmail(n)
 	case ChannelSMS:
-		digits := strings.TrimPrefix(n, "+")
-		if len(digits) < MinPhoneDigits || len(digits) > MaxPhoneDigits {
-			return "", ErrInvalidDestination
-		}
-		for _, r := range digits {
-			if r < '0' || r > '9' {
-				return "", ErrInvalidDestination
-			}
-		}
-		return n, nil
+		return validateSMS(n)
 	case ChannelDingTalk:
 		if len(n) == 0 || len(n) > MaxDingTalkLen {
 			return "", ErrInvalidDestination
@@ -109,4 +82,43 @@ func Validate(channel, dest string) (string, error) {
 	default:
 		return "", ErrInvalidDestination
 	}
+}
+
+func validateEmail(n string) (string, error) {
+
+	if len(n) > MaxEmailLen {
+		return "", ErrInvalidDestination
+	}
+	addr, err := mail.ParseAddress(n)
+	if err != nil {
+		return "", ErrInvalidDestination
+	}
+	// Reject display-name forms ("Foo <a@b.com>"); require bare address.
+	if addr.Address != n {
+		return "", ErrInvalidDestination
+	}
+	at := strings.LastIndexByte(n, '@')
+	if at <= 0 || at == len(n)-1 {
+		return "", ErrInvalidDestination
+	}
+	if !strings.Contains(n[at+1:], ".") {
+		return "", ErrInvalidDestination
+	}
+	return n, nil
+
+}
+
+func validateSMS(n string) (string, error) {
+
+	digits := strings.TrimPrefix(n, "+")
+	if len(digits) < MinPhoneDigits || len(digits) > MaxPhoneDigits {
+		return "", ErrInvalidDestination
+	}
+	for _, r := range digits {
+		if r < '0' || r > '9' {
+			return "", ErrInvalidDestination
+		}
+	}
+	return n, nil
+
 }

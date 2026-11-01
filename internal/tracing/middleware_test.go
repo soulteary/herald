@@ -8,170 +8,21 @@ import (
 )
 
 func TestTracingMiddleware(t *testing.T) {
-	t.Run("creates span", func(t *testing.T) {
-		app := fiber.New()
-		app.Use(TracingMiddleware("test-service"))
-		app.Get("/test", func(c fiber.Ctx) error {
-			// Verify span is in context
-			span := c.Locals("trace_span")
-			if span == nil {
-				t.Error("TracingMiddleware should add span to locals")
-			}
-			ctx := c.Locals("trace_context")
-			if ctx == nil {
-				t.Error("TracingMiddleware should add trace context to locals")
-			}
-			return c.SendString("OK")
-		})
+	t.Run("creates span", testTracingCreatesSpan)
 
-		req := httptest.NewRequest("GET", "/test", nil)
-		resp, err := app.Test(req)
-		if err != nil {
-			t.Fatalf("app.Test() error = %v", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
+	t.Run("extracts trace context", testTracingExtractsTraceContext)
 
-		if resp.StatusCode != 200 {
-			t.Errorf("Expected status 200, got %d", resp.StatusCode)
-		}
-	})
+	t.Run("injects trace context", testTracingInjectsTraceContext)
 
-	t.Run("extracts trace context", func(t *testing.T) {
-		app := fiber.New()
-		app.Use(TracingMiddleware("test-service"))
-		app.Get("/test", func(c fiber.Ctx) error {
-			return c.SendString("OK")
-		})
+	t.Run("sets HTTP attributes", testTracingSetsHttpAttributes)
 
-		req := httptest.NewRequest("GET", "/test", nil)
-		req.Header.Set("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
-		resp, err := app.Test(req)
-		if err != nil {
-			t.Fatalf("app.Test() error = %v", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
+	t.Run("handles error", testTracingHandlesError)
 
-		if resp.StatusCode != 200 {
-			t.Errorf("Expected status 200, got %d", resp.StatusCode)
-		}
-	})
+	t.Run("handles 4xx status code", testTracingHandles4XxStatusCode)
 
-	t.Run("injects trace context", func(t *testing.T) {
-		app := fiber.New()
-		app.Use(TracingMiddleware("test-service"))
-		app.Get("/test", func(c fiber.Ctx) error {
-			return c.SendString("OK")
-		})
+	t.Run("uses route path for span name", testTracingUsesRoutePathForSpanName)
 
-		req := httptest.NewRequest("GET", "/test", nil)
-		resp, err := app.Test(req)
-		if err != nil {
-			t.Fatalf("app.Test() error = %v", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-
-		// Verify trace context is injected (traceparent header may be present)
-		// The exact header depends on OTel implementation
-		if resp.StatusCode != 200 {
-			t.Errorf("Expected status 200, got %d", resp.StatusCode)
-		}
-	})
-
-	t.Run("sets HTTP attributes", func(t *testing.T) {
-		app := fiber.New()
-		app.Use(TracingMiddleware("test-service"))
-		app.Get("/test", func(c fiber.Ctx) error {
-			return c.SendString("OK")
-		})
-
-		req := httptest.NewRequest("GET", "/test", nil)
-		req.Header.Set("User-Agent", "test-agent")
-		resp, err := app.Test(req)
-		if err != nil {
-			t.Fatalf("app.Test() error = %v", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-
-		if resp.StatusCode != 200 {
-			t.Errorf("Expected status 200, got %d", resp.StatusCode)
-		}
-	})
-
-	t.Run("handles error", func(t *testing.T) {
-		app := fiber.New()
-		app.Use(TracingMiddleware("test-service"))
-		app.Get("/test", func(c fiber.Ctx) error {
-			return fiber.NewError(500, "test error")
-		})
-
-		req := httptest.NewRequest("GET", "/test", nil)
-		resp, err := app.Test(req)
-		if err != nil {
-			t.Fatalf("app.Test() error = %v", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-
-		if resp.StatusCode != 500 {
-			t.Errorf("Expected status 500, got %d", resp.StatusCode)
-		}
-	})
-
-	t.Run("handles 4xx status code", func(t *testing.T) {
-		app := fiber.New()
-		app.Use(TracingMiddleware("test-service"))
-		app.Get("/test", func(c fiber.Ctx) error {
-			return c.Status(404).SendString("Not Found")
-		})
-
-		req := httptest.NewRequest("GET", "/test", nil)
-		resp, err := app.Test(req)
-		if err != nil {
-			t.Fatalf("app.Test() error = %v", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-
-		if resp.StatusCode != 404 {
-			t.Errorf("Expected status 404, got %d", resp.StatusCode)
-		}
-	})
-
-	t.Run("uses route path for span name", func(t *testing.T) {
-		app := fiber.New()
-		app.Use(TracingMiddleware("test-service"))
-		app.Get("/api/v1/users/:id", func(c fiber.Ctx) error {
-			return c.SendString("OK")
-		})
-
-		req := httptest.NewRequest("GET", "/api/v1/users/123", nil)
-		resp, err := app.Test(req)
-		if err != nil {
-			t.Fatalf("app.Test() error = %v", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-
-		if resp.StatusCode != 200 {
-			t.Errorf("Expected status 200, got %d", resp.StatusCode)
-		}
-	})
-
-	t.Run("uses method and URL when no route", func(t *testing.T) {
-		app := fiber.New()
-		app.Use(TracingMiddleware("test-service"))
-		app.Get("/*", func(c fiber.Ctx) error {
-			return c.SendString("OK")
-		})
-
-		req := httptest.NewRequest("GET", "/unknown/path", nil)
-		resp, err := app.Test(req)
-		if err != nil {
-			t.Fatalf("app.Test() error = %v", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-
-		if resp.StatusCode != 200 {
-			t.Errorf("Expected status 200, got %d", resp.StatusCode)
-		}
-	})
+	t.Run("uses method and URL when no route", testTracingUsesMethodAndUrlWhenNoRoute)
 }
 
 func TestHeaderCarrier(t *testing.T) {
@@ -263,4 +114,177 @@ func TestHeaderCarrier(t *testing.T) {
 			t.Errorf("Keys() with empty headers length = %d, want 0", len(keys))
 		}
 	})
+}
+
+func testTracingCreatesSpan(t *testing.T) {
+	t.Helper()
+	app := fiber.New()
+	app.Use(TracingMiddleware("test-service"))
+	app.Get("/test", func(c fiber.Ctx) error {
+		// Verify span is in context
+		span := c.Locals("trace_span")
+		if span == nil {
+			t.Error("TracingMiddleware should add span to locals")
+		}
+		ctx := c.Locals("trace_context")
+		if ctx == nil {
+			t.Error("TracingMiddleware should add trace context to locals")
+		}
+		return c.SendString("OK")
+	})
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+	}
+}
+
+func testTracingExtractsTraceContext(t *testing.T) {
+	t.Helper()
+	app := fiber.New()
+	app.Use(TracingMiddleware("test-service"))
+	app.Get("/test", func(c fiber.Ctx) error {
+		return c.SendString("OK")
+	})
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+	}
+}
+
+func testTracingInjectsTraceContext(t *testing.T) {
+	t.Helper()
+	app := fiber.New()
+	app.Use(TracingMiddleware("test-service"))
+	app.Get("/test", func(c fiber.Ctx) error {
+		return c.SendString("OK")
+	})
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	// Verify trace context is injected (traceparent header may be present)
+	// The exact header depends on OTel implementation
+	if resp.StatusCode != 200 {
+		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+	}
+}
+
+func testTracingSetsHttpAttributes(t *testing.T) {
+	t.Helper()
+	app := fiber.New()
+	app.Use(TracingMiddleware("test-service"))
+	app.Get("/test", func(c fiber.Ctx) error {
+		return c.SendString("OK")
+	})
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("User-Agent", "test-agent")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+	}
+}
+
+func testTracingHandlesError(t *testing.T) {
+	t.Helper()
+	app := fiber.New()
+	app.Use(TracingMiddleware("test-service"))
+	app.Get("/test", func(c fiber.Ctx) error {
+		return fiber.NewError(500, "test error")
+	})
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 500 {
+		t.Errorf("Expected status 500, got %d", resp.StatusCode)
+	}
+}
+
+func testTracingHandles4XxStatusCode(t *testing.T) {
+	t.Helper()
+	app := fiber.New()
+	app.Use(TracingMiddleware("test-service"))
+	app.Get("/test", func(c fiber.Ctx) error {
+		return c.Status(404).SendString("Not Found")
+	})
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 404 {
+		t.Errorf("Expected status 404, got %d", resp.StatusCode)
+	}
+}
+
+func testTracingUsesRoutePathForSpanName(t *testing.T) {
+	t.Helper()
+	app := fiber.New()
+	app.Use(TracingMiddleware("test-service"))
+	app.Get("/api/v1/users/:id", func(c fiber.Ctx) error {
+		return c.SendString("OK")
+	})
+
+	req := httptest.NewRequest("GET", "/api/v1/users/123", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+	}
+}
+
+func testTracingUsesMethodAndUrlWhenNoRoute(t *testing.T) {
+	t.Helper()
+	app := fiber.New()
+	app.Use(TracingMiddleware("test-service"))
+	app.Get("/*", func(c fiber.Ctx) error {
+		return c.SendString("OK")
+	})
+
+	req := httptest.NewRequest("GET", "/unknown/path", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+	}
 }

@@ -14,6 +14,7 @@ import (
 	rediskitcache "github.com/soulteary/redis-kit/cache"
 	secure "github.com/soulteary/secure-kit/v2"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	challengekit "github.com/soulteary/challenge-kit"
 	"github.com/soulteary/herald-totp/pkg/heraldtotp"
@@ -114,35 +115,8 @@ func NewHandlersWithError(redisClient *redis.Client, log *logger.Logger) (*Handl
 	// Initialize provider registry (using provider-kit)
 	registry := provider.NewRegistry()
 
-	// Register email channel: herald-smtp HTTP provider takes precedence over built-in SMTP
-	if config.HeraldSMTPAPIURL != "" {
-		httpProvider, err := provider.NewHTTPProvider(hardenedHTTPConfig(config.HeraldSMTPAPIURL, config.HeraldSMTPAPIKey, provider.ChannelEmail, "smtp"))
-		if err != nil {
-			return nil, fmt.Errorf("herald-smtp provider config invalid: %w", err)
-		}
-		if err := registry.Register(httpProvider); err != nil {
-			return nil, fmt.Errorf("failed to register herald-smtp provider: %w", err)
-		}
-		log.Info().Msg("Email HTTP provider registered (herald-smtp)")
-	} else if config.SMTPHost != "" {
-		// Built-in SMTP provider when herald-smtp URL is not set
-		smtpConfig := &provider.SMTPConfig{
-			Host:        config.SMTPHost,
-			Port:        config.SMTPPort,
-			Username:    config.SMTPUser,
-			Password:    config.SMTPPassword,
-			From:        config.SMTPFrom,
-			UseStartTLS: true,
-			Timeout:     config.ProviderTimeout,
-		}
-		smtpProvider, err := provider.NewSMTPProvider(smtpConfig)
-		if err != nil {
-			return nil, fmt.Errorf("SMTP provider config invalid: %w", err)
-		}
-		if err := registry.Register(smtpProvider); err != nil {
-			return nil, fmt.Errorf("failed to register SMTP provider: %w", err)
-		}
-		log.Info().Msg("SMTP provider registered")
+	if err := registerEmailProvider(registry, log); err != nil {
+		return nil, err
 	}
 
 	// Register HTTP SMS provider if configured (using HTTP API for SMS delivery)
@@ -265,57 +239,8 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 		attribute.String("destination", maskDestination(req.Destination)),
 	)
 
-	// Validate request
-	if req.UserID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "user_id_required",
-		})
-	}
-
-	if req.Channel != "sms" && req.Channel != "email" && req.Channel != "dingtalk" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "invalid_channel",
-		})
-	}
-
-	if req.Destination == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "destination_required",
-		})
-	}
-
-	// Validate + normalize the destination once. The normalized value is used
-	// for the provider call, rate-limit keys, and idempotency fingerprint so
-	// trivial variants (case/spacing/separators) cannot bypass dedup or limits.
-	normDest, derr := destination.Validate(req.Channel, req.Destination)
-	if derr != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "invalid_destination",
-		})
-	}
-	req.Destination = normDest
-
-	// Validate purpose
-	if req.Purpose == "" {
-		req.Purpose = "login" // Default purpose
-	}
-	purposeValid := false
-	for _, allowed := range config.AllowedPurposes {
-		if allowed == req.Purpose {
-			purposeValid = true
-			break
-		}
-	}
-	if !purposeValid {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "invalid_purpose",
-			"error":  fmt.Sprintf("Purpose must be one of: %s", strings.Join(config.AllowedPurposes, ", ")),
-		})
+	if valid, err := h.validateCreateRequest(c, &req); !valid {
+		return err
 	}
 
 	// Client IP trust split (Phase 6):
@@ -326,14 +251,7 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 	//   - reportedClientIP is advisory (supplied by the trusted upstream service
 	//     in the request body) and is only recorded in audit logs.
 	peerIP := c.IP()
-	reportedClientIP := req.ClientIP
-	// The reported client IP is advisory only. Record a peppered digest at debug
-	// level for troubleshooting mismatches without trusting or exposing it.
-	if reportedClientIP != "" && reportedClientIP != peerIP {
-		h.log.Debug().
-			Str("reported_client_ip_digest", h.digester.Digest(reportedClientIP)).
-			Msg("reported client_ip differs from trusted peer IP (advisory only)")
-	}
+	h.logReportedClientIP(req.ClientIP, peerIP)
 
 	// Atomic idempotency claim (Phase 3). Principal = authenticated service +
 	// key id when present, else the client IP, so keys are namespaced per
@@ -341,127 +259,22 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 	// key with a different body we return 409; on a concurrent in-flight request
 	// we return 409 (retryable); on backend failure we fail closed.
 	principal := idempotencyPrincipal(c)
-	var idempotencyOwner string
 	fingerprint := idempotency.Fingerprint(
 		req.UserID, strings.ToLower(req.Channel), destination.Normalize(req.Channel, req.Destination), req.Purpose, req.Locale,
 	)
-	if idempotencyKey != "" {
-		replay, owner, err := h.idempotencyStore.Begin(spanCtx, principal, idempotencyKey, fingerprint)
-		switch {
-		case err == nil && owner == "" && replay != nil:
-			metrics.RecordIdempotency("replay")
-			c.Set("Content-Type", "application/json")
-			return c.Status(fiber.StatusOK).Send(replay)
-		case err == idempotency.ErrConflict:
-			metrics.RecordIdempotency("conflict")
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"ok": false, "reason": "idempotency_conflict"})
-		case err == idempotency.ErrDeliveryUnknown:
-			metrics.RecordIdempotency("delivery_unknown")
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"ok": false, "reason": "delivery_unknown"})
-		case err == idempotency.ErrInFlight:
-			metrics.RecordIdempotency("in_flight")
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"ok": false, "reason": "idempotency_in_flight"})
-		case err == idempotency.ErrBackendUnavailable:
-			metrics.RecordIdempotency("backend_error")
-			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "backend_unavailable"})
-		case err != nil:
-			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "backend_unavailable"})
-		}
-		idempotencyOwner = owner
-		// A non-empty owner token proves this handler holds the pending slot and
-		// must be supplied to Succeed/Fail below.
+	idempotencyOwner, handled, err := h.beginCreation(c, spanCtx, principal, idempotencyKey, fingerprint)
+	if handled {
+		return err
 	}
 
 	// failIdem clears the pending slot on a terminal failure so a retry can
 	// proceed. It is a no-op when there is no idempotency key.
 	failIdem := func() {
-		if idempotencyKey != "" {
-			_ = h.idempotencyStore.Fail(spanCtx, principal, idempotencyKey, fingerprint, idempotencyOwner)
-		}
+		h.releaseCreationClaim(spanCtx, principal, idempotencyKey, fingerprint, idempotencyOwner)
 	}
 
-	// Check rate limits
-	// 1. Per user (peppered digest so raw user id never lands in a Redis key)
-	allowed, _, _, err := h.rateLimitManager.CheckUserRateLimit(
-		spanCtx, h.digester.Digest(req.UserID), config.RateLimitPerUser, time.Hour,
-	)
-	if err != nil {
-		h.log.Error().Err(err).Msg("Rate limit check failed")
-		failIdem()
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "backend_unavailable",
-		})
-	}
-	if !allowed {
-		metrics.RecordRateLimitHit("user")
-		failIdem()
-		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "rate_limit_exceeded",
-		})
-	}
-
-	// 2. Per IP (peppered). Uses the trusted peer IP, never the self-reported one.
-	allowed, _, _, err = h.rateLimitManager.CheckIPRateLimit(
-		spanCtx, h.digester.Digest(peerIP), config.RateLimitPerIP, time.Minute,
-	)
-	if err != nil {
-		h.log.Error().Err(err).Msg("Rate limit check failed")
-		failIdem()
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "backend_unavailable",
-		})
-	}
-	if !allowed {
-		metrics.RecordRateLimitHit("ip")
-		failIdem()
-		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "rate_limit_exceeded",
-		})
-	}
-
-	// 3. Per destination (peppered digest of the normalized destination)
-	allowed, _, _, err = h.rateLimitManager.CheckDestinationRateLimit(
-		spanCtx, h.digester.Digest(req.Destination), config.RateLimitPerDestination, time.Hour,
-	)
-	if err != nil {
-		h.log.Error().Err(err).Msg("Rate limit check failed")
-		failIdem()
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "backend_unavailable",
-		})
-	}
-	if !allowed {
-		metrics.RecordRateLimitHit("destination")
-		failIdem()
-		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "rate_limit_exceeded",
-		})
-	}
-
-	// 4. Resend cooldown (peppered digest of user+destination)
-	cooldownKey := h.digester.DigestParts(req.UserID, req.Destination)
-	allowed, _, err = h.rateLimitManager.CheckResendCooldown(spanCtx, cooldownKey, config.ResendCooldown)
-	if err != nil {
-		h.log.Error().Err(err).Msg("Cooldown check failed")
-		failIdem()
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "backend_unavailable",
-		})
-	}
-	if !allowed {
-		metrics.RecordRateLimitHit("resend_cooldown")
-		failIdem()
-		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "resend_cooldown",
-		})
+	if allowed, err := h.checkCreationLimits(c, spanCtx, req, peerIP, failIdem); !allowed {
+		return err
 	}
 
 	// Check if user is locked
@@ -508,206 +321,22 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 	// Metrics: challenge created
 	metrics.RecordChallengeCreated(req.Channel, req.Purpose, "success")
 
-	// Store code in test mode (for integration testing only). Guarded by the
-	// combined test-environment + test-mode switch so plaintext codes can never
-	// be exposed in production even if HERALD_TEST_MODE is accidentally set.
-	if config.TestCodeExposureEnabled() {
-		if err := h.testCodeCache.Set(spanCtx, ch.ID, code, config.ChallengeExpiry); err != nil {
-			h.log.Warn().Err(err).Msg("Failed to store test code")
-		}
+	h.storeTestCode(spanCtx, ch.ID, code)
+
+	msg, providerName := h.buildDeliveryMessage(req, ch.ID, code)
+
+	if persisted, err := h.persistSendBoundary(c, spanCtx, ch, principal, idempotencyKey, fingerprint, idempotencyOwner); !persisted {
+		return err
 	}
 
-	// Send verification code via provider
-	channel := provider.Channel(req.Channel)
-
-	// Use template manager to format message
-	templateData := template.TemplateData{
-		Code:      code,
-		ExpiresIn: int(config.ChallengeExpiry.Seconds()),
-		Purpose:   req.Purpose,
-		Locale:    req.Locale,
+	softDeliveryFailed, delivered, err := h.deliverChallenge(c, spanCtx, req, ch, msg, providerName, peerIP)
+	if !delivered {
+		return err
 	}
 
-	// Build message using provider-kit fluent API
-	msg := provider.NewMessage(req.Destination).
-		WithCode(code).
-		WithLocale(req.Locale).
-		WithIdempotencyKey(ch.ID) // Use challenge ID as idempotency key
-
-	if channel == provider.ChannelEmail {
-		subject, body, err := h.templateManager.RenderEmail(req.Locale, req.Purpose, templateData)
-		if err != nil {
-			// Fallback to built-in formatting from provider-kit
-			subject, body = provider.FormatVerificationEmail(code, req.Locale)
-		}
-		msg.WithSubject(subject).WithBody(body)
-	} else {
-		// SMS and DingTalk: body only (DingTalk via herald-dingtalk receives body)
-		body, err := h.templateManager.RenderSMS(req.Locale, req.Purpose, templateData)
-		if err != nil {
-			// Fallback to built-in formatting from provider-kit
-			body = provider.FormatVerificationSMS(code, req.Locale)
-		}
-		msg.WithBody(body)
+	if activated, err := h.activateChallenge(c, spanCtx, ch, principal, idempotencyKey, fingerprint, idempotencyOwner); !activated {
+		return err
 	}
-
-	// Determine provider name for audit
-	var providerName string
-	switch req.Channel {
-	case "email":
-		providerName = "smtp"
-	case "sms":
-		providerName = config.SMSProvider
-	case "dingtalk":
-		providerName = "dingtalk"
-	default:
-		providerName = req.Channel
-	}
-
-	softDeliveryFailed := false
-
-	// Persist the send boundary before invoking the provider. A TTL lease alone
-	// would expire after a process exit and allow a second delivery.
-	if idempotencyKey != "" {
-		if err := h.idempotencyStore.MarkSending(spanCtx, principal, idempotencyKey, fingerprint, idempotencyOwner, ch.ID); err != nil {
-			_ = h.challengeManager.RevokePending(spanCtx, ch.ID)
-			if errors.Is(err, idempotency.ErrOwnershipLost) {
-				metrics.RecordIdempotency("ownership_lost")
-				return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-					"ok":     false,
-					"reason": "idempotency_ownership_lost",
-				})
-			}
-			h.log.Error().Err(err).Msg("Failed to persist idempotency send boundary")
-			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-				"ok":     false,
-				"reason": "backend_unavailable",
-			})
-		}
-	}
-
-	// Start provider observability only after the send boundary is persisted.
-	providerCtx, providerSpan := tracing.StartSpan(spanCtx, "otp.provider.send")
-	providerSpan.SetAttributes(
-		attribute.String("channel", req.Channel),
-		attribute.String("provider", providerName),
-	)
-
-	// Record only provider latency; send-boundary persistence belongs to Redis.
-	sendStart := time.Now()
-
-	// Send using provider-kit Registry (returns *SendResult, error)
-	sendResult, err := h.providerRegistry.Send(providerCtx, channel, msg)
-	sendDuration := time.Since(sendStart)
-
-	if err != nil || (sendResult != nil && !sendResult.OK) {
-		tracing.RecordError(providerSpan, err)
-		providerSpan.End()
-		h.log.Error().Err(err).Msg("Failed to send verification code via provider")
-
-		// Get error reason from provider-kit result
-		errorReason := "send_failed"
-		if sendResult != nil && sendResult.Error != nil {
-			errorReason = string(sendResult.Error.Reason)
-		}
-		// Record provider timeouts distinctly for reliability dashboards.
-		if errors.Is(err, context.DeadlineExceeded) || errorReason == "timeout" {
-			metrics.RecordProviderTimeout(req.Channel)
-		}
-
-		// Metrics: send failed
-		metrics.RecordOTPSend(req.Channel, providerName, "failure", sendDuration)
-
-		// Audit: send failed
-		auditErr := auditlog.LogSendFailed(providerCtx, ch.ID, req.UserID, req.Channel, req.Destination, req.Purpose, providerName, errorReason, peerIP)
-
-		// Handle provider failure based on policy
-		if config.NormalizedProviderFailurePolicy() == "strict" {
-			// Strict mode: revoke challenge and return error
-			_ = h.challengeManager.Revoke(spanCtx, ch.ID)
-			metrics.RecordChallengeState("revoked")
-			// The provider may have delivered before reporting an error. Keep
-			// the sending record so a retry cannot send a second code.
-			// Audit failure must not skip strict-policy revocation.
-			if auditErr != nil {
-				return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
-			}
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"ok":     false,
-				"reason": "send_failed",
-				"error":  "Failed to send verification code",
-			})
-		}
-		if auditErr != nil {
-			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
-		}
-		// Soft mode (only permitted outside production / degraded): the challenge
-		// stays created but we surface delivery_status=failed so the caller knows
-		// the code may not have been delivered. Still promote it to active so it
-		// can be verified if it did arrive.
-		softDeliveryFailed = true
-	} else {
-		providerSpan.SetAttributes(
-			attribute.String("result", "success"),
-			attribute.Int64("duration_ms", sendDuration.Milliseconds()),
-		)
-		providerSpan.End()
-
-		// Metrics: send success
-		metrics.RecordOTPSend(req.Channel, providerName, "success", sendDuration)
-
-		// Audit: send success (now includes messageID from provider-kit)
-		messageID := ""
-		if sendResult != nil {
-			messageID = sendResult.MessageID
-		}
-		if err := auditlog.LogSendSuccess(providerCtx, ch.ID, req.UserID, req.Channel, req.Destination, req.Purpose, providerName, messageID, peerIP); err != nil {
-			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
-		}
-	}
-
-	// Single active challenge (two-phase activate): now that the create+send
-	// step is done (success, or soft-failed but still verifiable), promote this
-	// challenge to be the only active one for its identity and invalidate the
-	// previously active challenge so an older, still-live code cannot be
-	// redeemed. A backend error here must not leave a redeemable-but-unindexed
-	// code, so on failure we revoke this pending challenge and fail closed.
-	// Re-check ownership immediately before activation. Sending records remain
-	// non-expiring; a backend error must not reopen the key for another send.
-	if idempotencyKey != "" {
-		if err := h.idempotencyStore.Refresh(spanCtx, principal, idempotencyKey, fingerprint, idempotencyOwner); err != nil {
-			_ = h.challengeManager.RevokePending(spanCtx, ch.ID)
-			if errors.Is(err, idempotency.ErrOwnershipLost) {
-				metrics.RecordIdempotency("ownership_lost")
-				return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-					"ok":     false,
-					"reason": "idempotency_ownership_lost",
-				})
-			}
-			h.log.Error().Err(err).Msg("Failed to refresh idempotency ownership")
-			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-				"ok":     false,
-				"reason": "backend_unavailable",
-			})
-		}
-	}
-	prevID, actErr := h.challengeManager.SwapActive(spanCtx, ch)
-	if actErr != nil {
-		h.log.Error().Err(actErr).Str("challenge_id", ch.ID).Msg("Failed to activate challenge")
-		_ = h.challengeManager.RevokePending(spanCtx, ch.ID)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "internal_error",
-		})
-	}
-	if prevID != "" && prevID != ch.ID {
-		if err := h.challengeManager.Revoke(spanCtx, prevID); err != nil {
-			h.log.Warn().Err(err).Str("challenge_id", prevID).Msg("Failed to revoke superseded challenge")
-		} else {
-			metrics.RecordChallengeState("superseded")
-		}
-	}
-	metrics.RecordChallengeState("activated")
 
 	// Prepare response
 	response := fiber.Map{
@@ -724,15 +353,8 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 
 	// Store the terminal idempotency result so concurrent/subsequent duplicates
 	// replay this exact response instead of sending another code.
-	if idempotencyKey != "" {
-		payload, err := json.Marshal(response)
-		if err == nil {
-			err = h.idempotencyStore.Succeed(spanCtx, principal, idempotencyKey, fingerprint, idempotencyOwner, payload)
-		}
-		if err != nil {
-			h.log.Error().Err(err).Msg("Failed to persist idempotency success record")
-			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "backend_unavailable"})
-		}
+	if completed, err := h.completeCreation(c, spanCtx, response, principal, idempotencyKey, fingerprint, idempotencyOwner); !completed {
+		return err
 	}
 
 	// Return response
@@ -830,48 +452,7 @@ func (h *Handlers) VerifyChallenge(c fiber.Ctx) error {
 	// Verify challenge
 	result, err := h.challengeManager.Verify(verifyCtx, req.ChallengeID, req.Code, peerIP)
 	if err != nil || result == nil || !result.OK {
-		reason := "verification_failed"
-		if result != nil && result.Reason != "" {
-			reason = result.Reason
-		} else if err != nil {
-			reason = verificationReasonFromError(err)
-		} else if result == nil {
-			reason = "backend_unavailable"
-		}
-
-		tracing.RecordError(verifySpan, err)
-		h.log.Debug().Err(err).Msg("Challenge verification failed")
-
-		// Set span attributes for failure
-		verifySpan.SetAttributes(
-			attribute.String("result", "failure"),
-			attribute.String("reason", reason),
-		)
-
-		// Metrics: verification failed
-		metrics.RecordVerification("failure", reason)
-		if reason == "contended" || contains(reason, "contention") || contains(reason, "try_again") {
-			metrics.RecordVerificationContention("contended")
-		}
-
-		// Audit: verification failed
-		if err := auditlog.LogVerificationFailed(verifyCtx, req.ChallengeID, reason, peerIP); err != nil {
-			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
-		}
-
-		response := fiber.Map{
-			"ok":     false,
-			"reason": reason,
-		}
-		if result != nil && result.RemainingAttempts != nil {
-			response["remaining_attempts"] = *result.RemainingAttempts
-		}
-
-		status := verificationFailureStatus(reason, err)
-		if verificationFailureRetryable(reason, status) {
-			c.Set("Retry-After", "1")
-		}
-		return c.Status(status).JSON(response)
+		return h.writeVerificationFailure(c, verifyCtx, verifySpan, req.ChallengeID, peerIP, result, err, false)
 	}
 
 	// Set span attributes for success
@@ -893,15 +474,7 @@ func (h *Handlers) VerifyChallenge(c fiber.Ctx) error {
 	}
 
 	// Generate AMR based on channel (use string to avoid depending on challengekit.ChannelDingTalk in v1.0.0)
-	amr := []string{"otp"}
-	switch string(ch.Channel) {
-	case "sms":
-		amr = append(amr, "sms")
-	case "email":
-		amr = append(amr, "email")
-	case "dingtalk":
-		amr = append(amr, "dingtalk")
-	}
+	amr := verificationAMR(string(ch.Channel))
 
 	// Success
 	return c.JSON(fiber.Map{
@@ -934,32 +507,8 @@ func (h *Handlers) VerifyChallengeV2(c fiber.Ctx) error {
 		return writeStrictBodyError(c, err)
 	}
 
-	if req.ChallengeID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "challenge_id_required",
-		})
-	}
-	if req.Code == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "code_required",
-		})
-	}
-	if !challengekit.ValidateCodeFormat(req.Code, config.CodeLength) {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "invalid_code_format",
-		})
-	}
-
-	if strings.TrimSpace(req.ExpectedUserID) == "" ||
-		strings.TrimSpace(req.ExpectedPurpose) == "" ||
-		strings.TrimSpace(req.ExpectedChannel) == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "context_required",
-		})
+	if valid, err := validateBoundVerification(c, req); !valid {
+		return err
 	}
 
 	traceCtx := c.Locals("trace_context")
@@ -990,32 +539,7 @@ func (h *Handlers) VerifyChallengeV2(c fiber.Ctx) error {
 
 	result, err := h.challengeManager.VerifyWithOptions(verifyCtx, req.ChallengeID, req.Code, peerIP, opts)
 	if err != nil || result == nil || !result.OK {
-		reason := "verification_failed"
-		if result != nil && result.Reason != "" {
-			reason = result.Reason
-		} else if err != nil || result == nil {
-			reason = "backend_unavailable"
-		}
-		tracing.RecordError(verifySpan, err)
-		h.log.Debug().Err(err).Msg("Challenge verification (v2) failed")
-		verifySpan.SetAttributes(
-			attribute.String("result", "failure"),
-			attribute.String("reason", reason),
-		)
-		metrics.RecordVerification("failure", reason)
-		if err := auditlog.LogVerificationFailed(verifyCtx, req.ChallengeID, reason, peerIP); err != nil {
-			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
-		}
-
-		response := fiber.Map{"ok": false, "reason": reason}
-		if result != nil && result.RemainingAttempts != nil {
-			response["remaining_attempts"] = *result.RemainingAttempts
-		}
-		status := verificationFailureStatus(reason, err)
-		if verificationFailureRetryable(reason, status) {
-			c.Set("Retry-After", "1")
-		}
-		return c.Status(status).JSON(response)
+		return h.writeVerificationFailure(c, verifyCtx, verifySpan, req.ChallengeID, peerIP, result, err, true)
 	}
 
 	ch := result.Challenge
@@ -1030,15 +554,7 @@ func (h *Handlers) VerifyChallengeV2(c fiber.Ctx) error {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
 	}
 
-	amr := []string{"otp"}
-	switch string(ch.Channel) {
-	case "sms":
-		amr = append(amr, "sms")
-	case "email":
-		amr = append(amr, "email")
-	case "dingtalk":
-		amr = append(amr, "dingtalk")
-	}
+	amr := verificationAMR(string(ch.Channel))
 
 	return c.JSON(fiber.Map{
 		"ok":           true,
@@ -1175,4 +691,569 @@ func verificationFailureRetryable(reason string, status int) bool {
 // Helper function
 func contains(s, substr string) bool {
 	return strings.Contains(s, substr)
+}
+
+func (h *Handlers) validateCreateRequest(c fiber.Ctx, req *CreateChallengeRequest) (bool, error) {
+	// Validate request
+	if req.UserID == "" {
+		return false, c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "user_id_required",
+		})
+	}
+
+	if req.Channel != "sms" && req.Channel != "email" && req.Channel != "dingtalk" {
+		return false, c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "invalid_channel",
+		})
+	}
+
+	if req.Destination == "" {
+		return false, c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "destination_required",
+		})
+	}
+
+	// Validate + normalize the destination once. The normalized value is used
+	// for the provider call, rate-limit keys, and idempotency fingerprint so
+	// trivial variants (case/spacing/separators) cannot bypass dedup or limits.
+	normDest, derr := destination.Validate(req.Channel, req.Destination)
+	if derr != nil {
+		return false, c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "invalid_destination",
+		})
+	}
+	req.Destination = normDest
+
+	// Validate purpose
+	if req.Purpose == "" {
+		req.Purpose = "login" // Default purpose
+	}
+	purposeValid := false
+	for _, allowed := range config.AllowedPurposes {
+		if allowed == req.Purpose {
+			purposeValid = true
+			break
+		}
+	}
+	if !purposeValid {
+		return false, c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "invalid_purpose",
+			"error":  fmt.Sprintf("Purpose must be one of: %s", strings.Join(config.AllowedPurposes, ", ")),
+		})
+	}
+
+	return true, nil
+}
+
+func (h *Handlers) checkCreationLimits(c fiber.Ctx, spanCtx context.Context, req CreateChallengeRequest, peerIP string, failIdem func()) (bool, error) {
+	// Check rate limits
+	// 1. Per user (peppered digest so raw user id never lands in a Redis key)
+	allowed, _, _, err := h.rateLimitManager.CheckUserRateLimit(
+		spanCtx, h.digester.Digest(req.UserID), config.RateLimitPerUser, time.Hour,
+	)
+	if err != nil {
+		h.log.Error().Err(err).Msg("Rate limit check failed")
+		failIdem()
+		return false, c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "backend_unavailable",
+		})
+	}
+	if !allowed {
+		metrics.RecordRateLimitHit("user")
+		failIdem()
+		return false, c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "rate_limit_exceeded",
+		})
+	}
+
+	// 2. Per IP (peppered). Uses the trusted peer IP, never the self-reported one.
+	allowed, _, _, err = h.rateLimitManager.CheckIPRateLimit(
+		spanCtx, h.digester.Digest(peerIP), config.RateLimitPerIP, time.Minute,
+	)
+	if err != nil {
+		h.log.Error().Err(err).Msg("Rate limit check failed")
+		failIdem()
+		return false, c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "backend_unavailable",
+		})
+	}
+	if !allowed {
+		metrics.RecordRateLimitHit("ip")
+		failIdem()
+		return false, c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "rate_limit_exceeded",
+		})
+	}
+
+	return h.checkDestinationLimits(c, spanCtx, req, failIdem)
+}
+
+func (h *Handlers) checkDestinationLimits(c fiber.Ctx, spanCtx context.Context, req CreateChallengeRequest, failIdem func()) (bool, error) {
+	// 3. Per destination (peppered digest of the normalized destination)
+	allowed, _, _, err := h.rateLimitManager.CheckDestinationRateLimit(
+		spanCtx, h.digester.Digest(req.Destination), config.RateLimitPerDestination, time.Hour,
+	)
+	if err != nil {
+		h.log.Error().Err(err).Msg("Rate limit check failed")
+		failIdem()
+		return false, c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "backend_unavailable",
+		})
+	}
+	if !allowed {
+		metrics.RecordRateLimitHit("destination")
+		failIdem()
+		return false, c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "rate_limit_exceeded",
+		})
+	}
+
+	// 4. Resend cooldown (peppered digest of user+destination)
+	cooldownKey := h.digester.DigestParts(req.UserID, req.Destination)
+	allowed, _, err = h.rateLimitManager.CheckResendCooldown(spanCtx, cooldownKey, config.ResendCooldown)
+	if err != nil {
+		h.log.Error().Err(err).Msg("Cooldown check failed")
+		failIdem()
+		return false, c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "backend_unavailable",
+		})
+	}
+	if !allowed {
+		metrics.RecordRateLimitHit("resend_cooldown")
+		failIdem()
+		return false, c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "resend_cooldown",
+		})
+	}
+
+	return true, nil
+}
+
+func (h *Handlers) deliverChallenge(c fiber.Ctx, spanCtx context.Context, req CreateChallengeRequest, ch *challengekit.Challenge, msg *provider.Message, providerName, peerIP string) (bool, bool, error) {
+	softDeliveryFailed := false
+	channel := provider.Channel(req.Channel)
+	// Start provider observability only after the send boundary is persisted.
+	providerCtx, providerSpan := tracing.StartSpan(spanCtx, "otp.provider.send")
+	providerSpan.SetAttributes(
+		attribute.String("channel", req.Channel),
+		attribute.String("provider", providerName),
+	)
+
+	// Record only provider latency; send-boundary persistence belongs to Redis.
+	sendStart := time.Now()
+
+	// Send using provider-kit Registry (returns *SendResult, error)
+	sendResult, err := h.providerRegistry.Send(providerCtx, channel, msg)
+	sendDuration := time.Since(sendStart)
+
+	if err != nil || (sendResult != nil && !sendResult.OK) {
+		tracing.RecordError(providerSpan, err)
+		providerSpan.End()
+		h.log.Error().Err(err).Msg("Failed to send verification code via provider")
+
+		// Get error reason from provider-kit result
+		errorReason := "send_failed"
+		if sendResult != nil && sendResult.Error != nil {
+			errorReason = string(sendResult.Error.Reason)
+		}
+		// Record provider timeouts distinctly for reliability dashboards.
+		if errors.Is(err, context.DeadlineExceeded) || errorReason == "timeout" {
+			metrics.RecordProviderTimeout(req.Channel)
+		}
+
+		// Metrics: send failed
+		metrics.RecordOTPSend(req.Channel, providerName, "failure", sendDuration)
+
+		// Audit: send failed
+		auditErr := auditlog.LogSendFailed(providerCtx, ch.ID, req.UserID, req.Channel, req.Destination, req.Purpose, providerName, errorReason, peerIP)
+
+		// Handle provider failure based on policy
+		if config.NormalizedProviderFailurePolicy() == "strict" {
+			// Strict mode: revoke challenge and return error
+			_ = h.challengeManager.Revoke(spanCtx, ch.ID)
+			metrics.RecordChallengeState("revoked")
+			// The provider may have delivered before reporting an error. Keep
+			// the sending record so a retry cannot send a second code.
+			// Audit failure must not skip strict-policy revocation.
+			if auditErr != nil {
+				return false, false, c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
+			}
+			return false, false, c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"ok":     false,
+				"reason": "send_failed",
+				"error":  "Failed to send verification code",
+			})
+		}
+		if auditErr != nil {
+			return false, false, c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
+		}
+		// Soft mode (only permitted outside production / degraded): the challenge
+		// stays created but we surface delivery_status=failed so the caller knows
+		// the code may not have been delivered. Still promote it to active so it
+		// can be verified if it did arrive.
+		softDeliveryFailed = true
+	} else {
+		providerSpan.SetAttributes(
+			attribute.String("result", "success"),
+			attribute.Int64("duration_ms", sendDuration.Milliseconds()),
+		)
+		providerSpan.End()
+
+		// Metrics: send success
+		metrics.RecordOTPSend(req.Channel, providerName, "success", sendDuration)
+
+		// Audit: send success (now includes messageID from provider-kit)
+		messageID := ""
+		if sendResult != nil {
+			messageID = sendResult.MessageID
+		}
+		if err := auditlog.LogSendSuccess(providerCtx, ch.ID, req.UserID, req.Channel, req.Destination, req.Purpose, providerName, messageID, peerIP); err != nil {
+			return false, false, c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
+		}
+	}
+
+	return softDeliveryFailed, true, nil
+}
+
+func (h *Handlers) activateChallenge(c fiber.Ctx, spanCtx context.Context, ch *challengekit.Challenge, principal, idempotencyKey, fingerprint, idempotencyOwner string) (bool, error) {
+	// Single active challenge (two-phase activate): now that the create+send
+	// step is done (success, or soft-failed but still verifiable), promote this
+	// challenge to be the only active one for its identity and invalidate the
+	// previously active challenge so an older, still-live code cannot be
+	// redeemed. A backend error here must not leave a redeemable-but-unindexed
+	// code, so on failure we revoke this pending challenge and fail closed.
+	// Re-check ownership immediately before activation. Sending records remain
+	// non-expiring; a backend error must not reopen the key for another send.
+	if idempotencyKey != "" {
+		if err := h.idempotencyStore.Refresh(spanCtx, principal, idempotencyKey, fingerprint, idempotencyOwner); err != nil {
+			_ = h.challengeManager.RevokePending(spanCtx, ch.ID)
+			if errors.Is(err, idempotency.ErrOwnershipLost) {
+				metrics.RecordIdempotency("ownership_lost")
+				return false, c.Status(fiber.StatusConflict).JSON(fiber.Map{
+					"ok":     false,
+					"reason": "idempotency_ownership_lost",
+				})
+			}
+			h.log.Error().Err(err).Msg("Failed to refresh idempotency ownership")
+			return false, c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+				"ok":     false,
+				"reason": "backend_unavailable",
+			})
+		}
+	}
+	prevID, actErr := h.challengeManager.SwapActive(spanCtx, ch)
+	if actErr != nil {
+		h.log.Error().Err(actErr).Str("challenge_id", ch.ID).Msg("Failed to activate challenge")
+		_ = h.challengeManager.RevokePending(spanCtx, ch.ID)
+		return false, c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "internal_error",
+		})
+	}
+	if prevID != "" && prevID != ch.ID {
+		if err := h.challengeManager.Revoke(spanCtx, prevID); err != nil {
+			h.log.Warn().Err(err).Str("challenge_id", prevID).Msg("Failed to revoke superseded challenge")
+		} else {
+			metrics.RecordChallengeState("superseded")
+		}
+	}
+	metrics.RecordChallengeState("activated")
+
+	return true, nil
+}
+
+func (h *Handlers) beginCreation(c fiber.Ctx, spanCtx context.Context, principal, idempotencyKey, fingerprint string) (string, bool, error) {
+	if idempotencyKey != "" {
+		replay, owner, err := h.idempotencyStore.Begin(spanCtx, principal, idempotencyKey, fingerprint)
+		switch {
+		case err == nil && owner == "" && replay != nil:
+			metrics.RecordIdempotency("replay")
+			c.Set("Content-Type", "application/json")
+			return "", true, c.Status(fiber.StatusOK).Send(replay)
+		case err == idempotency.ErrConflict:
+			metrics.RecordIdempotency("conflict")
+			return "", true, c.Status(fiber.StatusConflict).JSON(fiber.Map{"ok": false, "reason": "idempotency_conflict"})
+		case err == idempotency.ErrDeliveryUnknown:
+			metrics.RecordIdempotency("delivery_unknown")
+			return "", true, c.Status(fiber.StatusConflict).JSON(fiber.Map{"ok": false, "reason": "delivery_unknown"})
+		case err == idempotency.ErrInFlight:
+			metrics.RecordIdempotency("in_flight")
+			return "", true, c.Status(fiber.StatusConflict).JSON(fiber.Map{"ok": false, "reason": "idempotency_in_flight"})
+		case err == idempotency.ErrBackendUnavailable:
+			metrics.RecordIdempotency("backend_error")
+			return "", true, c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "backend_unavailable"})
+		case err != nil:
+			return "", true, c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "backend_unavailable"})
+		}
+		return owner, false, nil
+		// A non-empty owner token proves this handler holds the pending slot and
+		// must be supplied to Succeed/Fail below.
+	}
+
+	return "", false, nil
+}
+
+func (h *Handlers) buildDeliveryMessage(req CreateChallengeRequest, challengeID, code string) (*provider.Message, string) {
+	// Send verification code via provider
+	channel := provider.Channel(req.Channel)
+
+	// Use template manager to format message
+	templateData := template.TemplateData{
+		Code:      code,
+		ExpiresIn: int(config.ChallengeExpiry.Seconds()),
+		Purpose:   req.Purpose,
+		Locale:    req.Locale,
+	}
+
+	// Build message using provider-kit fluent API
+	msg := provider.NewMessage(req.Destination).
+		WithCode(code).
+		WithLocale(req.Locale).
+		WithIdempotencyKey(challengeID) // Use challenge ID as idempotency key
+
+	if channel == provider.ChannelEmail {
+		subject, body, err := h.templateManager.RenderEmail(req.Locale, req.Purpose, templateData)
+		if err != nil {
+			// Fallback to built-in formatting from provider-kit
+			subject, body = provider.FormatVerificationEmail(code, req.Locale)
+		}
+		msg.WithSubject(subject).WithBody(body)
+	} else {
+		// SMS and DingTalk: body only (DingTalk via herald-dingtalk receives body)
+		body, err := h.templateManager.RenderSMS(req.Locale, req.Purpose, templateData)
+		if err != nil {
+			// Fallback to built-in formatting from provider-kit
+			body = provider.FormatVerificationSMS(code, req.Locale)
+		}
+		msg.WithBody(body)
+	}
+
+	// Determine provider name for audit
+	var providerName string
+	switch req.Channel {
+	case "email":
+		providerName = "smtp"
+	case "sms":
+		providerName = config.SMSProvider
+	case "dingtalk":
+		providerName = "dingtalk"
+	default:
+		providerName = req.Channel
+	}
+
+	return msg, providerName
+}
+
+func (h *Handlers) persistSendBoundary(c fiber.Ctx, spanCtx context.Context, ch *challengekit.Challenge, principal, idempotencyKey, fingerprint, idempotencyOwner string) (bool, error) {
+	// Persist the send boundary before invoking the provider. A TTL lease alone
+	// would expire after a process exit and allow a second delivery.
+	if idempotencyKey != "" {
+		if err := h.idempotencyStore.MarkSending(spanCtx, principal, idempotencyKey, fingerprint, idempotencyOwner, ch.ID); err != nil {
+			_ = h.challengeManager.RevokePending(spanCtx, ch.ID)
+			if errors.Is(err, idempotency.ErrOwnershipLost) {
+				metrics.RecordIdempotency("ownership_lost")
+				return false, c.Status(fiber.StatusConflict).JSON(fiber.Map{
+					"ok":     false,
+					"reason": "idempotency_ownership_lost",
+				})
+			}
+			h.log.Error().Err(err).Msg("Failed to persist idempotency send boundary")
+			return false, c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+				"ok":     false,
+				"reason": "backend_unavailable",
+			})
+		}
+	}
+
+	return true, nil
+}
+
+func (h *Handlers) writeVerificationFailure(c fiber.Ctx, verifyCtx context.Context, verifySpan trace.Span, challengeID, peerIP string, result *challengekit.VerifyResult, err error, bound bool) error {
+	reason := failedVerificationReason(result, err, bound)
+	tracing.RecordError(verifySpan, err)
+	h.log.Debug().Err(err).Msg("Challenge verification failed")
+
+	// Set span attributes for failure
+	verifySpan.SetAttributes(
+		attribute.String("result", "failure"),
+		attribute.String("reason", reason),
+	)
+
+	// Metrics: verification failed
+	metrics.RecordVerification("failure", reason)
+	if !bound && (reason == "contended" || contains(reason, "contention") || contains(reason, "try_again")) {
+		metrics.RecordVerificationContention("contended")
+	}
+
+	// Audit: verification failed
+	if err := auditlog.LogVerificationFailed(verifyCtx, challengeID, reason, peerIP); err != nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
+	}
+
+	response := fiber.Map{
+		"ok":     false,
+		"reason": reason,
+	}
+	if result != nil && result.RemainingAttempts != nil {
+		response["remaining_attempts"] = *result.RemainingAttempts
+	}
+
+	status := verificationFailureStatus(reason, err)
+	if verificationFailureRetryable(reason, status) {
+		c.Set("Retry-After", "1")
+	}
+	return c.Status(status).JSON(response)
+}
+
+func failedVerificationReason(result *challengekit.VerifyResult, err error, bound bool) string {
+	if result != nil && result.Reason != "" {
+		return result.Reason
+	}
+	if err != nil {
+		if bound {
+			return "backend_unavailable"
+		}
+		return verificationReasonFromError(err)
+	}
+	if result == nil {
+		return "backend_unavailable"
+	}
+	return "verification_failed"
+}
+
+func verificationAMR(channel string) []string {
+	amr := []string{"otp"}
+	switch channel {
+	case "sms":
+		amr = append(amr, "sms")
+	case "email":
+		amr = append(amr, "email")
+	case "dingtalk":
+		amr = append(amr, "dingtalk")
+	}
+	return amr
+}
+
+func validateBoundVerification(c fiber.Ctx, req VerifyChallengeV2Request) (bool, error) {
+	if req.ChallengeID == "" {
+		return false, c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "challenge_id_required",
+		})
+	}
+	if req.Code == "" {
+		return false, c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "code_required",
+		})
+	}
+	if !challengekit.ValidateCodeFormat(req.Code, config.CodeLength) {
+		return false, c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "invalid_code_format",
+		})
+	}
+
+	if strings.TrimSpace(req.ExpectedUserID) == "" ||
+		strings.TrimSpace(req.ExpectedPurpose) == "" ||
+		strings.TrimSpace(req.ExpectedChannel) == "" {
+		return false, c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "context_required",
+		})
+	}
+
+	return true, nil
+}
+
+func registerEmailProvider(registry *provider.Registry, log *logger.Logger) error {
+	// Register email channel: herald-smtp HTTP provider takes precedence over built-in SMTP
+	if config.HeraldSMTPAPIURL != "" {
+		httpProvider, err := provider.NewHTTPProvider(hardenedHTTPConfig(config.HeraldSMTPAPIURL, config.HeraldSMTPAPIKey, provider.ChannelEmail, "smtp"))
+		if err != nil {
+			return fmt.Errorf("herald-smtp provider config invalid: %w", err)
+		}
+		if err := registry.Register(httpProvider); err != nil {
+			return fmt.Errorf("failed to register herald-smtp provider: %w", err)
+		}
+		log.Info().Msg("Email HTTP provider registered (herald-smtp)")
+	} else if config.SMTPHost != "" {
+		// Built-in SMTP provider when herald-smtp URL is not set
+		smtpConfig := &provider.SMTPConfig{
+			Host:        config.SMTPHost,
+			Port:        config.SMTPPort,
+			Username:    config.SMTPUser,
+			Password:    config.SMTPPassword,
+			From:        config.SMTPFrom,
+			UseStartTLS: true,
+			Timeout:     config.ProviderTimeout,
+		}
+		smtpProvider, err := provider.NewSMTPProvider(smtpConfig)
+		if err != nil {
+			return fmt.Errorf("SMTP provider config invalid: %w", err)
+		}
+		if err := registry.Register(smtpProvider); err != nil {
+			return fmt.Errorf("failed to register SMTP provider: %w", err)
+		}
+		log.Info().Msg("SMTP provider registered")
+	}
+
+	return nil
+}
+
+func (h *Handlers) logReportedClientIP(reportedClientIP, peerIP string) {
+	// The reported client IP is advisory only. Record a peppered digest at debug
+	// level for troubleshooting mismatches without trusting or exposing it.
+	if reportedClientIP != "" && reportedClientIP != peerIP {
+		h.log.Debug().
+			Str("reported_client_ip_digest", h.digester.Digest(reportedClientIP)).
+			Msg("reported client_ip differs from trusted peer IP (advisory only)")
+	}
+
+}
+
+func (h *Handlers) storeTestCode(spanCtx context.Context, challengeID, code string) {
+	// Store code in test mode (for integration testing only). Guarded by the
+	// combined test-environment + test-mode switch so plaintext codes can never
+	// be exposed in production even if HERALD_TEST_MODE is accidentally set.
+	if config.TestCodeExposureEnabled() {
+		if err := h.testCodeCache.Set(spanCtx, challengeID, code, config.ChallengeExpiry); err != nil {
+			h.log.Warn().Err(err).Msg("Failed to store test code")
+		}
+	}
+
+}
+
+func (h *Handlers) completeCreation(c fiber.Ctx, spanCtx context.Context, response fiber.Map, principal, idempotencyKey, fingerprint, idempotencyOwner string) (bool, error) {
+	if idempotencyKey != "" {
+		payload, err := json.Marshal(response)
+		if err == nil {
+			err = h.idempotencyStore.Succeed(spanCtx, principal, idempotencyKey, fingerprint, idempotencyOwner, payload)
+		}
+		if err != nil {
+			h.log.Error().Err(err).Msg("Failed to persist idempotency success record")
+			return false, c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "backend_unavailable"})
+		}
+	}
+
+	return true, nil
+}
+
+func (h *Handlers) releaseCreationClaim(ctx context.Context, principal, key, fingerprint, owner string) {
+	if key != "" {
+		_ = h.idempotencyStore.Fail(ctx, principal, key, fingerprint, owner)
+	}
 }

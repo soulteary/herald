@@ -69,44 +69,10 @@ func newJournalStorage(backend audit.Storage, dir string, limit int64, queue, wo
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	j := &journalStorage{dir: dir, dirFile: df, lockFile: lock, backend: backend, entries: make(map[string]*journalEntry), limit: limit, wake: make(chan struct{}, queue), ctx: ctx, cancel: cancel, done: make(chan struct{}), onFailure: onFailure}
-	files, err := os.ReadDir(dir)
+	err = j.recoverPendingEntries()
 	if err == nil {
-		for _, f := range files {
-			if strings.HasSuffix(f.Name(), ".json") {
-				info, e := f.Info()
-				if e != nil {
-					err = e
-					break
-				}
-				j.entries[f.Name()] = &journalEntry{size: info.Size()}
-				j.bytes += info.Size()
-			} else if strings.HasSuffix(f.Name(), ".tmp") {
-				// Temporary files were never acknowledged to a caller.
-				if e := os.Remove(filepath.Join(dir, f.Name())); e != nil {
-					err = e
-					break
-				}
-			}
-		}
+		err = probeJournalDirectory(dir, df)
 	}
-	if err == nil {
-		var probe *os.File
-		probe, err = os.CreateTemp(dir, ".probe-*.tmp")
-		if err == nil {
-			err = probe.Sync()
-			closeErr := probe.Close()
-			if err == nil {
-				err = closeErr
-			}
-			removeErr := os.Remove(probe.Name())
-			if err == nil {
-				err = removeErr
-			}
-		}
-	}
-	if err == nil {
-		err = df.Sync()
-	} // also probes directory fsync support at startup
 	if err != nil {
 		cancel()
 		_ = df.Close()
@@ -184,16 +150,7 @@ func (j *journalStorage) run() {
 		if j.ctx.Err() != nil {
 			return
 		}
-		j.mu.Lock()
-		name := ""
-		for n, e := range j.entries {
-			if !e.busy && !time.Now().Before(e.next) {
-				name = n
-				e.busy = true
-				break
-			}
-		}
-		j.mu.Unlock()
+		name := j.claimReadyEntry()
 		if name == "" {
 			select {
 			case <-j.ctx.Done():
@@ -249,4 +206,68 @@ func (j *journalStorage) Close() error {
 	case <-time.After(6 * time.Second):
 		return errors.New("audit worker shutdown timed out; pending records remain on disk")
 	}
+}
+
+func (j *journalStorage) recoverPendingEntries() error {
+	dir := j.dir
+	files, err := os.ReadDir(dir)
+	if err == nil {
+		for _, f := range files {
+			if strings.HasSuffix(f.Name(), ".json") {
+				info, e := f.Info()
+				if e != nil {
+					err = e
+					break
+				}
+				j.entries[f.Name()] = &journalEntry{size: info.Size()}
+				j.bytes += info.Size()
+			} else if strings.HasSuffix(f.Name(), ".tmp") {
+				// Temporary files were never acknowledged to a caller.
+				if e := os.Remove(filepath.Join(dir, f.Name())); e != nil {
+					err = e
+					break
+				}
+			}
+		}
+	}
+
+	return err
+}
+
+func probeJournalDirectory(dir string, df *os.File) error {
+	var err error
+	if err == nil {
+		var probe *os.File
+		probe, err = os.CreateTemp(dir, ".probe-*.tmp")
+		if err == nil {
+			err = probe.Sync()
+			closeErr := probe.Close()
+			if err == nil {
+				err = closeErr
+			}
+			removeErr := os.Remove(probe.Name())
+			if err == nil {
+				err = removeErr
+			}
+		}
+	}
+	if err == nil {
+		err = df.Sync()
+	} // also probes directory fsync support at startup
+
+	return err
+}
+
+func (j *journalStorage) claimReadyEntry() string {
+	j.mu.Lock()
+	name := ""
+	for n, e := range j.entries {
+		if !e.busy && !time.Now().Before(e.next) {
+			name = n
+			e.busy = true
+			break
+		}
+	}
+	j.mu.Unlock()
+	return name
 }
