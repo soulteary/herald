@@ -60,8 +60,8 @@ flowchart LR
 2. 用户输入标识（邮箱/手机/用户名）。**Stargate** 调用 **Warden** 解析用户，获得 `user_id` 与 destination（email/phone/userid）。
 3. **Stargate** 调用 **Herald** `POST /v1/otp/challenges`（user_id、channel、destination、purpose）。Herald 在 **Redis** 中创建 challenge，通过 **短信**、**邮件**（内置 SMTP 或配置 `HERALD_SMTP_API_URL` 时由 [herald-smtp](https://github.com/soulteary/herald-smtp) 发送）或 **herald-dingtalk**（provider send）发送验证码。
 4. Herald 向 Stargate 返回 `challenge_id`、`expires_in`、`next_resend_in`。
-5. 用户提交验证码。**Stargate** 调用 **Herald** `POST /v1/otp/verifications`（challenge_id、code）。
-6. Herald 在 Redis 中校验，返回 `ok`、`user_id`、`amr`、`issued_at`。Stargate 创建会话（cookie/JWT）。
+5. 用户提交验证码。**Stargate** 调用 **Herald** `POST /v2/otp/verifications`（challenge_id、code 及可信应用状态中的预期用户、用途和通道）。
+6. Herald 在 Redis 中校验，返回 `ok`、`user_id`、`purpose`、`channel`、`challenge_id`、`amr`、`verified_at` 和 `issued_at`。Stargate 创建会话（cookie/JWT）。
 7. 后续 forwardAuth：Stargate 仅校验会话，**不再**调用 Warden 或 Herald。
 
 ### 关键接口
@@ -99,3 +99,10 @@ flowchart LR
 `otp:active:v2:*` 按完整身份原值派生，激活与旧码删除原子执行；旧索引只有在身份完全匹配时才迁移。
 升级步骤见 [激活索引升级](API.md#激活索引升级)。启用审计的实例还需私有、持久的本地审计目录，
 仅保留 Redis 不能保存待投递审计积压。mTLS 是独立传输策略，不能代替 HMAC 或 API Key 请求认证。
+
+## 已认证身份与工作准入
+
+幂等命名空间使用已验签服务标识和实际密钥 ID；省略与显式默认 ID 共用记录，单密钥只授权
+`default`。旧空 Key ID 记录保持受保护状态，不在可能已轮换的凭据间复制，详见
+[身份兼容性](API.md#hmac-身份与旧幂等记录)。创建及 v1/v2 验证共享本实例哈希预算（默认 4），
+渠道网络发送不占用槽位。生产 CORS 列表在安装中间件前拒绝独立通配项。

@@ -44,7 +44,7 @@
 
 4. **检查审计日志**
    - 查看 `send_failed` 事件的审计日志
-   - 检查提供者错误代码和消息
+   - 检查受控 `reason` 代码；Herald 不导出原始渠道错误文本
    - 验证目标地址是否有效
 
 5. **直接测试提供者**
@@ -63,7 +63,7 @@
 
 在本地或集成测试中若不想依赖真实短信/邮件送达：
 
-- 将 **Herald** 的 `ENVIRONMENT=test`、`HERALD_TEST_MODE=true` 和 `HERALD_TEST_API_KEY` 设置好。创建 challenge 的响应会包含 `debug_code`，并开放 `GET /v1/test/code/:challenge_id` 用于查询验证码。
+- 将 **Herald** 的 `ENVIRONMENT=test`、`HERALD_TEST_MODE=true` 和 `HERALD_TEST_API_KEY` 设置好。创建 challenge 的响应会包含 `debug_code`，仅在独立测试监听器上通过测试密钥开放 `GET /v1/test/code/:challenge_id`。成功创建仍需配置发送渠道。
 - 将 **Stargate** 的 `DEBUG=true`。`/_send_verify_code` 的响应会包含验证码，登录页会直接展示（如「验证码（调试）：123456」）。
 
 详见 [API.md](API.md)（创建挑战、获取测试验证码）与 [DEPLOYMENT.md](DEPLOYMENT.md)（测试模式与调试）。**生产环境请勿开启测试模式或 DEBUG。**
@@ -152,7 +152,7 @@
 5. **检查 Herald 日志**
    ```bash
    # 检查身份验证错误
-   grep "unauthorized\|invalid_signature\|timestamp_out_of_range" /var/log/herald.log
+   rg '"status":401' /var/log/herald.log
    ```
 
 ### 解决方案
@@ -196,7 +196,8 @@
    
    # 检查特定速率限制键
    redis-cli TYPE "ratelimit:user:{peppered_user_digest}"
-   redis-cli ZCARD "ratelimit:user:{peppered_user_digest}"
+   redis-cli GET "ratelimit:user:{peppered_user_digest}"
+   redis-cli PTTL "ratelimit:user:{peppered_user_digest}"
    ```
 
 4. **分析使用模式**
@@ -223,15 +224,17 @@
 
 1. **检查 Redis 连接性**
    ```bash
-   # 测试 Redis 连接
-   redis-cli -h $REDIS_ADDR -p 6379 PING
+   # 将以下 host/port 替换为 REDIS_ADDR 中独立的地址和端口。
+   # 密码通过 REDISCLI_AUTH 传入，不要打印或写入连接 URI。
+   # 在可访问 Redis 的网络内执行；Compose 默认不发布 Redis 端口。
+   REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli -h redis.example.internal -p 6379 -n "${REDIS_DB:-0}" PING
    ```
 
 2. **验证配置**
    ```bash
    # 检查 Redis 配置
    echo $REDIS_ADDR
-   echo $REDIS_PASSWORD
+   test -n "$REDIS_PASSWORD" && echo "REDIS_PASSWORD is set"
    echo $REDIS_DB
    ```
 
@@ -250,7 +253,7 @@
    histogram_quantile(0.99, rate(herald_redis_operation_duration_seconds_bucket[5m]))
    
    # 检查 Redis 操作错误
-   rate(herald_redis_operation_duration_seconds_count[5m])
+   sum by (operation) (rate(herald_redis_operations_total{result="failure"}[5m]))
    ```
 
 5. **查看 Herald 日志**
@@ -272,7 +275,7 @@
 ### 症状
 - 指标中高发送失败率
 - 日志中的 `send_failed` 错误
-- 提供者特定的错误消息
+- 受控渠道失败 `reason`，不包含原始错误文本
 
 ### 诊断步骤
 
@@ -286,7 +289,7 @@
    ```
 
 2. **查看提供者日志**
-   - 检查提供者特定的错误消息
+   - 检查受控渠道失败 `reason`，不包含原始错误文本
    - 查看提供者错误的审计日志
    - 检查提供者 API 响应代码
 
@@ -332,8 +335,8 @@
    # 检查 CPU 和内存
    top -p $(pgrep herald)
    
-   # 检查 Goroutine 数量
-   curl http://localhost:8082/debug/pprof/goroutine?debug=1
+   # 查看服务指标；Herald 未挂载 pprof 或注册 Go 运行时采集器
+   curl -fsS http://localhost:8082/metrics | rg "^herald_"
    ```
 
 3. **查看请求模式**
@@ -353,7 +356,7 @@
 ### 解决方案
 
 - **扩展资源**：增加 CPU/内存分配
-- **优化 Redis**：使用 Redis Cluster 或优化查询
+- **优化 Redis**：使用受管理的单一 Redis 端点并检查慢操作；没有原生 Cluster/Sentinel 发现配置
 - **提供者优化**：使用更快的提供者或优化提供者调用
 - **缓存**：为频繁访问的数据实现缓存
 - **负载均衡**：在多个实例之间分配负载
@@ -382,3 +385,12 @@
 发送失败使用受控 `reason` 字段，不再记录上游错误消息；span 状态和 exception 事件也只保留安全原因码。
 排障时不要启用原始渠道响应体日志。若历史日志或导出的 span 含敏感数据，应核查访问与保留策略，
 并轮换已暴露凭据，字段变化见 [安全说明](SECURITY.md#发送渠道失败诊断)。
+
+## HMAC 身份与 CORS 升级排查
+
+- `401/invalid_key_id`：仅使用 `HMAC_SECRET` 时省略 ID 或精确填写 `default`。已知自定义 ID 需显式加入 `HERALD_HMAC_KEYS` 并保持调用方身份不变，不能换 ID 重试不确定发送。
+- `409/idempotency_namespace_conflict`：存在身份不明的旧空 Key ID 记录。保留原内容和 TTL，结合渠道及审计证据核对；它不是可直接重试的发送失败。
+- `409/delivery_unknown`：消息可能已经发送。保持身份和客户端键，不得删除不自动过期的发送记录来强制补发。
+- 生产 CORS 启动报错时，应移除列表中所有独立 `*` 项或关闭 CORS。未列出的来源不应得到通配响应，API Key/HMAC 认证仍独立执行。
+
+升级及回滚均需遵循 [HMAC 升级步骤](DEPLOYMENT.md#hmac-身份升级) 和 [CORS 要求](DEPLOYMENT.md#生产-cors-来源列表)。

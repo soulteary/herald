@@ -49,6 +49,7 @@ The following match the implementation in `internal/config/config.go`.
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
+| `ENVIRONMENT` | Runtime policy: `development`/`dev`, `test`/`testing`, `production`/`prod`; unknown values fail startup | `development` | Set `production` in production |
 | `PORT` | Server listen port (with or without leading colon, e.g. `8082` or `:8082`) | `:8082` | No |
 | `REDIS_ADDR` | Redis address | `localhost:6379` | No |
 | `REDIS_PASSWORD` | Redis password | (empty) | Production, unless explicitly risk-acknowledged |
@@ -187,8 +188,8 @@ responses. API Key and HMAC wire formats are unchanged.
 | `AUDIT_ENABLED` | Enable audit | `true` | No |
 | `AUDIT_MASK_DESTINATION` | Mask destination in audit | `true` in production unless explicitly set; otherwise `false` | No |
 | `AUDIT_TTL` | Audit record TTL in Redis (e.g. `168h` = 7 days) | `168h` | No |
-| `AUDIT_STORAGE_TYPE` | Persistent storage: `database`, `file`, `redis`, or comma-separated | (empty) | No |
-| `AUDIT_DATABASE_URL` | DB URL when `AUDIT_STORAGE_TYPE` includes database | (empty) | No |
+| `AUDIT_STORAGE_TYPE` | One backend: `database` (`db` alias), `file`, or `redis`; empty/`none` uses the provided Redis client | (empty) | No |
+| `AUDIT_DATABASE_URL` | DB URL when `AUDIT_STORAGE_TYPE` is database/db | (empty) | No |
 | `AUDIT_TABLE_NAME` | Audit table name | `audit_logs` | No |
 | `AUDIT_FILE_PATH` | Audit file path when using file | (empty) | No |
 | `AUDIT_WRITER_QUEUE_SIZE` | Wake-up hint queue size (records are stored on disk) | `1000` | No |
@@ -310,20 +311,14 @@ This is an at-most-once send attempt for an unresolved key, not guaranteed deliv
 
 **Capacity Planning:**
 
-Basic estimation formula:
-```
-Peak challenges/second × TTL (seconds) × Average size per entry + Rate limit keys + Audit keys
-```
+Measure payload size and Redis overhead under representative traffic. Include
+challenges and activation indexes, expiring completed idempotency responses,
+non-expiring unresolved sends, rate/cooldown keys, nonces, and audit retention.
+A peak-rate × challenge-TTL estimate alone does not bound total storage. Account
+separately for persistent audit-buffer disk space and the process hash-work
+budget. Use `MEMORY USAGE`, key counts and retained-record growth for sizing.
 
-**Example:**
-- Peak: 100 challenges/second
-- Challenge TTL: 300 seconds (5 minutes)
-- Average challenge size: ~500 bytes
-- Estimated: 100 × 300 × 500 bytes ≈ 15 MB for challenges
-- Plus rate limit keys (~1-2 MB) and audit keys (~1-2 MB)
-- **Total estimated: ~20 MB minimum**
-
-For high-availability deployments, consider Redis Cluster or Redis Sentinel.
+`REDIS_ADDR` names one Redis endpoint; Herald does not configure native Cluster or Sentinel discovery. Use an externally managed failover endpoint and preserve data. Multi-key activation and idempotency scripts are not Redis Cluster-compatible.
 
 ## Integration with Other Services (Optional)
 
@@ -358,7 +353,7 @@ Herald exposes Prometheus metrics at the `/metrics` endpoint. The following metr
 - `herald_otp_verifications_total{result,reason}` - Total number of OTP verifications
 - `herald_otp_send_duration_seconds{provider}` - Duration of OTP send operations (Histogram)
 - `herald_rate_limit_hits_total{scope}` - Total number of rate limit hits (scope: user, ip, destination, resend_cooldown)
-- `herald_redis_latency_seconds{operation}` - Redis operation latency (operation: get, set, del, exists)
+- `herald_redis_operation_duration_seconds{operation}` - Redis wrapper latency (rate-limit and cooldown operations; see MONITORING.md)
 
 **Example Prometheus scrape configuration:**
 ```yaml
@@ -422,7 +417,7 @@ Legacy empty-key-ID records are retained. A matching service/client key returns
 `409/idempotency_namespace_conflict`; this is an operator-reconciliation condition,
 not permission to retry with another key. Non-expiring sending records remain
 non-expiring. Do not infer the original credential from the current default or
-blindly replay/migrate old responses after key rotation. Explicit-key records
+blindly replay/migrate old responses after key rotation. Authorized explicit-key records
 continue normally when there is no conflicting legacy record.
 
 Older releases cannot enforce this guard. Before rollback, keep creation disabled

@@ -40,10 +40,10 @@
 3. **Prometheus 메트릭 확인**
    ```promql
    # 전송 실패율 확인
-   rate(herald_otp_sends_total{result="failed"}[5m]) / rate(herald_otp_sends_total[5m])
+   rate(herald_otp_sends_total{result="failure"}[5m]) / rate(herald_otp_sends_total[5m])
    
    # 프로바이더별 전송 성공 확인
-   rate(herald_otp_sends_total{result="success"}[5m]) by (provider)
+   sum by (provider) (rate(herald_otp_sends_total{result="success"}[5m]))
    ```
 
 4. **감사 로그 확인**
@@ -91,10 +91,10 @@
 4. **Prometheus 메트릭 확인**
    ```promql
    # 검증 실패 이유 확인
-   rate(herald_otp_verifications_total{result="failed"}[5m]) by (reason)
+   sum by (reason) (rate(herald_otp_verifications_total{result="failure"}[5m]))
    
    # 잠긴 챌린지 확인
-   rate(herald_otp_verifications_total{result="failed",reason="locked"}[5m])
+   rate(herald_otp_verifications_total{result="failure",reason="locked"}[5m])
    ```
 
 5. **감사 로그 검토**
@@ -125,7 +125,7 @@
 2. **HMAC 인증의 경우**
    ```bash
    # HMAC_SECRET이 구성되었는지 확인
-   echo $HMAC_SECRET
+   test -n "$HMAC_SECRET" && echo "HMAC_SECRET is set"
    
    # 타임스탬프가 5분 창 내에 있는지 확인
    # 서명 계산이 Herald의 구현과 일치하는지 확인
@@ -134,7 +134,7 @@
 3. **API 키 인증의 경우**
    ```bash
    # API_KEY가 설정되었는지 확인
-   echo $API_KEY
+   test -n "$API_KEY" && echo "API_KEY is set"
    
    # X-API-Key 헤더가 구성된 키와 일치하는지 확인
    ```
@@ -178,7 +178,7 @@
 2. **Prometheus 메트릭 확인**
    ```promql
    # 범위별 속도 제한 히트 확인
-   rate(herald_rate_limit_hits_total[5m]) by (scope)
+   sum by (scope) (rate(herald_rate_limit_hits_total[5m]))
    
    # 속도 제한 히트율 확인
    rate(herald_rate_limit_hits_total[5m])
@@ -218,14 +218,14 @@
 1. **Redis 연결성 확인**
    ```bash
    # Redis 연결 테스트
-   redis-cli -h $REDIS_ADDR -p 6379 PING
+   REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli -h redis.example.internal -p 6379 -n "${REDIS_DB:-0}" PING
    ```
 
 2. **구성 확인**
    ```bash
    # Redis 구성 확인
    echo $REDIS_ADDR
-   echo $REDIS_PASSWORD
+   test -n "$REDIS_PASSWORD" && echo "REDIS_PASSWORD is set"
    echo $REDIS_DB
    ```
 
@@ -241,10 +241,10 @@
 4. **Prometheus 메트릭 확인**
    ```promql
    # Redis 지연 시간 확인
-   histogram_quantile(0.99, rate(herald_redis_latency_seconds_bucket[5m]))
+   histogram_quantile(0.99, rate(herald_redis_operation_duration_seconds_bucket[5m]))
    
    # Redis 작업 오류 확인
-   rate(herald_redis_latency_seconds_count[5m])
+   rate(herald_redis_operation_duration_seconds_count[5m])
    ```
 
 5. **Herald 로그 검토**
@@ -273,10 +273,10 @@
 1. **프로바이더 메트릭 확인**
    ```promql
    # 프로바이더별 전송 실패율 확인
-   rate(herald_otp_sends_total{result="failed"}[5m]) by (provider)
+   sum by (provider) (rate(herald_otp_sends_total{result="failure"}[5m]))
    
    # 프로바이더별 전송 지속 시간 확인
-   histogram_quantile(0.95, rate(herald_otp_send_duration_seconds_bucket[5m])) by (provider)
+   histogram_quantile(0.95, sum by (le, provider) (rate(herald_otp_send_duration_seconds_bucket[5m])))
    ```
 
 2. **프로바이더 로그 검토**
@@ -318,7 +318,7 @@
    histogram_quantile(0.95, rate(herald_otp_send_duration_seconds_bucket[5m]))
    
    # Redis 지연 시간 확인
-   histogram_quantile(0.99, rate(herald_redis_latency_seconds_bucket[5m]))
+   histogram_quantile(0.99, rate(herald_redis_operation_duration_seconds_bucket[5m]))
    ```
 
 2. **리소스 사용량 확인**
@@ -327,7 +327,7 @@
    top -p $(pgrep herald)
    
    # Goroutine 수 확인
-   curl http://localhost:8082/debug/pprof/goroutine?debug=1
+   curl -fsS http://localhost:8082/metrics | rg "^herald_"
    ```
 
 3. **요청 패턴 검토**

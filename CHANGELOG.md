@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.13] - 2026-11-02
+
+### Fixed
+
+- Use the verified HMAC key identity for idempotency. Omitted and explicit
+  default IDs no longer split send records; rotating the default cannot replay
+  an ambiguous legacy credential's response. See PR #108.
+- Reject unconfigured key IDs in single-secret HMAC mode, preventing arbitrary
+  aliases from selecting independent nonce and idempotency namespaces. See PR #109.
+- Reject standalone wildcard entries anywhere in production CORS origin lists,
+  during both startup validation and router construction. See PR #110.
+- Refresh current operational documentation, error references, Redis diagnostics,
+  metric names, capacity assumptions and upgrade entry points.
+
+### Compatibility and operations
+
+- HMAC v2/v3 signing is unchanged; creation still requires v3. Single-secret mode
+  accepts only an omitted key ID or `default`. Provision known custom IDs in an
+  explicit key map without changing caller identities or client keys.
+- Historical empty-key-ID records remain intact and block creation with
+  `409/idempotency_namespace_conflict`; no response is copied or replayed across
+  ambiguous credentials. Existing authorized explicit-key records keep their
+  keys, contents, owners and TTLs. Preserve non-expiring sending records.
+- Pause creation, drain in-flight requests, reconcile old identities and replace
+  all instances. Preserve Redis data, audit volumes, nonce prefixes and the
+  effective idempotency secret. Older releases need an external identity
+  allowlist before creation can resume safely after rollback.
+- Remove standalone `*` entries from production CORS lists before upgrade or
+  rollback. Default CORS-disabled behavior and development/test support remain
+  unchanged; this does not bypass API Key/HMAC authentication.
+- Provider diagnostics retain the v1.3.11 `reason` field and sanitized span errors;
+  this release adds no provider diagnostic field change. Historical logs and
+  exported spans are not rewritten. Review retained copies and access/retention
+  policies, and rotate credentials confirmed to have been exposed.
+
+### Validation
+
+- Linux reproductions confirmed duplicate sends after failed Redis completion
+  writes, credential-response replay after default rotation, and unlisted-origin
+  CORS preflights receiving wildcard responses. Patched regressions passed.
+- Full Linux race suite passed with 95.7% statement coverage. Real Redis 7.4.12
+  namespace tests, vet, lint and Linux amd64/arm64 builds passed. Go Report Card:
+  A+, 100%, zero issues. Current documentation links and examples were checked.
+
 ## [1.3.12] - 2026-11-01
 
 ### Fixed
@@ -399,7 +443,21 @@ and Redis key prefix of audit records all stay as they were.
 See `docs/enUS/MIGRATION_V2.md` and `docs/zhCN/MIGRATION_V2.md` for the v1→v2
 authentication diff, environment-variable migration, and rollback guidance.
 
-[Unreleased]: https://github.com/soulteary/herald/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/soulteary/herald/compare/v1.3.13...HEAD
+[1.3.13]: https://github.com/soulteary/herald/compare/v1.3.12...v1.3.13
+[1.3.12]: https://github.com/soulteary/herald/compare/v1.3.11...v1.3.12
+[1.3.11]: https://github.com/soulteary/herald/compare/v1.3.10...v1.3.11
+[1.3.10]: https://github.com/soulteary/herald/compare/v1.3.9...v1.3.10
+[1.3.9]: https://github.com/soulteary/herald/compare/v1.3.8...v1.3.9
+[1.3.8]: https://github.com/soulteary/herald/compare/v1.3.7...v1.3.8
+[1.3.7]: https://github.com/soulteary/herald/compare/v1.3.6...v1.3.7
+[1.3.6]: https://github.com/soulteary/herald/compare/v1.3.5...v1.3.6
+[1.3.5]: https://github.com/soulteary/herald/compare/v1.3.4...v1.3.5
+[1.3.4]: https://github.com/soulteary/herald/compare/v1.3.3...v1.3.4
+[1.3.3]: https://github.com/soulteary/herald/compare/v1.3.2...v1.3.3
+[1.3.2]: https://github.com/soulteary/herald/compare/v1.3.1...v1.3.2
+[1.3.0]: https://github.com/soulteary/herald/compare/v1.2.1...v1.3.0
+[1.2.1]: https://github.com/soulteary/herald/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/soulteary/herald/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/soulteary/herald/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/soulteary/herald/releases/tag/v1.0.0
+[1.0.0]: https://github.com/soulteary/herald/compare/v0.11.0...v1.0.0

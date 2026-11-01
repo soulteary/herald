@@ -44,7 +44,7 @@ This guide helps you diagnose and resolve common issues with Herald OTP and veri
 
 4. **Check Audit Logs**
    - Review audit logs for `send_failed` events
-   - Check provider error codes and messages
+   - Check bounded provider `reason` codes; raw provider messages are not exported
    - Verify destination addresses are valid
 
 5. **Test Provider Directly**
@@ -63,7 +63,7 @@ This guide helps you diagnose and resolve common issues with Herald OTP and veri
 
 For local or integration testing when you do not want to rely on real SMS/email delivery:
 
-1. Set **Herald** `ENVIRONMENT=test`, `HERALD_TEST_MODE=true` and `HERALD_TEST_API_KEY`. Herald will then return the verification code in the create-challenge response (`debug_code`) and expose `GET /v1/test/code/:challenge_id`.
+1. Set **Herald** `ENVIRONMENT=test`, `HERALD_TEST_MODE=true` and `HERALD_TEST_API_KEY`. Herald will then return the verification code in the create-challenge response (`debug_code`) and expose `GET /v1/test/code/:challenge_id` only on the separate test listener, with test-key authentication. A configured provider is still needed for a successful creation.
 2. Set **Stargate** `DEBUG=true`. Stargate will include the verification code in the `/_send_verify_code` response and display it on the login page (e.g. "Verification code (debug): 123456").
 
 See [API.md](API.md) (Create Challenge response, Get Test Code) and [DEPLOYMENT.md](DEPLOYMENT.md) (Test mode and debugging). **Never enable test mode or DEBUG in production.**
@@ -124,7 +124,7 @@ See [API.md](API.md) (Create Challenge response, Get Test Code) and [DEPLOYMENT.
 ### Diagnostic Steps
 
 1. **Check Authentication Method**
-   - Verify which authentication method is being used (mTLS, HMAC, API Key)
+   - Check `REQUEST_AUTH_MODE` (HMAC or API Key); mTLS is a separate transport policy
    - Check if authentication headers are present
 
 2. **For HMAC Authentication**
@@ -152,7 +152,7 @@ See [API.md](API.md) (Create Challenge response, Get Test Code) and [DEPLOYMENT.
 5. **Check Herald Logs**
    ```bash
    # Check for authentication errors
-   grep "unauthorized\|invalid_signature\|timestamp_out_of_range" /var/log/herald.log
+   rg '"status":401' /var/log/herald.log
    ```
 
 ### Solutions
@@ -196,7 +196,8 @@ See [API.md](API.md) (Create Challenge response, Get Test Code) and [DEPLOYMENT.
    
    # Check specific rate limit key
    redis-cli TYPE "ratelimit:user:{peppered_user_digest}"
-   redis-cli ZCARD "ratelimit:user:{peppered_user_digest}"
+   redis-cli GET "ratelimit:user:{peppered_user_digest}"
+   redis-cli PTTL "ratelimit:user:{peppered_user_digest}"
    ```
 
 4. **Analyze Usage Patterns**
@@ -223,15 +224,17 @@ See [API.md](API.md) (Create Challenge response, Get Test Code) and [DEPLOYMENT.
 
 1. **Check Redis Connectivity**
    ```bash
-   # Test Redis connection
-   redis-cli -h $REDIS_ADDR -p 6379 PING
+   # Replace the host/port below with the separate components of REDIS_ADDR.
+   # Use REDISCLI_AUTH for the password; do not print it or put it in a URI.
+   # Run redis-cli on the Redis network; Compose does not publish Redis by default.
+   REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli -h redis.example.internal -p 6379 -n "${REDIS_DB:-0}" PING
    ```
 
 2. **Verify Configuration**
    ```bash
    # Check Redis configuration
    echo $REDIS_ADDR
-   echo $REDIS_PASSWORD
+   test -n "$REDIS_PASSWORD" && echo "REDIS_PASSWORD is set"
    echo $REDIS_DB
    ```
 
@@ -250,7 +253,7 @@ See [API.md](API.md) (Create Challenge response, Get Test Code) and [DEPLOYMENT.
    histogram_quantile(0.99, rate(herald_redis_operation_duration_seconds_bucket[5m]))
    
    # Check Redis operation errors
-   rate(herald_redis_operation_duration_seconds_count[5m])
+   sum by (operation) (rate(herald_redis_operations_total{result="failure"}[5m]))
    ```
 
 5. **Review Herald Logs**
@@ -332,8 +335,8 @@ See [API.md](API.md) (Create Challenge response, Get Test Code) and [DEPLOYMENT.
    # Check CPU and memory
    top -p $(pgrep herald)
    
-   # Check Goroutine count
-   curl http://localhost:8082/debug/pprof/goroutine?debug=1
+   # Inspect service metrics; pprof and Go runtime collectors are not mounted
+   curl -fsS http://localhost:8082/metrics | rg "^herald_"
    ```
 
 3. **Review Request Patterns**
@@ -353,7 +356,7 @@ See [API.md](API.md) (Create Challenge response, Get Test Code) and [DEPLOYMENT.
 ### Solutions
 
 - **Scale Resources**: Increase CPU/memory allocation
-- **Optimize Redis**: Use Redis Cluster or optimize queries
+- **Optimize Redis**: Use a managed single Redis endpoint and inspect slow operations; native Cluster/Sentinel discovery is not configured
 - **Provider Optimization**: Use faster providers or optimize provider calls
 - **Caching**: Implement caching for frequently accessed data
 - **Load Balancing**: Distribute load across multiple instances
@@ -384,3 +387,12 @@ message. Span status and exception events use the same safe reason. Do not
 enable raw provider-body logging to investigate failures. Review historical
 logs and exported spans for echoed sensitive data and rotate exposed credentials.
 See [security](SECURITY.md#provider-failure-diagnostics) for compatibility details.
+
+## HMAC identity and CORS upgrade checks
+
+- `401/invalid_key_id`: with only `HMAC_SECRET`, omit the ID or use exactly `default`. Provision known custom IDs in `HERALD_HMAC_KEYS` without renaming callers. Do not change IDs to retry an uncertain send.
+- `409/idempotency_namespace_conflict`: an ambiguous historical empty-key-ID record exists. Preserve its bytes and TTL and reconcile it against provider/audit evidence; it is not a retryable delivery failure.
+- `409/delivery_unknown`: delivery may already have happened. Keep the same identity and client key; do not delete a non-expiring sending record or force a replacement send.
+- A production CORS startup error requires removing every standalone `*` entry from the origin list, or disabling CORS. Unlisted origins must not receive wildcard responses; API Key/HMAC authentication still applies.
+
+Follow the [HMAC upgrade procedure](DEPLOYMENT.md#hmac-identity-upgrade) and [CORS requirements](DEPLOYMENT.md#production-cors-origin-lists), including before rollback.

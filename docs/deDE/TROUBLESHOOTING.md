@@ -40,10 +40,10 @@ Dieser Leitfaden hilft Ihnen, häufige Probleme mit dem Herald OTP- und Verifizi
 3. **Prometheus-Metriken prüfen**
    ```promql
    # Send-Fehlerrate prüfen
-   rate(herald_otp_sends_total{result="failed"}[5m]) / rate(herald_otp_sends_total[5m])
+   rate(herald_otp_sends_total{result="failure"}[5m]) / rate(herald_otp_sends_total[5m])
    
    # Send-Erfolg nach Provider prüfen
-   rate(herald_otp_sends_total{result="success"}[5m]) by (provider)
+   sum by (provider) (rate(herald_otp_sends_total{result="success"}[5m]))
    ```
 
 4. **Audit-Protokolle prüfen**
@@ -91,10 +91,10 @@ Dieser Leitfaden hilft Ihnen, häufige Probleme mit dem Herald OTP- und Verifizi
 4. **Prometheus-Metriken prüfen**
    ```promql
    # Verifizierungs-Fehlergründe prüfen
-   rate(herald_otp_verifications_total{result="failed"}[5m]) by (reason)
+   sum by (reason) (rate(herald_otp_verifications_total{result="failure"}[5m]))
    
    # Gesperrte Challenges prüfen
-   rate(herald_otp_verifications_total{result="failed",reason="locked"}[5m])
+   rate(herald_otp_verifications_total{result="failure",reason="locked"}[5m])
    ```
 
 5. **Audit-Protokolle überprüfen**
@@ -125,7 +125,7 @@ Dieser Leitfaden hilft Ihnen, häufige Probleme mit dem Herald OTP- und Verifizi
 2. **Für HMAC-Authentifizierung**
    ```bash
    # Verifizieren, dass HMAC_SECRET konfiguriert ist
-   echo $HMAC_SECRET
+   test -n "$HMAC_SECRET" && echo "HMAC_SECRET is set"
    
    # Prüfen, ob Zeitstempel innerhalb des 5-Minuten-Fensters liegt
    # Verifizieren, dass Signaturberechnung mit Herald-Implementierung übereinstimmt
@@ -134,7 +134,7 @@ Dieser Leitfaden hilft Ihnen, häufige Probleme mit dem Herald OTP- und Verifizi
 3. **Für API-Schlüssel-Authentifizierung**
    ```bash
    # Verifizieren, dass API_KEY gesetzt ist
-   echo $API_KEY
+   test -n "$API_KEY" && echo "API_KEY is set"
    
    # Prüfen, ob X-API-Key-Header mit konfiguriertem Schlüssel übereinstimmt
    ```
@@ -178,7 +178,7 @@ Dieser Leitfaden hilft Ihnen, häufige Probleme mit dem Herald OTP- und Verifizi
 2. **Prometheus-Metriken prüfen**
    ```promql
    # Rate-Limit-Hits nach Bereich prüfen
-   rate(herald_rate_limit_hits_total[5m]) by (scope)
+   sum by (scope) (rate(herald_rate_limit_hits_total[5m]))
    
    # Rate-Limit-Hit-Rate prüfen
    rate(herald_rate_limit_hits_total[5m])
@@ -218,14 +218,14 @@ Dieser Leitfaden hilft Ihnen, häufige Probleme mit dem Herald OTP- und Verifizi
 1. **Redis-Verbindung prüfen**
    ```bash
    # Redis-Verbindung testen
-   redis-cli -h $REDIS_ADDR -p 6379 PING
+   REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli -h redis.example.internal -p 6379 -n "${REDIS_DB:-0}" PING
    ```
 
 2. **Konfiguration verifizieren**
    ```bash
    # Redis-Konfiguration prüfen
    echo $REDIS_ADDR
-   echo $REDIS_PASSWORD
+   test -n "$REDIS_PASSWORD" && echo "REDIS_PASSWORD is set"
    echo $REDIS_DB
    ```
 
@@ -241,10 +241,10 @@ Dieser Leitfaden hilft Ihnen, häufige Probleme mit dem Herald OTP- und Verifizi
 4. **Prometheus-Metriken prüfen**
    ```promql
    # Redis-Latenz prüfen
-   histogram_quantile(0.99, rate(herald_redis_latency_seconds_bucket[5m]))
+   histogram_quantile(0.99, rate(herald_redis_operation_duration_seconds_bucket[5m]))
    
    # Redis-Operationsfehler prüfen
-   rate(herald_redis_latency_seconds_count[5m])
+   rate(herald_redis_operation_duration_seconds_count[5m])
    ```
 
 5. **Herald-Protokolle überprüfen**
@@ -273,10 +273,10 @@ Dieser Leitfaden hilft Ihnen, häufige Probleme mit dem Herald OTP- und Verifizi
 1. **Provider-Metriken prüfen**
    ```promql
    # Send-Fehlerrate nach Provider prüfen
-   rate(herald_otp_sends_total{result="failed"}[5m]) by (provider)
+   sum by (provider) (rate(herald_otp_sends_total{result="failure"}[5m]))
    
    # Send-Dauer nach Provider prüfen
-   histogram_quantile(0.95, rate(herald_otp_send_duration_seconds_bucket[5m])) by (provider)
+   histogram_quantile(0.95, sum by (le, provider) (rate(herald_otp_send_duration_seconds_bucket[5m])))
    ```
 
 2. **Provider-Protokolle überprüfen**
@@ -318,7 +318,7 @@ Dieser Leitfaden hilft Ihnen, häufige Probleme mit dem Herald OTP- und Verifizi
    histogram_quantile(0.95, rate(herald_otp_send_duration_seconds_bucket[5m]))
    
    # Redis-Latenz prüfen
-   histogram_quantile(0.99, rate(herald_redis_latency_seconds_bucket[5m]))
+   histogram_quantile(0.99, rate(herald_redis_operation_duration_seconds_bucket[5m]))
    ```
 
 2. **Ressourcennutzung prüfen**
@@ -327,7 +327,7 @@ Dieser Leitfaden hilft Ihnen, häufige Probleme mit dem Herald OTP- und Verifizi
    top -p $(pgrep herald)
    
    # Goroutine-Anzahl prüfen
-   curl http://localhost:8082/debug/pprof/goroutine?debug=1
+   curl -fsS http://localhost:8082/metrics | rg "^herald_"
    ```
 
 3. **Anforderungsmuster überprüfen**

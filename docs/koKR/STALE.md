@@ -10,3 +10,8 @@ persistent audit buffering, exact-identity activation indexes, and redacted
 provider diagnostics. Builds and validation run on Linux; other hosts should
 use Linux containers. See [authentication](../enUS/API.md#authentication),
 [deployment](../enUS/DEPLOYMENT.md) and [security](../enUS/SECURITY.md).
+
+The v1.3.13 upgrade also requires verified HMAC key identities, explicit custom
+key provisioning in single-secret migrations, reconciliation of ambiguous legacy
+records, and rejection of standalone wildcards in production CORS lists. Use the
+current English or Chinese upgrade procedures before deployment or rollback.

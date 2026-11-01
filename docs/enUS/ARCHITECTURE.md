@@ -61,7 +61,7 @@ flowchart LR
 3. **Stargate** calls **Herald** `POST /v1/otp/challenges` (user_id, channel, destination, purpose). Herald creates a challenge in **Redis**, sends the code via **SMS**, **Email** (built-in SMTP or [herald-smtp](https://github.com/soulteary/herald-smtp) when `HERALD_SMTP_API_URL` is set), or **herald-dingtalk** (provider send).
 4. Herald returns `challenge_id`, `expires_in`, `next_resend_in` to Stargate.
 5. User submits the code. **Stargate** calls **Herald** `POST /v2/otp/verifications` with the challenge ID, code and trusted expected user, purpose and channel.
-6. Herald verifies against Redis, returns `ok`, `user_id`, `amr`, `issued_at`. Stargate creates session (cookie/JWT).
+6. Herald verifies against Redis, returns `ok`, `user_id`, `purpose`, `channel`, `challenge_id`, `amr`, `verified_at` and `issued_at`. Stargate creates session (cookie/JWT).
 7. Subsequent forwardAuth: Stargate only validates session; it does **not** call Warden or Herald.
 
 ### Key Interfaces
@@ -101,3 +101,13 @@ and superseded-code deletion are atomic; legacy indexes migrate only after exact
 identity checks. Follow the [upgrade procedure](API.md#activation-index-upgrade).
 Audit-enabled instances also need a persistent, private local audit directory;
 Redis alone does not preserve the pending audit backlog.
+
+## Authenticated identity and work admission
+
+Verified HMAC service and resolved key ID select the idempotency namespace.
+Omitted and explicit default IDs share records; single-secret lookup authorizes
+only `default`. Historical empty-key-ID records are guarded rather than copied
+across potentially rotated credentials. See [identity compatibility](API.md#hmac-identity-and-legacy-idempotency-records).
+Creation and v1/v2 verification share the per-instance hash budget (default 4);
+provider network delivery does not hold a slot. Production CORS origin lists
+reject standalone wildcard entries before middleware installation.
