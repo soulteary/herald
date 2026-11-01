@@ -1,0 +1,11 @@
+#!/bin/sh
+# Go Report Card scores against its Go-file inventory. Its pinned misspell
+# command walks every document by default, including non-English translations.
+# Keep this metric on Go source; regenerate-report-card.sh checks English docs.
+set -eu
+: "${HERALD_REAL_MISSPELL:?set the path of the pinned misspell binary}"
+if [ "$#" -ne 1 ] || [ ! -d "$1" ]; then
+    echo 'expected one source directory' >&2
+    exit 2
+fi
+find "$1" -type f -name '*.go' -exec "$HERALD_REAL_MISSPELL" {} +

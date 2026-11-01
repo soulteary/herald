@@ -64,12 +64,8 @@ func New(app *fiber.App, cfg Config) (*Server, error) {
 	if cfg.Addr == "" {
 		return nil, errors.New("server: empty listen address")
 	}
-	if cfg.LoopbackOnly {
-		host, _, err := net.SplitHostPort(cfg.Addr)
-		ip := net.ParseIP(host)
-		if err != nil || (host != "localhost" && (ip == nil || !ip.IsLoopback())) {
-			return nil, fmt.Errorf("server: listen address %q is not loopback-only", cfg.Addr)
-		}
+	if err := validateLoopbackAddress(cfg); err != nil {
+		return nil, err
 	}
 	if (cfg.TLSCertFile == "") != (cfg.TLSKeyFile == "") {
 		return nil, errors.New("server: half-configured TLS (cert without key or vice versa)")
@@ -247,4 +243,16 @@ func (s *Server) shutdown(serveErr <-chan error) error {
 		s.cfg.Logger.Info().Msg("Herald service stopped")
 	}
 	return firstErr
+}
+
+func validateLoopbackAddress(cfg Config) error {
+	if cfg.LoopbackOnly {
+		host, _, err := net.SplitHostPort(cfg.Addr)
+		ip := net.ParseIP(host)
+		if err != nil || (host != "localhost" && (ip == nil || !ip.IsLoopback())) {
+			return fmt.Errorf("server: listen address %q is not loopback-only", cfg.Addr)
+		}
+	}
+
+	return nil
 }

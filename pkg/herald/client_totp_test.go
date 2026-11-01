@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,51 +20,7 @@ func newTOTPTestClient(t *testing.T, baseURL string) *Client {
 }
 
 func TestTOTPClientHappyPaths(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if got := r.Header.Get("X-API-Key"); got != "test-key" {
-			t.Errorf("X-API-Key = %q", got)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		switch r.URL.Path {
-		case "/v1/totp/status":
-			if r.Method != http.MethodGet || r.URL.Query().Get("subject") != "user+1@example.com" {
-				t.Errorf("unexpected status request: %s %s", r.Method, r.URL.String())
-			}
-			_ = json.NewEncoder(w).Encode(TOTPStatusResponse{Subject: "user+1@example.com", TotpEnabled: true})
-		case "/v1/totp/verify":
-			var req TOTPVerifyRequest
-			_ = json.NewDecoder(r.Body).Decode(&req)
-			if req.Subject != "user-1" || req.Code != "123456" {
-				t.Errorf("verify request: %+v", req)
-			}
-			_ = json.NewEncoder(w).Encode(TOTPVerifyResponse{OK: true})
-		case "/v1/totp/enroll/start":
-			var req TOTPEnrollStartRequest
-			_ = json.NewDecoder(r.Body).Decode(&req)
-			if req.Subject != "user-1" || req.Label != "Work" {
-				t.Errorf("start request: %+v", req)
-			}
-			_ = json.NewEncoder(w).Encode(TOTPEnrollStartResponse{EnrollID: "enroll-1", SecretBase32: "SECRET", OtpauthURI: "otpauth://totp/test"})
-		case "/v1/totp/enroll/confirm":
-			var req TOTPEnrollConfirmRequest
-			_ = json.NewDecoder(r.Body).Decode(&req)
-			if req.EnrollID != "enroll-1" || req.Code != "654321" {
-				t.Errorf("confirm request: %+v", req)
-			}
-			_ = json.NewEncoder(w).Encode(TOTPEnrollConfirmResponse{Subject: "user-1", TotpEnabled: true, BackupCodes: []string{"backup"}})
-		case "/v1/totp/revoke":
-			var req struct {
-				Subject string `json:"subject"`
-			}
-			_ = json.NewDecoder(r.Body).Decode(&req)
-			if req.Subject != "user-1" {
-				t.Errorf("revoke request: %+v", req)
-			}
-			_ = json.NewEncoder(w).Encode(TOTPRevokeResponse{OK: true, Subject: "user-1"})
-		default:
-			http.NotFound(w, r)
-		}
-	}))
+	server := httptest.NewServer(totpHappyHandler(t))
 	defer server.Close()
 	client := newTOTPTestClient(t, server.URL)
 	ctx := context.Background()
@@ -171,5 +128,52 @@ func TestTOTPClientResponseLimit(t *testing.T) {
 	var heraldErr *HeraldError
 	if !errors.As(err, &heraldErr) || heraldErr.Reason != "response_too_large" {
 		t.Fatalf("error = %v, want response_too_large", err)
+	}
+}
+
+func totpHappyHandler(t *testing.T) http.HandlerFunc {
+	t.Helper()
+	return func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "test-key", r.Header.Get("X-API-Key"))
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/totp/status":
+			if r.Method != http.MethodGet || r.URL.Query().Get("subject") != "user+1@example.com" {
+				t.Errorf("unexpected status request: %s %s", r.Method, r.URL.String())
+			}
+			_ = json.NewEncoder(w).Encode(TOTPStatusResponse{Subject: "user+1@example.com", TotpEnabled: true})
+		case "/v1/totp/verify":
+			var req TOTPVerifyRequest
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			if req.Subject != "user-1" || req.Code != "123456" {
+				t.Errorf("verify request: %+v", req)
+			}
+			_ = json.NewEncoder(w).Encode(TOTPVerifyResponse{OK: true})
+		case "/v1/totp/enroll/start":
+			var req TOTPEnrollStartRequest
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			if req.Subject != "user-1" || req.Label != "Work" {
+				t.Errorf("start request: %+v", req)
+			}
+			_ = json.NewEncoder(w).Encode(TOTPEnrollStartResponse{EnrollID: "enroll-1", SecretBase32: "SECRET", OtpauthURI: "otpauth://totp/test"})
+		case "/v1/totp/enroll/confirm":
+			var req TOTPEnrollConfirmRequest
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			if req.EnrollID != "enroll-1" || req.Code != "654321" {
+				t.Errorf("confirm request: %+v", req)
+			}
+			_ = json.NewEncoder(w).Encode(TOTPEnrollConfirmResponse{Subject: "user-1", TotpEnabled: true, BackupCodes: []string{"backup"}})
+		case "/v1/totp/revoke":
+			var req struct {
+				Subject string `json:"subject"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			if req.Subject != "user-1" {
+				t.Errorf("revoke request: %+v", req)
+			}
+			_ = json.NewEncoder(w).Encode(TOTPRevokeResponse{OK: true, Subject: "user-1"})
+		default:
+			http.NotFound(w, r)
+		}
 	}
 }

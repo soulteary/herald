@@ -34,6 +34,21 @@ func NormalizedProviderFailurePolicy() string {
 func validateStrictSettings() error {
 	var problems []string
 
+	problems = append(problems, strictEnumProblems()...)
+	problems = append(problems, strictProxyProblems()...)
+	problems = append(problems, strictHTTPProblems()...)
+	problems = append(problems, strictDeliveryProblems()...)
+	problems = append(problems, strictAuditProblems()...)
+
+	if len(problems) > 0 {
+		return fmt.Errorf("configuration validation failed: %s", strings.Join(problems, "; "))
+	}
+	return nil
+}
+
+func strictEnumProblems() []string {
+	var problems []string
+
 	if !normalizedOneOf(EnvironmentValue, "", "development", "dev", "test", "testing", "production", "prod") {
 		problems = append(problems, "ENVIRONMENT must be development, test, or production")
 	}
@@ -52,15 +67,11 @@ func validateStrictSettings() error {
 	if !normalizedOneOf(ProviderRedirectPolicy, "deny", "same-origin") {
 		problems = append(problems, "PROVIDER_REDIRECT_POLICY must be deny or same-origin")
 	}
-	if (strings.TrimSpace(TrustedProxyHeader) == "") != (len(TrustedProxies) == 0) {
-		problems = append(problems, "HERALD_TRUSTED_PROXY_HEADER and HERALD_TRUSTED_PROXIES must be configured together")
-	}
-	for _, proxy := range TrustedProxies {
-		if strings.TrimSpace(proxy) == "" {
-			problems = append(problems, "HERALD_TRUSTED_PROXIES must not contain empty entries")
-			break
-		}
-	}
+	return problems
+}
+
+func strictHTTPProblems() []string {
+	var problems []string
 
 	if MaxBodyBytes <= 0 {
 		problems = append(problems, "HERALD_MAX_BODY_BYTES must be positive")
@@ -77,6 +88,12 @@ func validateStrictSettings() error {
 	if MaxBodyBytes > 0 && CodeLength > MaxBodyBytes-contextBoundVerificationRequestEnvelopeBytes {
 		problems = append(problems, "CODE_LENGTH plus a context-bound v2 verification JSON envelope must not exceed HERALD_MAX_BODY_BYTES")
 	}
+	return problems
+}
+
+func strictDeliveryProblems() []string {
+	var problems []string
+
 	if ResendCooldown < 0 || IdempotencyKeyTTL < 0 {
 		problems = append(problems, "RESEND_COOLDOWN and IDEMPOTENCY_KEY_TTL must not be negative")
 	}
@@ -92,6 +109,12 @@ func validateStrictSettings() error {
 	if HMACMaxDrift <= 0 {
 		problems = append(problems, "HMAC_MAX_DRIFT must be positive")
 	}
+	return problems
+}
+
+func strictAuditProblems() []string {
+	var problems []string
+
 	if AuditEnabled && (strings.TrimSpace(AuditSpoolDir) == "" || AuditSpoolMaxBytes <= 0) {
 		problems = append(problems, "AUDIT_SPOOL_DIR and positive AUDIT_SPOOL_MAX_BYTES are required when audit logging is enabled")
 	}
@@ -102,8 +125,21 @@ func validateStrictSettings() error {
 		problems = append(problems, "audit writer queue size and worker count must not be negative")
 	}
 
-	if len(problems) > 0 {
-		return fmt.Errorf("configuration validation failed: %s", strings.Join(problems, "; "))
+	return problems
+}
+
+func strictProxyProblems() []string {
+	var problems []string
+
+	if (strings.TrimSpace(TrustedProxyHeader) == "") != (len(TrustedProxies) == 0) {
+		problems = append(problems, "HERALD_TRUSTED_PROXY_HEADER and HERALD_TRUSTED_PROXIES must be configured together")
 	}
-	return nil
+	for _, proxy := range TrustedProxies {
+		if strings.TrimSpace(proxy) == "" {
+			problems = append(problems, "HERALD_TRUSTED_PROXIES must not contain empty entries")
+			break
+		}
+	}
+
+	return problems
 }

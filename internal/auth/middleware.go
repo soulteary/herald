@@ -167,18 +167,15 @@ func verifyHMACV2(c fiber.Ctx, cfg Config) error {
 	service := c.Get(HeaderService)
 	keyID := c.Get(HeaderKeyID)
 
-	if signature == "" || timestamp == "" || nonce == "" || service == "" {
+	if missingHMACHeaders(signature, timestamp, nonce, service) {
 		return deny(c, "missing_auth_headers")
 	}
 	// keyID as sent by the client (may be empty). It is bound into the canonical
 	// string exactly as received. lookupKeyID is the id used to resolve the
 	// secret, which may fall back to a configured default.
-	lookupKeyID := keyID
-	if lookupKeyID == "" {
-		if cfg.DefaultKeyID == "" {
-			return deny(c, "key_id_required")
-		}
-		lookupKeyID = cfg.DefaultKeyID
+	lookupKeyID, validKey := effectiveHMACKeyID(keyID, cfg.DefaultKeyID)
+	if !validKey {
+		return deny(c, "key_id_required")
 	}
 
 	if !TimestampWithinDrift(timestamp, cfg.Clock(), cfg.MaxDrift) {
@@ -220,6 +217,10 @@ func verifyHMACV2(c fiber.Ctx, cfg Config) error {
 	if cfg.NonceStore == nil {
 		return deny(c, "unauthorized")
 	}
+	return consumeVerifiedNonce(c, cfg, service, lookupKeyID, nonce)
+}
+
+func consumeVerifiedNonce(c fiber.Ctx, cfg Config, service, lookupKeyID, nonce string) error {
 	fresh, err := cfg.NonceStore.Consume(c.Context(), service, lookupKeyID, nonce)
 	if err != nil {
 		// Backend failure: fail closed in production, otherwise allow (dev).
@@ -237,4 +238,14 @@ func verifyHMACV2(c fiber.Ctx, cfg Config) error {
 	}
 
 	return c.Next()
+}
+
+func missingHMACHeaders(signature, timestamp, nonce, service string) bool {
+	return signature == "" || timestamp == "" || nonce == "" || service == ""
+}
+func effectiveHMACKeyID(keyID, defaultKeyID string) (string, bool) {
+	if keyID == "" {
+		return defaultKeyID, defaultKeyID != ""
+	}
+	return keyID, true
 }

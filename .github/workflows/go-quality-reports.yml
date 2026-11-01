@@ -196,6 +196,10 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      - name: Check report spelling scope and regenerate quality evidence
+        if: "!cancelled() && steps.go_report_card.outcome == 'success'"
+        run: sh scripts/regenerate-report-card.sh
+
       - name: Upload stable reports
         if: "always() && steps.report_cleanup.outcome == 'success'"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

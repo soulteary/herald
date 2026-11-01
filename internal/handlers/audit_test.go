@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/stretchr/testify/require"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -55,18 +56,14 @@ func TestAuditUnavailableRejectsBusinessSuccess(t *testing.T) {
 	t.Cleanup(func() { _ = h.StopAuditWriter() })
 	p := &countingProvider{channel: provider.ChannelEmail}
 	h.providerRegistry = provider.NewRegistry()
-	if err := h.providerRegistry.Register(p); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, h.providerRegistry.Register(p))
 	app := fiber.New()
 	app.Post("/v1/otp/challenges", h.CreateChallenge)
 	app.Post("/v1/otp/verifications", h.VerifyChallenge)
 	app.Post("/v2/otp/verifications", h.VerifyChallengeV2)
 	app.Post("/v1/otp/challenges/:id/revoke", h.RevokeChallenge)
 	resp, err := idemRequest(app, "audit-key", faultBody)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	if healthy {
 		if resp.status != 200 || p.calls != 1 {
 			t.Fatalf("healthy create: status=%d calls=%d body=%s", resp.status, p.calls, resp.body)
@@ -75,58 +72,10 @@ func TestAuditUnavailableRejectsBusinessSuccess(t *testing.T) {
 		t.Fatalf("create: status=%d calls=%d body=%s", resp.status, p.calls, resp.body)
 	}
 
-	for _, path := range []string{"/v1/otp/verifications", "/v2/otp/verifications", "revoke"} {
-		ch, code, err := h.challengeManager.Create(context.Background(), challengekit.CreateRequest{UserID: "u", Channel: challengekit.ChannelEmail, Destination: "a@b.com", Purpose: "login"})
-		if err != nil {
-			t.Fatal(err)
-		}
-		body := map[string]string{"challenge_id": ch.ID, "code": code}
-		if strings.HasPrefix(path, "/v2") {
-			body["expected_user_id"] = "u"
-			body["expected_channel"] = "email"
-			body["expected_purpose"] = "login"
-		}
-		if path == "revoke" {
-			path = "/v1/otp/challenges/" + ch.ID + "/revoke"
-		}
-		payload, err := json.Marshal(body)
-		if err != nil {
-			t.Fatal(err)
-		}
-		req := httptest.NewRequest("POST", path, bytes.NewReader(payload))
-		req.Header.Set("Content-Type", "application/json")
-		r, err := app.Test(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		_ = r.Body.Close()
-		want := 503
-		if healthy {
-			want = 200
-		}
-		if r.StatusCode != want {
-			t.Fatalf("%s status=%d, want %d", path, r.StatusCode, want)
-		}
-		if healthy {
-			continue
-		}
-		result, err := h.challengeManager.Verify(context.Background(), ch.ID, code, "")
-		if err != nil || result == nil || !result.OK {
-			t.Fatalf("%s consumed or revoked unaudited challenge: result=%v err=%v", path, result, err)
-		}
-	}
+	checkAuditVerificationAndRevoke(t, app, h, healthy)
+
 	if healthy {
-		deadline := time.Now().Add(5 * time.Second)
-		for {
-			rows, err := auditlog.Query(context.Background(), audit.DefaultQueryFilter())
-			if err == nil && len(rows) >= 8 {
-				break
-			}
-			if time.Now().After(deadline) {
-				t.Fatalf("audit events not delivered: records=%d err=%v", len(rows), err)
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
+		waitForAuditDelivery(t)
 	}
 
 }
@@ -176,15 +125,11 @@ func TestStrictRevocationSurvivesAuditFailure(t *testing.T) {
 	})
 	p := &auditFailureProvider{failingProvider: failingProvider{channel: provider.ChannelEmail}, spool: config.AuditSpoolDir}
 	h.providerRegistry = provider.NewRegistry()
-	if err := h.providerRegistry.Register(p); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, h.providerRegistry.Register(p))
 	app := fiber.New()
 	app.Post("/v1/otp/challenges", h.CreateChallenge)
 	r, err := idemRequest(app, "strict-audit-failure", faultBody)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	if r.status != 503 || !strings.Contains(string(r.body), "audit_unavailable") {
 		t.Fatalf("status=%d body=%s", r.status, r.body)
 	}
@@ -195,19 +140,13 @@ func TestStrictRevocationSurvivesAuditFailure(t *testing.T) {
 		t.Fatal("provider was not called after the initial audit")
 	}
 	exists, err := rc.Exists(context.Background(), "otp:ch:"+id).Result()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	if exists != 0 {
 		t.Fatalf("strict-policy challenge %s survived failed result auditing", id)
 	}
-	if err = os.Rename(config.AuditSpoolDir+"-offline", config.AuditSpoolDir); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Rename(config.AuditSpoolDir+"-offline", config.AuditSpoolDir))
 	retry, err := idemRequest(app, "strict-audit-failure", faultBody)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	if retry.status != 409 || !strings.Contains(string(retry.body), "delivery_unknown") {
 		t.Fatalf("retry status=%d body=%s", retry.status, retry.body)
 	}
@@ -215,5 +154,58 @@ func TestStrictRevocationSurvivesAuditFailure(t *testing.T) {
 	defer p.mu.Unlock()
 	if p.calls != 1 {
 		t.Fatalf("provider called %d times", p.calls)
+	}
+}
+
+func checkAuditVerificationAndRevoke(t *testing.T, app *fiber.App, h *Handlers, healthy bool) {
+	t.Helper()
+	for _, path := range []string{"/v1/otp/verifications", "/v2/otp/verifications", "revoke"} {
+		ch, code, err := h.challengeManager.Create(context.Background(), challengekit.CreateRequest{UserID: "u", Channel: challengekit.ChannelEmail, Destination: "a@b.com", Purpose: "login"})
+		require.NoError(t, err)
+		body := map[string]string{"challenge_id": ch.ID, "code": code}
+		if strings.HasPrefix(path, "/v2") {
+			body["expected_user_id"] = "u"
+			body["expected_channel"] = "email"
+			body["expected_purpose"] = "login"
+		}
+		if path == "revoke" {
+			path = "/v1/otp/challenges/" + ch.ID + "/revoke"
+		}
+		payload, err := json.Marshal(body)
+		require.NoError(t, err)
+		req := httptest.NewRequest("POST", path, bytes.NewReader(payload))
+		req.Header.Set("Content-Type", "application/json")
+		r, err := app.Test(req)
+		require.NoError(t, err)
+		_ = r.Body.Close()
+		want := 503
+		if healthy {
+			want = 200
+		}
+		if r.StatusCode != want {
+			t.Fatalf("%s status=%d, want %d", path, r.StatusCode, want)
+		}
+		if healthy {
+			continue
+		}
+		result, err := h.challengeManager.Verify(context.Background(), ch.ID, code, "")
+		if err != nil || result == nil || !result.OK {
+			t.Fatalf("%s consumed or revoked unaudited challenge: result=%v err=%v", path, result, err)
+		}
+	}
+}
+
+func waitForAuditDelivery(t *testing.T) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		rows, err := auditlog.Query(context.Background(), audit.DefaultQueryFilter())
+		if err == nil && len(rows) >= 8 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("audit events not delivered: records=%d err=%v", len(rows), err)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

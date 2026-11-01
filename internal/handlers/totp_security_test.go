@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/stretchr/testify/require"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -138,12 +139,8 @@ func TestTOTPSecurityPreservesSuccessfulWireContract(t *testing.T) {
 				t.Fatalf("valid response rejected: %d %s", status, body)
 			}
 			var got, want interface{}
-			if err := json.Unmarshal([]byte(body), &got); err != nil {
-				t.Fatal(err)
-			}
-			if err := json.Unmarshal([]byte(endpoint.response), &want); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, json.Unmarshal([]byte(body), &got))
+			require.NoError(t, json.Unmarshal([]byte(endpoint.response), &want))
 			gotJSON, _ := json.Marshal(got)
 			wantJSON, _ := json.Marshal(want)
 			if string(gotJSON) != string(wantJSON) {
