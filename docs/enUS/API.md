@@ -76,6 +76,15 @@ Create a new verification challenge and send verification code.
 **Headers:**
 - `Idempotency-Key` (optional): Reuse this key with the same request when retrying. Completed requests replay their response within `IDEMPOTENCY_KEY_TTL`; pre-send concurrent requests return `409/idempotency_in_flight`. Once sending starts, an incomplete request returns `409/delivery_unknown` rather than sending again, even after the TTL. A different request with the same key returns `409/idempotency_conflict`.
 
+Fingerprints preserve field boundaries even when JSON strings contain embedded
+NUL characters (`\u0000`). Ordinary request fingerprints and Redis key names
+remain compatible with earlier versions. Requests containing NUL characters
+use a versioned, length-framed fingerprint. If their key already has a legacy
+record, retries return `409/idempotency_conflict` without changing or deleting
+that record. Normal retention still applies to expiring records; non-expiring
+sending records require delivery reconciliation. Do not clear them or switch
+keys to retry an uncertain send without checking the provider outcome.
+
 Before calling the provider, Herald persists a non-expiring send record. If the
 process exits, the provider reports an uncertain result, or a later Redis write
 fails, that record prevents retries from sending another code. A failed final
