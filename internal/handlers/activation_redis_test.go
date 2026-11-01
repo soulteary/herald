@@ -54,4 +54,16 @@ func TestAtomicActivationWithRedisServer(t *testing.T) {
 	active, err := rc.Get(ctx, m.activeIndexKey(live)).Result()
 	require.NoError(t, err)
 	require.Equal(t, live.ID, active)
+	// A legacy index shared by differently cased users must not revoke either identity.
+	victim, victimCode := createActivationOTP(t, legacy, "Alice")
+	_, err = legacy.SwapActive(ctx, victim)
+	require.NoError(t, err)
+	other, _ := createActivationOTP(t, m, "alice")
+	_, err = m.SwapActive(ctx, other)
+	require.NoError(t, err)
+	require.Equal(t, victim.ID, rc.Get(ctx, m.legacyActiveIndexKey(victim)).Val())
+	victimResult, err := m.VerifyWithOptions(ctx, victim.ID, victimCode, "", challengekit.VerifyOptions{ExpectedUserID: "Alice", ExpectedPurpose: "login", ExpectedChannel: challengekit.ChannelEmail})
+	require.NoError(t, err)
+	require.True(t, victimResult.OK)
+
 }

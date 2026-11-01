@@ -114,8 +114,8 @@ used, the sending record remains non-expiring: retrying the same key returns
 can mean both old and new codes were invalidated; reconcile delivery before
 retrying with another key.
 
-Existing Redis key names, index encodings and challenge lifetimes are preserved;
-no schema migration or new configuration is required. This fix does not scan for
+Challenge record keys and lifetimes are preserved; activation indexes migrate as
+described under "Activation index upgrade" below. No new configuration is required. This fix does not scan for
 or remove unidentified orphaned codes left by an earlier revocation failure.
 They retain their original expiry; revoke known affected challenge IDs when
 reconciling an earlier incident. Keep the existing Redis persistence and audit
@@ -485,3 +485,23 @@ attempts are recorded before the operation; result events follow it. These are
 not a distributed transaction: an error recording the result can follow a
 completed side effect. A 503 therefore does not imply the code is still usable
 or the message was not sent. Follow the idempotency retry rules above.
+
+### Activation index upgrade
+
+Activation indexes preserve the exact user ID, purpose, channel and destination,
+using a versioned encoding with explicit field boundaries. User IDs such as
+`Alice` and `alice` no longer share an activation index. This prevents a request
+for one identity from revoking another identity's code when the remaining fields
+match. It does not allow one user to verify another user's code.
+
+Existing challenge records remain verifiable until their original expiry. On
+resend, an old index is migrated atomically only when its stored challenge has
+exactly the same four identity fields. A colliding legacy record is preserved.
+Previously overwritten legacy indexes cannot be reconstructed automatically;
+unindexed codes expire normally and known affected challenge IDs can be revoked.
+
+Stop creation traffic and replace all old instances before resuming creation.
+Mixed versions can use different indexes and leave superseded codes valid.
+Rollback requires stopping creation and waiting the maximum challenge lifetime
+before resuming on the old version. No client API or challenge record format
+changes are required.

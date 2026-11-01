@@ -26,7 +26,7 @@ func createActivationOTP(t *testing.T, m challengekit.ManagerInterface, user str
 	return ch, code
 }
 
-func TestAtomicActivationRetainsLegacyIndexEncoding(t *testing.T) {
+func TestAtomicActivationMigratesLegacyIndex(t *testing.T) {
 	for _, prefix := range []string{"", "custom:"} {
 		t.Run(prefix, func(t *testing.T) {
 			cfg := challengekit.Config{Expiry: 5 * time.Minute, CodeLength: 6, MaxAttempts: 5}
@@ -125,4 +125,60 @@ func TestConcurrentActivationsLeaveOnlyIndexedCandidate(t *testing.T) {
 	for _, ch := range candidates {
 		require.Equal(t, ch.ID == active, mr.Exists(m.config.ChallengeKeyPrefix+ch.ID), "candidate %s", ch.ID)
 	}
+}
+
+func TestActivationSeparatesCaseSensitiveUsers(t *testing.T) {
+	m, _, _ := activationFixture(t, challengekit.Config{Expiry: time.Minute, CodeLength: 6, MaxAttempts: 5})
+	first, code := createActivationOTP(t, m, "Alice")
+	_, err := m.SwapActive(context.Background(), first)
+	require.NoError(t, err)
+	second, _ := createActivationOTP(t, m, "alice")
+	_, err = m.SwapActive(context.Background(), second)
+	require.NoError(t, err)
+	result, err := m.VerifyWithOptions(context.Background(), first.ID, code, "", challengekit.VerifyOptions{ExpectedUserID: "Alice", ExpectedPurpose: "login", ExpectedChannel: challengekit.ChannelEmail})
+	require.NoError(t, err)
+	require.True(t, result.OK, "activating alice must not revoke Alice's challenge")
+}
+
+func TestActivationDoesNotRevokeCollidingLegacyIdentity(t *testing.T) {
+	m, rc, mr := activationFixture(t, challengekit.Config{Expiry: time.Minute, CodeLength: 6, MaxAttempts: 5})
+	legacy := challengekit.NewManager(rc, m.config)
+	victim, code := createActivationOTP(t, legacy, "Alice")
+	_, err := legacy.SwapActive(context.Background(), victim)
+	require.NoError(t, err)
+	other, _ := createActivationOTP(t, m, "alice")
+	_, err = m.SwapActive(context.Background(), other)
+	require.NoError(t, err)
+	require.True(t, mr.Exists(m.config.ChallengeKeyPrefix+victim.ID))
+	active, err := mr.Get(m.legacyActiveIndexKey(victim))
+	require.NoError(t, err)
+	require.Equal(t, victim.ID, active)
+	replacement, _ := createActivationOTP(t, m, "alice")
+	_, err = m.SwapActive(context.Background(), replacement)
+	require.NoError(t, err)
+	require.False(t, mr.Exists(m.config.ChallengeKeyPrefix+other.ID))
+	result, err := m.VerifyWithOptions(context.Background(), victim.ID, code, "", challengekit.VerifyOptions{ExpectedUserID: "Alice", ExpectedPurpose: "login", ExpectedChannel: challengekit.ChannelEmail})
+	require.NoError(t, err)
+	require.True(t, result.OK)
+}
+
+func TestActiveIndexPreservesFieldBoundariesAndValues(t *testing.T) {
+	m, _, _ := activationFixture(t, challengekit.Config{Expiry: time.Minute})
+	base := challengekit.Challenge{UserID: "Alice", Purpose: "login", Channel: challengekit.ChannelEmail, Destination: "A@example.com"}
+	for _, mutate := range []func(*challengekit.Challenge){
+		func(ch *challengekit.Challenge) { ch.UserID = "alice" },
+		func(ch *challengekit.Challenge) { ch.UserID = " Alice " },
+		func(ch *challengekit.Challenge) { ch.Purpose = "LOGIN" },
+		func(ch *challengekit.Challenge) { ch.Destination = "a@example.com" },
+	} {
+		other := base
+		mutate(&other)
+		require.NotEqual(t, m.activeIndexKey(&base), m.activeIndexKey(&other))
+	}
+	first := base
+	first.UserID, first.Purpose = "a\x1fb", "c"
+	second := base
+	second.UserID, second.Purpose = "a", "b\x1fc"
+	require.Equal(t, m.legacyActiveIndexKey(&first), m.legacyActiveIndexKey(&second))
+	require.NotEqual(t, m.activeIndexKey(&first), m.activeIndexKey(&second))
 }
