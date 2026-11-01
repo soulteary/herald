@@ -1,14 +1,12 @@
-# ⚠️ These docs are stale (out of date)
+# Translation status: koKR
 
-The security-hardening release (Herald v2) updated only the **enUS** and
-**zhCN** documentation. The docs in this directory were **not** updated and may
-be inaccurate regarding:
+The documents in this directory and `README.koKR.md` are historical
+translations. Their examples are not maintained as current deployment guidance.
+Use [English](../enUS/README.md) or [中文](../zhCN/README.md).
 
-- HMAC v1 → v2 authentication (canonical string, required headers, nonces)
-- Idempotency / concurrency semantics
-- Provider timeout / failure policy
-- Test-mode limits
-- Environment-variable migration and production deployment
-
-Please refer to `docs/enUS/MIGRATION_V2.md` (or `docs/zhCN/MIGRATION_V2.md`)
-until this language is retranslated.
+Current requirements include HMAC v3 for challenge creation, replay-resistant
+nonces, required v2 verification context, non-expiring uncertain-send records,
+persistent audit buffering, exact-identity activation indexes, and redacted
+provider diagnostics. Builds and validation run on Linux; other hosts should
+use Linux containers. See [authentication](../enUS/API.md#authentication),
+[deployment](../enUS/DEPLOYMENT.md) and [security](../enUS/SECURITY.md).

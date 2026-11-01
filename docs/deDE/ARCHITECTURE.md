@@ -1,5 +1,10 @@
 # Herald-Architektur
 
+> **Veraltete Übersetzung / Historical translation.** This page predates current security changes.
+> Do not use its commands or configuration as current instructions. See the
+> [current English guide](../enUS/ARCHITECTURE.md) or [中文](../zhCN/ARCHITECTURE.md)
+> and [translation status](STALE.md). HMAC creation requires v3; builds and validation use Linux.
+
 Dieses Dokument beschreibt die Full-Stack-Architektur des Authentifizierungsablaufs mit Stargate, Warden, Herald, Redis und externen Anbietern (SMS, E-Mail, DingTalk).
 
 ## Überblick

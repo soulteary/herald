@@ -7,40 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.11] - 2026-11-01
+
 ### Fixed
 
-- Revoke the superseded OTP and publish its replacement active index in one
-  Redis Lua operation. A failed standalone revocation or a Herald process exit
-  can no longer leave both codes redeemable after a successful resend. Existing
-  active-index encodings, challenge records, expiry settings and idempotency
-  delivery-unknown protection are retained.
+- Stop exporting raw provider errors to delivery-failure logs and tracing.
+  An upstream error echoing an OTP, destination or credential could previously
+  persist those values in logs, span status and exception events. Retain only
+  known reason codes; normalize unknown reasons to `send_failed`.
+- Align operational documentation with current authentication, environment
+  variables, metrics, provider interfaces, test listeners and Linux validation.
+  Correct local links and expose the historical status of older translations.
 
-- Bind the idempotency header (including its absence) in HMAC v3. HMAC challenge
-  creation requires v3 so changing or stripping the header cannot redirect a
-  signed request into another idempotency record and cause a duplicate send.
-  Go SDK signing defaults to v3. Older HMAC creation callers must upgrade;
-  v2 remains accepted on other routes. API key mode and Redis records are unchanged.
+### Compatibility
 
-- Reject `X-Service` and `X-Key-Id` values containing the reserved `|kid:`
-  delimiter before authentication, nonce consumption, or business writes.
-  Otherwise different service/key pairs could share an idempotency namespace
-  and replay a response across HMAC credentials. Rejected values return
-  `401/invalid_auth_headers`; ordinary namespaces and existing Redis records
-  retain their format, contents, and TTL.
-- Use length-framed, versioned idempotency fingerprints for requests containing
-  embedded NUL characters. Moving separator bytes between user and locale
-  fields can no longer replay a response for a different request. Ordinary
-  request fingerprints and Redis keys remain unchanged. Existing legacy NUL
-  records return `409/idempotency_conflict` and retain their contents and TTL;
-  non-expiring sending records must be reconciled rather than cleared to retry.
-- Harden all TOTP proxy calls with a redirect-denying HTTP client, verified
-  TLS, bounded response reads, and strict HTTP 200 response handling. Failed
-  or incomplete upstream responses cannot become successful verification
-  results, and redirects cannot forward TOTP codes or service credentials.
-- Apply `PROVIDER_MAX_RESPONSE_BYTES` to TOTP responses as well. Redirects,
-  non-200 responses, oversized bodies, and malformed or interrupted responses
-  now return `502/proxy_failed`. Valid `200/ok:false` verification results and
-  complete enrollment-confirm HTTP 400 responses retain their existing contract.
+- Delivery-failure log consumers must use `reason` instead of free-text `error`.
+  Span descriptions use `provider send failed: <reason>`. Client responses,
+  strict-policy revocation, idempotency handling and Redis records are unchanged.
+- Existing logs and exported spans are not rewritten. Review historical stores
+  and exported copies for sensitive provider echoes, apply access/retention
+  policies and rotate exposed credentials. No client or record migration is needed.
+
+## [1.3.10] - 2026-11-01
+
+### Fixed
+
+- Preserve exact identity fields and boundaries in versioned activation indexes.
+  Activating `alice` can no longer revoke `Alice` when other fields match.
+  Migrate legacy indexes only when the stored challenge matches all four fields.
+- Correct release download links to use published image tags and a versioned
+  changelog URL.
+
+### Compatibility
+
+- Old challenge records retain their verification format and expiry. Overwritten
+  legacy indexes cannot be reconstructed automatically. Pause creation, drain
+  requests and replace all old instances before resuming; mixed versions can
+  leave superseded codes valid. Before rollback, stop creation and wait the
+  maximum challenge lifetime. Preserve Redis data and audit volumes.
 
 ## [1.3.9] - 2026-11-01
 
@@ -69,6 +73,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The release retains v1.3.8's atomic resend activation and its existing Redis
   formats and TTLs. No new storage migration is required. Preserve pending
   idempotency records and the per-instance audit spool during deployment.
+
+## [1.3.8] - 2026-11-01
+
+### Fixed
+
+- Revoke the superseded OTP and publish its replacement active index in one
+  Redis Lua operation. A failed standalone revocation or a Herald process exit
+  can no longer leave both codes redeemable after a successful resend. Existing
+  active-index encodings, challenge records, expiry settings and idempotency
+  delivery-unknown protection are retained.
+
+## [1.3.7] - 2026-11-01
+
+### Fixed
+
+- Bind the idempotency header (including its absence) in HMAC v3. HMAC challenge
+  creation requires v3 so changing or stripping the header cannot redirect a
+  signed request into another idempotency record and cause a duplicate send.
+  Go SDK signing defaults to v3. Older HMAC creation callers must upgrade;
+  v2 remains accepted on other routes. API key mode and Redis records are unchanged.
+
+- Refactor complex paths and correct Go Report Card spelling scope.
+
+## [1.3.6] - 2026-11-01
+
+### Fixed
+
+- Reject `X-Service` and `X-Key-Id` values containing the reserved `|kid:`
+  delimiter before authentication, nonce consumption, or business writes.
+  Otherwise different service/key pairs could share an idempotency namespace
+  and replay a response across HMAC credentials. Rejected values return
+  `401/invalid_auth_headers`; ordinary namespaces and existing Redis records
+  retain their format, contents, and TTL.
+
+- Reuse keyed digest state and simplify template formatting; raise the enforced
+  statement coverage floor to 95%.
+
+## [1.3.5] - 2026-11-01
+
+### Fixed
+
+- Use length-framed, versioned idempotency fingerprints for requests containing
+  embedded NUL characters. Moving separator bytes between user and locale
+  fields can no longer replay a response for a different request. Ordinary
+  request fingerprints and Redis keys remain unchanged. Existing legacy NUL
+  records return `409/idempotency_conflict` and retain their contents and TTL;
+  non-expiring sending records must be reconciled rather than cleared to retry.
+
+## [1.3.4] - 2026-11-01
+
+### Fixed
+
+- Harden all TOTP proxy calls with a redirect-denying HTTP client, verified
+  TLS, bounded response reads, and strict HTTP 200 response handling. Failed
+  or incomplete upstream responses cannot become successful verification
+  results, and redirects cannot forward TOTP codes or service credentials.
+- Apply `PROVIDER_MAX_RESPONSE_BYTES` to TOTP responses as well. Redirects,
+  non-200 responses, oversized bodies, and malformed or interrupted responses
+  now return `502/proxy_failed`. Valid `200/ok:false` verification results and
+  complete enrollment-confirm HTTP 400 responses retain their existing contract.
 
 ## [1.3.3] - 2026-11-01
 

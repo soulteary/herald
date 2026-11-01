@@ -1,5 +1,10 @@
 # Herald 모니터링 가이드
 
+> **오래된 번역 / Historical translation.** This page predates current security changes.
+> Do not use its commands or configuration as current instructions. See the
+> [current English guide](../enUS/MONITORING.md) or [中文](../zhCN/MONITORING.md)
+> and [translation status](STALE.md). HMAC creation requires v3; builds and validation use Linux.
+
 Herald는 모니터링 및 관찰 가능성을 위해 Prometheus 메트릭을 노출합니다. 이 문서에서는 사용 가능한 모든 메트릭, 모니터링 구성 방법 및 모범 사례에 대해 설명합니다.
 
 ## 메트릭 엔드포인트

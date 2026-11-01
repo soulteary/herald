@@ -1,5 +1,10 @@
 # Documentazione di Sicurezza
 
+> **Traduzione non aggiornata / Historical translation.** This page predates current security changes.
+> Do not use its commands or configuration as current instructions. See the
+> [current English guide](../enUS/SECURITY.md) or [中文](../zhCN/SECURITY.md)
+> and [translation status](STALE.md). HMAC creation requires v3; builds and validation use Linux.
+
 > 🌐 **Language / 语言**: [English](../enUS/SECURITY.md) | [中文](../zhCN/SECURITY.md) | [Français](../frFR/SECURITY.md) | [Italiano](SECURITY.md) | [日本語](../jaJP/SECURITY.md) | [Deutsch](../deDE/SECURITY.md) | [한국어](../koKR/SECURITY.md)
 
 Questo documento spiega le funzionalità di sicurezza di Herald, la configurazione di sicurezza e le migliori pratiche.

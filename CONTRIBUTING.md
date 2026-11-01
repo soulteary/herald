@@ -1,5 +1,7 @@
 # Contributing Guide
 
+> Current operational documentation: [English](docs/enUS/README.md) and [中文](docs/zhCN/README.md). Other translations are historical; consult their translation-status notice before use.
+
 > 🌐 **Language / 语言**: [English](docs/enUS/CONTRIBUTING.md) | [中文](docs/zhCN/CONTRIBUTING.md) | [Français](docs/frFR/CONTRIBUTING.md) | [Italiano](docs/itIT/CONTRIBUTING.md) | [日本語](docs/jaJP/CONTRIBUTING.md) | [Deutsch](docs/deDE/CONTRIBUTING.md) | [한국어](docs/koKR/CONTRIBUTING.md)
 
 This document provides guidelines for contributing to the Herald project. Please select your preferred language from the links above to view the complete contributing guide.

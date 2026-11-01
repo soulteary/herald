@@ -1,5 +1,10 @@
 # Herald API 문서
 
+> **오래된 번역 / Historical translation.** This page predates current security changes.
+> Do not use its commands or configuration as current instructions. See the
+> [current English guide](../enUS/API.md) or [中文](../zhCN/API.md)
+> and [translation status](STALE.md). HMAC creation requires v3; builds and validation use Linux.
+
 Herald는 SMS·이메일·DingTalk으로 인증 코드를 보내는 인증 코드 및 OTP 서비스입니다（이메일은 `HERALD_SMTP_API_URL` 설정 시 [herald-smtp](https://github.com/soulteary/herald-smtp), DingTalk은 [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) 사용）. 내장된 속도 제한 및 보안 제어를 제공합니다.
 
 ## 기본 URL
@@ -192,7 +197,7 @@ HTTP 상태 코드:
 - `400 Bad Request`: 잘못된 요청
 - `500 Internal Server Error`: 내부 서버 오류
 
-**TOTP 프록시(선택)**：`HERALD_TOTP_ENABLED=true`이고 `HERALD_TOTP_BASE_URL`이 설정되면 Herald는 TOTP(Authenticator) 요청을 [herald-totp](https://github.com/soulteary/herald-totp)로 프록시합니다. 엔드포인트 및 형식은 [API (enUS)](enUS/API.md#totp-proxy-optional) 참조.
+**TOTP 프록시(선택)**：`HERALD_TOTP_ENABLED=true`이고 `HERALD_TOTP_BASE_URL`이 설정되면 Herald는 TOTP(Authenticator) 요청을 [herald-totp](https://github.com/soulteary/herald-totp)로 프록시합니다. 엔드포인트 및 형식은 [API (enUS)](../enUS/API.md#totp-proxy-optional) 참조.
 
 ## 속도 제한
 

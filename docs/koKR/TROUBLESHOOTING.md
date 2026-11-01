@@ -1,5 +1,10 @@
 # Herald 문제 해결 가이드
 
+> **오래된 번역 / Historical translation.** This page predates current security changes.
+> Do not use its commands or configuration as current instructions. See the
+> [current English guide](../enUS/TROUBLESHOOTING.md) or [中文](../zhCN/TROUBLESHOOTING.md)
+> and [translation status](STALE.md). HMAC creation requires v3; builds and validation use Linux.
+
 이 가이드는 Herald OTP 및 인증 코드 서비스의 일반적인 문제를 진단하고 해결하는 데 도움이 됩니다.
 
 ## 목차

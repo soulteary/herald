@@ -41,7 +41,11 @@ OTLP_ENDPOINT=http://localhost:4318
 ### 在代码中创建 Span
 
 ```go
-import "github.com/soulteary/herald/internal/tracing"
+import (
+    "errors"
+    tracing "github.com/soulteary/tracing-kit/v2"
+    "go.opentelemetry.io/otel/attribute"
+)
 
 // 创建 span
 ctx, span := tracing.StartSpan(ctx, "custom.operation")
@@ -55,10 +59,15 @@ span.SetAttributes(
 
 // 记录错误
 if err != nil {
-    tracing.RecordError(span, err)
+    tracing.RecordError(span, errors.New("operation failed")) // 不传递上游原始错误
 }
 ```
 
 ## 参考
 
 - [OpenTelemetry Go](https://opentelemetry.io/docs/languages/go/)
+
+## 渠道错误诊断
+
+发送失败的 span 状态和 exception 事件仅记录 `provider send failed: <reason>`，
+不导出上游错误文本。历史 span 不会被改写；处理说明见 [安全文档](../../docs/zhCN/SECURITY.md#发送渠道失败诊断)。

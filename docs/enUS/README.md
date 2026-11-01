@@ -1,5 +1,7 @@
 # Documentation Index
 
+> Current operational documentation: [English](../enUS/README.md) and [中文](../zhCN/README.md). Other translations are historical; consult their translation-status notice before use.
+
 Welcome to the Herald OTP and Verification Code Service documentation.
 
 ## 🌐 Multi-language Documentation
@@ -51,7 +53,7 @@ Welcome to the Herald OTP and Verification Code Service documentation.
 
 1. Read [README.md](../../README.md) to understand the project
 2. Check the [Quick Start](../../README.md#quick-start) section
-3. Refer to [Configuration](../../README.md#configuration) to configure the service
+3. Refer to [Configuration](../../README.md#basic-configuration) to configure the service
 
 ### Developers
 

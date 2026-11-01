@@ -1,11 +1,13 @@
-# Herald v2 迁移与安全加固指南（zhCN）
+# HMAC 迁移与安全升级指南（zhCN）
+
+文件名保留以兼容已有链接。HMAC v2/v3 和 v2 验证 API 是协议版本，Herald 服务版本仍为 v1.x。
 
 > 安全更新：Go SDK 现默认使用 HMAC v3；创建验证码必须使用 v3，包括不带幂等键的请求。
 > 下文 v2 签名格式仅用于保留兼容性的验证接口。需协调服务端和调用方升级，
 > 详见 [API 认证](API.md#hmac-v3)。
 
-本文档说明安全加固版本引入的破坏性变更、迁移方式与回滚方法，是 v1 → v2 认证
-变更、幂等/并发语义、Provider 投递策略、环境变量迁移与生产部署的权威说明。
+本文档记录安全升级及历史 HMAC v2 迁移规则。现行行为以 [API](API.md)、
+[部署](DEPLOYMENT.md) 和 [安全](SECURITY.md) 为准；下文 v2 签名仅适用于仍兼容它的路由。
 
 > 其他语言文档（deDE、frFR、itIT、jaJP、koKR）相对本次发布**已过期**，仅
 > enUS 与 zhCN 为最新。详见文末“过期文档”。
@@ -51,8 +53,8 @@ HERALD-HMAC-V2\n
 - **无随机默认密钥**：配置多把密钥时，调用方须携带 `X-Key-Id`，或设置
   `HERALD_HMAC_DEFAULT_KEY_ID` 指向已知 id。
 - **不降级**：v2 签名存在但无效将被拒绝，绝不静默回退到 API Key。
-- **旧版 v1** 仅在 `HMAC_V1_ENABLED=true` 时接受；否则缺少
-  `X-Signature-Version: v2` 的请求将被拒绝。
+- **旧版 v1** 仅在 `HMAC_V1_ENABLED=true` 时用于兼容的非创建路由。
+  HMAC 模式的创建请求始终要求 `X-Signature-Version: v3`；其他路由接受 v2/v3。
 
 ### 1.4 重放保护
 
@@ -83,11 +85,11 @@ c, _ := herald.NewClient(herald.DefaultOptions().
 ## 2. 幂等与并发语义
 
 - 在 `POST /v1/otp/challenges` 上携带 `Idempotency-Key`。
-- 键**按 principal 命名空间隔离**（由 key-id/service/api-key 派生），不同调用方
-  即便使用相同的客户端键也不会冲突。
-- 首个请求**原子占位**（`SET NX`）。发送前相同 body 的并发请求返回
+- principal 使用 `X-Service` 与 `X-Key-Id` 的原始值，两者均缺失时使用客户端 IP。
+  API key 本身不构成命名空间；重试时保持身份头不变，两种头均不得含 `|kid:`。
+- 首个请求**原子占位**（`SET NX`）。发送前相同指纹字段的并发请求返回
   `409/idempotency_in_flight`，已完成请求在 TTL 内重放响应。
-- 相同键 + **不同 body** → `409 Conflict`。
+- 相同键 + **不同指纹字段** → `409 Conflict`。
 - 成功后精确响应会被存储，并在重试时**原样重放**。
 - 调用渠道前将占位记录转为不自动过期的 `sending` 状态。进程退出或发送后结果不确定时，
   同一键返回 `409/delivery_unknown`，不能因 TTL 到期而重新发送。发送前的失败仍可释放或
@@ -118,7 +120,7 @@ c, _ := herald.NewClient(herald.DefaultOptions().
 
 - `debug_code` **仅**在 `ENVIRONMENT=test` **且** `HERALD_TEST_MODE=true` 时
   出现在创建响应中。
-- `/v1/test/code/:id` 仅在测试模式挂载，需 `HERALD_TEST_API_KEY`，开发与生产
+- `/v1/test/code/:id` 仅在测试模式的独立监听器挂载，需 `HERALD_TEST_API_KEY`，开发与生产
   环境均不存在。
 - 生产环境若 `HERALD_TEST_MODE=true` 将拒绝启动。
 
@@ -126,8 +128,8 @@ c, _ := herald.NewClient(herald.DefaultOptions().
 
 ## 5. Purpose / 上下文绑定
 
-校验与 challenge 的 `purpose` 绑定；为某 purpose 签发的码不能用于其他 purpose。
-同一流程的 create/verify 请保持 `purpose` 一致（如 `login`）。
+使用 `POST /v2/otp/verifications`，从业务后端可信状态提供 `expected_user_id`、
+`expected_purpose`、`expected_channel`。v1 验证接口没有调用方提供的上下文绑定，不能把它当作 v2 使用。
 
 ---
 
@@ -141,8 +143,8 @@ c, _ := herald.NewClient(herald.DefaultOptions().
 | Provider | `PROVIDER_FAILURE_POLICY` | + `PROVIDER_TIMEOUT`、`PROVIDER_MAX_RESPONSE_BYTES`、`PROVIDER_REDIRECT_POLICY` | 生产用 `strict`，设超时/上限 |
 | 测试模式 | `HERALD_TEST_MODE` | + `HERALD_TEST_API_KEY` | 仅测试；生产禁用 |
 | 审计 | `AUDIT_LOKI_URL` | **移除** | 删除该项；使用 `database`/`file`/`redis` |
-| 隐私 | — | `PII_PEPPER`（回退到幂等/HMAC 密钥） | 生产设专用 pepper |
-| CORS | 允许通配 | `CORS_ALLOW_ORIGINS` | 生产禁止通配 |
+| 隐私 | — | `HERALD_PII_PEPPER`（回退到幂等/HMAC 密钥） | 生产设专用 pepper |
+| CORS | 允许通配 | `HERALD_CORS_ALLOW_ORIGINS` | 生产禁止通配 |
 
 `HERALD_SESSION_*` 变量已失效（会话存储被移除），可从环境中删除。
 
@@ -154,7 +156,7 @@ c, _ := herald.NewClient(herald.DefaultOptions().
 2. 配置请求认证（`REQUEST_AUTH_MODE=hmac_v2` + 密钥，或 `api_key`）。
 3. 使用带密码的 Redis（或在私网启用风险确认标志）。
 4. 设 `PROVIDER_FAILURE_POLICY=strict`、`PROVIDER_TIMEOUT` 及 HTTPS Provider URL。
-5. 设 `PII_PEPPER` 并保持 `AUDIT_MASK_DESTINATION=true`。
+5. 设 `HERALD_PII_PEPPER` 并保持 `AUDIT_MASK_DESTINATION=true`。
 6. 以非 root（UID/GID 10001）运行容器，置于 TLS 或 mTLS 之后。
 7. 将 `/livez`（存活）与 `/readyz`（就绪）接入编排系统。
 
@@ -162,8 +164,8 @@ c, _ := herald.NewClient(herald.DefaultOptions().
 
 - 对 API Key 部署而言配置兼容：设 `REQUEST_AUTH_MODE=api_key` 可在滚动升级
   SDK 期间保持旧客户端可用。
-- 若需临时接受旧 HMAC v1 客户端，设 `HMAC_V1_ENABLED=true`（不建议长期启用，
-  其无重放保护）。
+- `HMAC_V1_ENABLED=true` 只影响兼容的非创建路由，不能恢复 v1/v2 创建请求。
+  服务端与调用方需按 [API 认证](API.md#hmac-v3) 协调升级。
 - Redis 键为增量式（`otp:nonce:*`、`otp:idem2:*`）；不确定的 `sending` 记录不会自动过期，回滚时也需保留并核对。其他键按 TTL
   过期，无需破坏性迁移。
 
@@ -190,3 +192,9 @@ v1 验证接口保留原有的无上下文绑定语义。
 `AUDIT_WRITER_QUEUE_SIZE` 现在只控制通知容量，不控制记录保留。本地接收需要 fsync，
 后端按至少一次语义投递。缓冲已满或不可用时返回 `503/audit_unavailable`。
 容量、权限及重复事件处理方式见部署指南。
+
+## 激活索引与渠道诊断升级
+
+从 v1.3.10 之前的版本升级时，按 [激活索引升级](API.md#激活索引升级) 暂停创建流量、排空进行中的请求并替换全部实例，之后再恢复。保留不确定发送记录和审计持久卷；回滚前应暂停创建并等待最长验证码有效期。
+
+渠道诊断现在使用受控 `reason`，不再记录原始错误文本。诊断字段兼容性及历史日志、span 处理要求见 [发送渠道失败诊断](SECURITY.md#发送渠道失败诊断)。

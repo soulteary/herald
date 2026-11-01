@@ -1,5 +1,10 @@
 # 기여 가이드
 
+> **오래된 번역 / Historical translation.** This page predates current security changes.
+> Do not use its commands or configuration as current instructions. See the
+> [current English guide](../enUS/CONTRIBUTING.md) or [中文](../zhCN/CONTRIBUTING.md)
+> and [translation status](STALE.md). HMAC creation requires v3; builds and validation use Linux.
+
 > 🌐 **Language / 语言**: [English](../enUS/CONTRIBUTING.md) | [中文](../zhCN/CONTRIBUTING.md) | [Français](../frFR/CONTRIBUTING.md) | [Italiano](../itIT/CONTRIBUTING.md) | [日本語](../jaJP/CONTRIBUTING.md) | [Deutsch](../deDE/CONTRIBUTING.md) | [한국어](CONTRIBUTING.md)
 
 Herald 프로젝트에 관심을 가져 주셔서 감사합니다! 모든 형태의 기여를 환영합니다.

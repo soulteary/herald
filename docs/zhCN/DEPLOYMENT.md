@@ -21,7 +21,11 @@ docker compose up -d
 # 构建
 go build -o herald main.go
 
-# 运行
+# 先配置受密码保护的 Redis 端点
+export ENVIRONMENT=production REQUEST_AUTH_MODE=api_key PROVIDER_FAILURE_POLICY=strict
+: "${API_KEY:?提供至少 32 字节密钥}"
+: "${REDIS_PASSWORD:?提供 Redis 密码}"
+: "${AUDIT_SPOOL_DIR:?提供私有持久审计目录}"
 ./herald
 ```
 
@@ -33,7 +37,8 @@ go build -o herald main.go
 - 部分变量使用 `HERALD_*` 前缀（例如：`HERALD_TEST_MODE`、`HERALD_HMAC_KEYS`）
 - 部分变量使用较短名称（例如：`REDIS_ADDR`、`API_KEY`、`HMAC_SECRET`）
 
-为保持一致性并确保未来兼容性，建议尽可能使用 `HERALD_*` 前缀。服务支持两种命名约定。
+必须使用下表中的准确名称，不能任意添加或删除 `HERALD_` 前缀。
+`HERALD_API_KEY` 是 Compose 输入，会映射为进程的 `API_KEY`；仅明确列出的别名有效。
 
 ### `REDIS_ADDR` 与 `HERALD_REDIS_*` 约定
 
@@ -56,10 +61,18 @@ go build -o herald main.go
 |------|------|--------|------|
 | `PORT` | 服务器监听端口（可带或不带前导冒号，如 `8082` 或 `:8082`） | `:8082` | 否 |
 | `REDIS_ADDR` | Redis 地址 | `localhost:6379` | 否 |
-| `REDIS_PASSWORD` | Redis 密码 | （空） | 否 |
+| `REDIS_PASSWORD` | Redis 密码 | （空） | 生产必需，除非显式风险确认 |
 | `REDIS_DB` | Redis 数据库索引 | `0` | 否 |
 | `LOG_LEVEL` | 日志级别 | `info` | 否 |
 | `SERVICE_NAME` | 服务标识（用于 HMAC/日志/健康检查） | `herald` | 否 |
+| `HERALD_READ_TIMEOUT` | 请求读取超时 | `15s` | 否 |
+| `HERALD_WRITE_TIMEOUT` | 响应写入超时 | `15s` | 否 |
+| `HERALD_IDLE_TIMEOUT` | 空闲连接超时 | `60s` | 否 |
+| `HERALD_CORS_ALLOW_ORIGINS` | 逗号分隔源允许列表；空值关闭 CORS，生产禁止通配符 | （空） | 否 |
+| `HERALD_RISK_ACK_PASSWORDLESS_REDIS` | 生产无密码 Redis 的显式风险确认；应优先使用密码 | `false` | 仅此例外 |
+| `HERALD_NONCE_PREFIX` | Redis nonce 键前缀，实例间与升级时保持一致 | `otp:nonce:` | 否 |
+| `PROVIDER_TIMEOUT` | 正值渠道请求超时 | `10s` | 否 |
+| `PROVIDER_REDIRECT_POLICY` | HTTP 渠道重定向：`deny` 或 `same-origin`；TOTP 始终禁止 | `deny` | 否 |
 | `HERALD_TRUSTED_PROXY_HEADER` | 转发客户端 IP 的请求头；仅信任允许列表中的代理 | （空） | 配置可信代理时 |
 | `HERALD_TRUSTED_PROXIES` | 可信代理 IP/CIDR 允许列表，逗号分隔 | （空） | 配置代理请求头时 |
 
@@ -74,12 +87,13 @@ Herald 从右向左解析转发 IP 链，仅跳过明确配置为可信的代理
 | `HMAC_SECRET` | 单 HMAC 密钥；生产至少 32 字节 | （空） | HMAC 单密钥模式 |
 | `HERALD_HMAC_KEYS` | HMAC 密钥映射；ID/密钥不得为空，生产密钥至少 32 字节 | （空） | HMAC 多密钥模式 |
 | `HERALD_HMAC_DEFAULT_KEY_ID` | 显式默认密钥 ID；否则多密钥请求必须发送 `X-Key-Id` | （空） | 可选 |
-| `HMAC_MAX_DRIFT` | HMAC v2 时间戳允许偏差 | `60s` | 否 |
+| `HMAC_MAX_DRIFT` | HMAC v2/v3 时间戳允许偏差 | `60s` | 否 |
 | `HMAC_V1_ENABLED` | 临时启用旧版 HMAC v1 | `false` | 否 |
 | `HERALD_IDEMPOTENCY_SECRET` | 幂等记录密钥；生产仅配置多 HMAC 密钥时必需 | （空） | 条件必需 |
 | `HERALD_PII_PEPPER` | PII 派生 Redis/指标键的 pepper；生产至少 32 字节 | （空） | 建议 |
 
-未设置任一认证时，服务会记录警告并允许未认证请求（仅适合开发/测试）。
+`hmac_v2` 和 `api_key` 模式缺少可用凭据时会拒绝请求。只有显式选择 `REQUEST_AUTH_MODE=none`
+才会跳过请求认证，且生产环境禁止此模式。
 
 #### OTP/Challenge
 
@@ -178,7 +192,7 @@ HTTPS。请配置最终服务地址：包括同源跳转在内的所有重定向
 | 变量 | 描述 | 默认值 | 必需 |
 |------|------|--------|------|
 | `AUDIT_ENABLED` | 是否启用审计 | `true` | 否 |
-| `AUDIT_MASK_DESTINATION` | 是否对 destination 脱敏 | `false` | 否 |
+| `AUDIT_MASK_DESTINATION` | 是否对 destination 脱敏 | 生产未显式配置时为 `true`，否则为 `false` | 否 |
 | `AUDIT_TTL` | 审计记录在 Redis 中的 TTL（如 `168h` 即 7 天） | `168h` | 否 |
 | `AUDIT_STORAGE_TYPE` | 持久化类型：`database`、`file`、`redis` 或逗号分隔多类型 | （空） | 否 |
 | `AUDIT_DATABASE_URL` | 数据库连接串（当 `AUDIT_STORAGE_TYPE` 含 database） | （空） | 否 |
@@ -229,7 +243,7 @@ fsync 和原子 rename。
 
 ### 测试模式与调试
 
-当 `HERALD_TEST_MODE=true` 时：
+仅当同时设置 `ENVIRONMENT=test` 和 `HERALD_TEST_MODE=true` 时：
 
 - 创建 challenge 的响应中会包含 `debug_code` 字段（明文验证码），便于调用方（如 Stargate 在 `DEBUG=true` 时）在登录页直接展示。
 - 会开放接口 `GET /v1/test/code/:challenge_id`，用于根据 challenge_id 查询验证码（供集成测试或 Stargate 在创建响应未带 `debug_code` 时回退使用）。
@@ -278,7 +292,7 @@ fsync 和原子 rename。
 
 **键前缀：**
 - `otp:ch:*` - 挑战数据（TTL：挑战过期时间）
-- `otp:rate:*` - 速率限制计数器（TTL：速率限制窗口）
+- `ratelimit:*` - 速率限制计数器（TTL：速率限制窗口）
 - `otp:idem2:*` - 幂等记录（发送前占位和成功响应按配置 TTL 过期；不确定发送不过期）
 - `otp:lock:*` - 用户锁定记录（TTL：锁定持续时间）
 
@@ -310,11 +324,15 @@ fsync 和原子 rename。
 - 加上速率限制键（~1-2 MB）和审计键（~1-2 MB）
 - **总估算：约 20 MB 最小值**
 
-对于高可用性部署，请考虑使用 Redis Cluster 或 Redis Sentinel。
+`REDIS_ADDR` 指定单一 Redis 端点；Herald 未提供原生 Cluster 或 Sentinel 发现配置。
+高可用部署使用外部管理的故障切换端点并保留数据，不应假定多键激活脚本兼容 Redis Cluster。
 
 ## 与其他服务集成（可选）
 
 Herald 设计为可独立工作，也可以根据需要与其他服务集成。如果您想将 Herald 与其他认证或网关服务集成，可以配置以下内容：
+
+以下为调用方配置示例，不是新增的 Herald 进程变量。Herald 的 API Key 模式使用
+`REQUEST_AUTH_MODE=api_key` 和 `API_KEY`。
 
 **集成配置示例：**
 ```bash
@@ -322,7 +340,8 @@ Herald 设计为可独立工作，也可以根据需要与其他服务集成。�
 export HERALD_URL=http://herald:8082
 
 # 用于服务间身份验证的 API 密钥
-export HERALD_API_KEY=your-secret-key
+: "${API_KEY:?load the Herald server API key}"
+export HERALD_API_KEY="$API_KEY"
 
 # 启用 Herald 集成（如果您的服务支持）
 export HERALD_ENABLED=true
@@ -361,3 +380,9 @@ scrape_configs:
 - 在生产环境中使用 TLS/HTTPS
 - 适当配置速率限制
 - 监控 Redis 的异常活动
+
+## 发送渠道失败诊断
+
+发送失败使用受控 `reason` 字段，不再记录上游错误消息；span 状态和 exception 事件也只保留安全原因码。
+排障时不要启用原始渠道响应体日志。若历史日志或导出的 span 含敏感数据，应核查访问与保留策略，
+并轮换已暴露凭据，字段变化见 [安全说明](SECURITY.md#发送渠道失败诊断)。

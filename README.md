@@ -14,7 +14,9 @@
 
 Herald is a production-ready, standalone OTP and verification code service that sends verification codes via email and SMS. It features built-in rate limiting, security controls, and audit logging. Herald is designed to work independently and can be integrated with other services as needed.
 
-The HTTP server uses Fiber v3.5.0 and the matching v2 module lines of the Fiber-facing kit packages. Building from source requires Go 1.27.3 or later.
+The HTTP server uses Fiber v3. Dependency versions and the Go toolchain are pinned
+in `go.mod` (Go 1.27.3 or later). Builds and validation run on Linux; use Linux
+containers on macOS, Windows and other hosts.
 
 ## Core Features
 
@@ -24,6 +26,15 @@ The HTTP server uses Fiber v3.5.0 and the matching v2 module lines of the Fiber-
 - 🔌 **Pluggable Providers**: Extensible email, SMS, and DingTalk provider architecture (email via [herald-smtp](https://github.com/soulteary/herald-smtp), DingTalk via [herald-dingtalk](https://github.com/soulteary/herald-dingtalk))
 - ↩️ **Challenge Revoke**: **POST /v1/otp/challenges/{id}/revoke** to revoke (unbind/invalidate) a challenge when it is no longer needed
 - 🔐 **TOTP Proxy (Optional)**: When enabled, proxy TOTP (Authenticator) operations to [herald-totp](https://github.com/soulteary/herald-totp) so one Herald URL covers OTP and TOTP
+
+## Current security upgrades
+
+HMAC challenge creation requires v3. Use the v2 verification API with expected
+user, purpose and channel from trusted application state. Upgrades from before
+v1.3.10 require a coordinated [activation index upgrade](docs/enUS/API.md#activation-index-upgrade).
+Keep Redis and audit volumes persistent. See [provider diagnostics](docs/enUS/SECURITY.md#provider-failure-diagnostics)
+for log field changes and historical log/trace handling. Other-language translations
+are historical; current operational guides are maintained in English and Chinese.
 
 ## Quick Start
 

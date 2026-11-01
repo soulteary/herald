@@ -1,5 +1,10 @@
 # 문서 인덱스
 
+> **오래된 번역 / Historical translation.** This page predates current security changes.
+> Do not use its commands or configuration as current instructions. See the
+> [current English guide](../enUS/README.md) or [中文](../zhCN/README.md)
+> and [translation status](STALE.md). HMAC creation requires v3; builds and validation use Linux.
+
 Herald OTP 및 인증 코드 서비스 문서에 오신 것을 환영합니다.
 
 ## 🌐 다국어 문서
@@ -50,7 +55,7 @@ Herald OTP 및 인증 코드 서비스 문서에 오신 것을 환영합니다.
 
 1. [README.koKR.md](../../README.koKR.md)를 읽어 프로젝트를 이해하세요
 2. [빠른 시작](../../README.koKR.md#빠른-시작) 섹션을 확인하세요
-3. [구성](../../README.koKR.md#구성)을 참조하여 서비스를 구성하세요
+3. [구성](../../README.koKR.md#기본-구성)을 참조하여 서비스를 구성하세요
 
 ### 개발자
 

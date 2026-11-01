@@ -1,5 +1,10 @@
 # ドキュメントインデックス
 
+> **古い翻訳 / Historical translation.** This page predates current security changes.
+> Do not use its commands or configuration as current instructions. See the
+> [current English guide](../enUS/README.md) or [中文](../zhCN/README.md)
+> and [translation status](STALE.md). HMAC creation requires v3; builds and validation use Linux.
+
 Herald OTP および検証コードサービスのドキュメントへようこそ。
 
 ## 🌐 多言語ドキュメント
@@ -50,7 +55,7 @@ Herald OTP および検証コードサービスのドキュメントへようこ
 
 1. [README.jaJP.md](../../README.jaJP.md) を読んでプロジェクトを理解する
 2. [クイックスタート](../../README.jaJP.md#クイックスタート) セクションを確認する
-3. [設定](../../README.jaJP.md#設定) を参照してサービスを設定する
+3. [設定](../../README.jaJP.md#基本設定) を参照してサービスを設定する
 
 ### 開発者
 

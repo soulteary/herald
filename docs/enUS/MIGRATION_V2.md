@@ -1,4 +1,7 @@
-# Herald v2 Migration & Security Hardening Guide (enUS)
+# HMAC Migration and Security Upgrades (enUS)
+
+The filename is retained for existing links. HMAC v2/v3 and the v2 verification
+API are protocol versions; Herald service releases remain on the v1.x line.
 
 > Current security update: the Go SDK now defaults to HMAC v3. Challenge creation
 > requires v3, including requests without an idempotency key. The historical v2
@@ -56,8 +59,10 @@ The HMAC-SHA256 of that canonical string (hex) is sent in `X-Signature`.
   `X-Key-Id`, or you must set `HERALD_HMAC_DEFAULT_KEY_ID` to a known id.
 - **No downgrade.** A present-but-invalid v2 signature is rejected; Herald never
   silently falls back to API-key auth.
-- **Legacy v1** is only accepted when `HMAC_V1_ENABLED=true`. Requests without
-  `X-Signature-Version: v2` are otherwise rejected.
+- **Legacy v1** requires `HMAC_V1_ENABLED=true` on compatible non-creation routes.
+  Challenge creation always requires `X-Signature-Version: v3` in HMAC mode.
+  Other routes accept v2/v3; a missing or unknown version is rejected unless
+  the legacy fallback is enabled.
 
 ### 1.4 Replay protection
 
@@ -92,12 +97,13 @@ c, _ := herald.NewClient(herald.DefaultOptions().
 ## 2. Idempotency & concurrency semantics
 
 - Send `Idempotency-Key` on `POST /v1/otp/challenges`.
-- Keys are **namespaced per principal** (derived from key-id/service/api-key), so
-  two callers using the same client-chosen key do not collide.
+- Keys are namespaced by the literal `X-Service` and `X-Key-Id` headers, or the
+  client IP when both headers are absent. An API key is not itself a namespace.
+  Keep caller headers stable across retries; `|kid:` is forbidden in either header.
 - The first request **atomically claims** the key (`SET NX`). Concurrent
-  duplicates with the **same body** return `409/idempotency_in_flight` before
+  duplicates with the **same fingerprinted fields** return `409/idempotency_in_flight` before
   sending, or replay a completed response within its TTL.
-- Same key + **different body** → `409 Conflict`.
+- Same key + **different fingerprinted fields** → `409 Conflict`.
 - After success, the exact response is stored and **replayed** for retries.
 - Before delivery, the claim becomes a non-expiring `sending` record. A crash
   or an uncertain post-send failure leaves the key blocked with
@@ -134,7 +140,7 @@ c, _ := herald.NewClient(herald.DefaultOptions().
 
 - `debug_code` appears in the create response **only** when
   `ENVIRONMENT=test` **and** `HERALD_TEST_MODE=true`.
-- `/v1/test/code/:id` is mounted only in test mode, requires
+- `/v1/test/code/:id` is mounted only on the separate test listener in test mode, requires
   `HERALD_TEST_API_KEY`, and is never present in development or production.
 - Production refuses to start if `HERALD_TEST_MODE=true`.
 
@@ -142,9 +148,10 @@ c, _ := herald.NewClient(herald.DefaultOptions().
 
 ## 5. Purpose / context binding
 
-Verification is bound to the challenge's `purpose`; a code issued for one purpose
-cannot be redeemed for another. Keep the `purpose` value stable across
-create/verify for a given flow (e.g. `login`).
+Use `POST /v2/otp/verifications` with all three expected context fields from
+trusted application state: `expected_user_id`, `expected_purpose` and
+`expected_channel`. The v1 verification route has no caller-supplied context
+binding; do not treat it as providing the v2 guarantees.
 
 ---
 
@@ -158,8 +165,8 @@ create/verify for a given flow (e.g. `login`).
 | Provider | `PROVIDER_FAILURE_POLICY` | + `PROVIDER_TIMEOUT`, `PROVIDER_MAX_RESPONSE_BYTES`, `PROVIDER_REDIRECT_POLICY` | Use `strict` in prod; set timeout/bounds |
 | Test mode | `HERALD_TEST_MODE` | + `HERALD_TEST_API_KEY` | Test-only; forbidden in prod |
 | Audit | `AUDIT_LOKI_URL` | **removed** | Remove it; use `database`/`file`/`redis` |
-| Privacy | — | `PII_PEPPER` (falls back to idempotency/HMAC secret) | Set a dedicated pepper in prod |
-| Rate-limit CORS | wildcard allowed | `CORS_ALLOW_ORIGINS` | No wildcard in prod |
+| Privacy | — | `HERALD_PII_PEPPER` (falls back to idempotency/HMAC secret) | Set a dedicated pepper in prod |
+| Rate-limit CORS | wildcard allowed | `HERALD_CORS_ALLOW_ORIGINS` | No wildcard in prod |
 
 `HERALD_SESSION_*` variables are inert (session storage was removed) and can be
 deleted from your environment.
@@ -172,7 +179,7 @@ deleted from your environment.
 2. Configure request auth (`REQUEST_AUTH_MODE=hmac_v2` + keys, or `api_key`).
 3. Set a password-protected Redis (or the risk-ack flag on a private network).
 4. Set `PROVIDER_FAILURE_POLICY=strict`, `PROVIDER_TIMEOUT`, HTTPS provider URLs.
-5. Set `PII_PEPPER` and keep `AUDIT_MASK_DESTINATION=true`.
+5. Set `HERALD_PII_PEPPER` and keep `AUDIT_MASK_DESTINATION=true`.
 6. Deploy the container (runs as non-root UID/GID 10001) behind TLS or mTLS.
 7. Wire `/livez` (liveness) and `/readyz` (readiness) into your orchestrator.
 
@@ -180,8 +187,9 @@ deleted from your environment.
 
 - The change is config-compatible for API-key deployments: set
   `REQUEST_AUTH_MODE=api_key` to keep pre-v2 clients working while you roll SDKs.
-- To temporarily accept old HMAC v1 clients, set `HMAC_V1_ENABLED=true` (not
-  recommended long-term; it has no replay protection).
+- `HMAC_V1_ENABLED=true` permits legacy signatures only on compatible
+  non-creation routes. It cannot restore v1/v2 challenge creation. Coordinate
+  server/client upgrades as described in [API authentication](API.md#hmac-v3).
 - Redis keys are additive (`otp:nonce:*`, `otp:idem2:*`). Nonce and completed
   response keys expire normally; unresolved `sending` records do not. Preserve
   them during rollback and reconcile them before any cleanup.
@@ -213,3 +221,9 @@ rollback, and do not run old and new instances against the same directory.
 retention. Local acceptance requires fsync; backend delivery is at least once.
 A full or unavailable buffer returns `503/audit_unavailable`. See the deployment
 guide for capacity, permissions, and duplicate-event handling.
+
+## Activation indexes and provider diagnostics
+
+For upgrades from versions before v1.3.10, follow the [activation index upgrade](API.md#activation-index-upgrade): pause creation, drain requests and replace all instances before resuming. Preserve unresolved sending records and audit volumes. Before rollback, wait the maximum challenge lifetime with creation stopped.
+
+Delivery diagnostics now contain bounded `reason` codes rather than raw provider errors. See [provider failure diagnostics](SECURITY.md#provider-failure-diagnostics) for field compatibility and historical log/trace handling.

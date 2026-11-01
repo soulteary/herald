@@ -1,5 +1,10 @@
 # Documentazione API Herald
 
+> **Traduzione non aggiornata / Historical translation.** This page predates current security changes.
+> Do not use its commands or configuration as current instructions. See the
+> [current English guide](../enUS/API.md) or [中文](../zhCN/API.md)
+> and [translation status](STALE.md). HMAC creation requires v3; builds and validation use Linux.
+
 Herald è un servizio di codici di verifica e OTP che invia codici tramite SMS, e-mail e DingTalk (e-mail opzionale via [herald-smtp](https://github.com/soulteary/herald-smtp) se `HERALD_SMTP_API_URL` è impostato, DingTalk via [herald-dingtalk](https://github.com/soulteary/herald-dingtalk)), con limitazione della velocità e controlli di sicurezza.
 
 ## URL di Base
@@ -192,7 +197,7 @@ Codici di Stato HTTP :
 - `400 Bad Request` : Richiesta non valida
 - `500 Internal Server Error` : Errore interno del server
 
-**Proxy TOTP (opzionale)** : Quando `HERALD_TOTP_ENABLED=true` e `HERALD_TOTP_BASE_URL` sono impostati, Herald inoltra le richieste TOTP (Authenticator) a [herald-totp](https://github.com/soulteary/herald-totp). Vedi [API (enUS)](enUS/API.md#totp-proxy-optional) per endpoint e formato.
+**Proxy TOTP (opzionale)** : Quando `HERALD_TOTP_ENABLED=true` e `HERALD_TOTP_BASE_URL` sono impostati, Herald inoltra le richieste TOTP (Authenticator) a [herald-totp](https://github.com/soulteary/herald-totp). Vedi [API (enUS)](../enUS/API.md#totp-proxy-optional) per endpoint e formato.
 
 ## Limitazione della Velocità
 

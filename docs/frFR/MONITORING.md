@@ -1,5 +1,10 @@
 # Guide de Monitoring Herald
 
+> **Traduction ancienne / Historical translation.** This page predates current security changes.
+> Do not use its commands or configuration as current instructions. See the
+> [current English guide](../enUS/MONITORING.md) or [中文](../zhCN/MONITORING.md)
+> and [translation status](STALE.md). HMAC creation requires v3; builds and validation use Linux.
+
 Herald expose des métriques Prometheus pour le monitoring et l'observabilité. Ce document décrit toutes les métriques disponibles, comment configurer le monitoring et les meilleures pratiques.
 
 ## Point de Terminaison des Métriques

@@ -1,5 +1,8 @@
 # Herald - OTP 및 인증 코드 서비스
 
+> **오래된 번역 / Historical translation.** For current deployment and security instructions,
+> use [English](README.md) or [中文](README.zhCN.md). See [translation status](docs/koKR/STALE.md).
+
 [![Go Test Coverage](./.github/coverage.svg)](./.github/go-test-report.md) [![Go Report Card](./.github/goreportcard.svg)](./.github/goreportcard-report.md) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go Version](https://img.shields.io/badge/go-1.27.3+-blue.svg)](https://golang.org)
 
 
@@ -84,7 +87,7 @@ Herald를 시작하려면 최소한의 구성이 필요합니다:
 | `REDIS_ADDR` | Redis address | `localhost:6379` | No |
 | `API_KEY` | API key for authentication | - | Recommended |
 
-속도 제한, 챌린지 만료 시간 및 프로바이더 설정을 포함한 전체 구성 옵션에 대해서는 [배포 가이드](docs/koKR/DEPLOYMENT.md#configuration)를 참조하세요.
+속도 제한, 챌린지 만료 시간 및 프로바이더 설정을 포함한 전체 구성 옵션에 대해서는 [배포 가이드](docs/koKR/DEPLOYMENT.md#구성)를 참조하세요.
 
 ## 문서
 

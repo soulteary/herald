@@ -14,13 +14,15 @@ repository/organization settings.
   date. Required checks:
   - `Code Formatting Check`
   - `Code Static Analysis`
+  - `Build Check`
   - `Code Testing`
   - `Code Quality Check`
   - `Dependency Security Scan`
   - `Docker Build + Scan`
   - `Compose Smoke + Config Startup Failure`
 - Require signed commits.
-- Require linear history.
+- Require linear history only when the chosen merge policy uses squash/rebase;
+  leave it off when preserving merge commits.
 - Require conversation resolution before merging.
 - Restrict who can push / force-push; **block force-pushes and deletions**.
 - Do not allow bypassing the above for administrators.
@@ -35,8 +37,8 @@ repository/organization settings.
 
 ## Release integrity
 
-- Tag releases as `vX.Y.Z`; the release workflow builds multi-arch binaries,
-  generates and **verifies** `checksums.txt`, pushes an image, and optionally
+- Tag releases as `vX.Y.Z`; the release workflow builds Linux amd64/arm64 binaries,
+  generates and **verifies** `checksums.txt`, pushes an image, and
   keyless-signs it with cosign (Sigstore/Fulcio via OIDC).
-- Consumers should verify checksums and, when signing is enabled, verify the
+- Consumers should verify checksums and, verify the
   cosign signature by digest.

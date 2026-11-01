@@ -1,5 +1,10 @@
 # Herald 아키텍처
 
+> **오래된 번역 / Historical translation.** This page predates current security changes.
+> Do not use its commands or configuration as current instructions. See the
+> [current English guide](../enUS/ARCHITECTURE.md) or [中文](../zhCN/ARCHITECTURE.md)
+> and [translation status](STALE.md). HMAC creation requires v3; builds and validation use Linux.
+
 이 문서는 Stargate, Warden, Herald, Redis 및 외부 제공자(SMS, 이메일, DingTalk)를 포함한 인증 흐름의 풀스택 아키텍처를 설명합니다.
 
 ## 개요

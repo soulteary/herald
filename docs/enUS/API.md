@@ -172,7 +172,7 @@ a new request. See the deployment guide for persistence and reconciliation.
 }
 ```
 
-When `HERALD_TEST_MODE=true`, the response also includes `debug_code` (the plain verification code) so callers (e.g. Stargate in debug mode) can display it for local/testing. **Do not enable test mode in production.**
+When `ENVIRONMENT=test` and `HERALD_TEST_MODE=true`, the response also includes `debug_code` (the plain verification code) so callers (e.g. Stargate in debug mode) can display it for local/testing. **Do not enable test mode in production.**
 
 **Error Responses:**
 
@@ -208,7 +208,10 @@ HTTP Status Codes:
 
 **GET /v1/test/code/:challenge_id**
 
-Returns the verification code for a challenge. **Only available when `HERALD_TEST_MODE=true`.** Used by integration tests or by Stargate in debug mode when the create-challenge response did not include `debug_code` (e.g. when using an older Herald client). Do not enable test mode in production.
+Returns the verification code for a challenge. **Requires `ENVIRONMENT=test`, `HERALD_TEST_MODE=true`, and the dedicated
+`HERALD_TEST_API_KEY`. Use `X-Test-Api-Key` or Bearer authentication on the
+separate test listener (default `http://127.0.0.1:18082`); this route is absent
+from the main service listener.** Used by integration tests or by Stargate in debug mode when the create-challenge response did not include `debug_code` (e.g. when using an older Herald client). Do not enable test mode in production.
 
 **Response (200 OK):**
 ```json

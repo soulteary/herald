@@ -4,7 +4,7 @@
 
 Thank you for your interest in the Herald project! We welcome all forms of contributions.
 
-## 📋 Table of Contents
+## Table of Contents
 
 - [How to Contribute](#how-to-contribute)
 - [Development Environment Setup](#development-environment-setup)
@@ -14,7 +14,7 @@ Thank you for your interest in the Herald project! We welcome all forms of contr
 - [Bug Reports and Feature Requests](#bug-reports-and-feature-requests)
 - [Provider Development](#provider-development)
 
-## 🚀 How to Contribute
+## How to Contribute
 
 You can contribute in the following ways:
 
@@ -27,12 +27,13 @@ You can contribute in the following ways:
 
 When participating in this project, please respect all contributors, accept constructive criticism, and focus on what's best for the project.
 
-## 🛠️ Development Environment Setup
+## Development Environment Setup
 
 ### Prerequisites
 
-- Go 1.27.2 or higher
-- Redis (for testing and development)
+- Go 1.27.3 or higher
+- Linux for builds and validation; use Linux containers on other hosts
+- Redis for running the service (unit tests normally use an in-process test server)
 - Git
 
 ### Quick Start
@@ -49,39 +50,39 @@ git remote add upstream https://github.com/soulteary/herald.git
 go mod download
 
 # 4. Run tests
-go test ./...
+go test -race ./...
 
 # 5. Start local service (ensure Redis is running)
 # Using Docker Compose (recommended)
-docker-compose up -d redis
-go run main.go
+export REDIS_PASSWORD="$(openssl rand -hex 32)"
+export HERALD_API_KEY="$(openssl rand -hex 32)"
+docker compose up -d --build
 
 # Or using local Redis
-export REDIS_ADDR=localhost:6379
-go run main.go
+ENVIRONMENT=development REQUEST_AUTH_MODE=none REDIS_ADDR=localhost:6379 go run .
 ```
 
 ### Testing with Redis
 
-Herald requires Redis for operation. You can use Docker Compose to start Redis:
+Unit tests normally use an in-process Redis server and do not need Compose.
+The following starts the complete service stack; its Redis port is not published
+to the host. Use local Redis separately for a native Linux service run.
 
 ```bash
-docker-compose up -d redis
+export REDIS_PASSWORD="$(openssl rand -hex 32)"
+export HERALD_API_KEY="$(openssl rand -hex 32)"
+docker compose up -d --build
 ```
 
 Or use a local Redis instance:
 
 ```bash
-# macOS
-brew install redis
-brew services start redis
-
 # Linux
 sudo apt-get install redis-server
 sudo systemctl start redis
 ```
 
-## 📝 Code Standards
+## Code Standards
 
 Please follow these code standards:
 
@@ -90,16 +91,16 @@ Please follow these code standards:
 3. **Code Checking**: Use `golangci-lint` or `go vet ./...`
 4. **Write Tests**: New features must include tests
 5. **Add Comments**: Public functions and types must have documentation comments
-6. **Constant Naming**: All constants must use `ALL_CAPS` (UPPER_SNAKE_CASE) naming style
+6. **Constant naming**: Follow Go naming conventions and the surrounding package
 
 ### Testing Requirements
 
 - All new features must include unit tests
 - Provider implementations must include integration tests
-- Test coverage should be maintained or improved
-- Run `go test ./...` before submitting PRs
+- Aggregate statement coverage must remain at least 95% (enforced by CI)
+- Run `go test -race ./...` before submitting PRs
 
-## 📦 Commit Standards
+## Commit Standards
 
 ### Commit Message Format
 
@@ -142,7 +143,7 @@ Fixed the issue where expired challenges were not properly rejected during verif
 Fixes #456
 ```
 
-## 🔄 Pull Request Process
+## Pull Request Process
 
 ### Create Pull Request
 
@@ -167,7 +168,7 @@ git push origin feature/your-feature-name
 Before submitting a Pull Request, please ensure:
 
 - [ ] Code follows project code standards
-- [ ] All tests pass (`go test ./...`)
+- [ ] All tests pass (`go test -race ./...`)
 - [ ] Code is formatted (`go fmt ./...`)
 - [ ] Necessary tests are added
 - [ ] Related documentation is updated
@@ -177,7 +178,7 @@ Before submitting a Pull Request, please ensure:
 
 All Pull Requests require code review. Please respond to review comments promptly.
 
-## 🐛 Bug Reports and Feature Requests
+## Bug Reports and Feature Requests
 
 Before creating an Issue, please search existing Issues to confirm the problem or feature hasn't been reported.
 
@@ -217,7 +218,7 @@ What problem does this feature solve? Why is it needed?
 Clearly and concisely describe how you hope to implement this feature.
 ```
 
-## 🔌 Provider Development
+## Provider Development
 
 Herald supports pluggable email and SMS providers. If you want to add a new provider:
 
@@ -226,35 +227,41 @@ Herald supports pluggable email and SMS providers. If you want to add a new prov
 Providers must implement the `Provider` interface:
 
 ```go
+import (
+    "context"
+    provider "github.com/soulteary/provider-kit"
+)
+
 type Provider interface {
-    Send(ctx context.Context, req *SendRequest) (*SendResponse, error)
+    Send(ctx context.Context, msg *provider.Message) (*provider.SendResult, error)
+    Channel() provider.Channel
     Name() string
+    Validate() error
 }
 ```
 
 ### Creating a New Provider
 
-1. **Create provider file**: `internal/provider/yourprovider.go`
-2. **Implement Provider interface**: Implement `Send()` and `Name()` methods
-3. **Add tests**: Create `internal/provider/yourprovider_test.go`
-4. **Register provider**: Add provider registration in provider initialization
-5. **Update documentation**: Document provider configuration options
+Implement providers in [provider-kit](https://github.com/soulteary/provider-kit) or
+an external provider package. Add tests alongside the implementation. Register
+the provider in `internal/handlers/handlers.go` through `provider.Registry` and
+document its configuration. Herald no longer has an `internal/provider` package.
 
 ### Provider Best Practices
 
 - **Idempotency**: Support idempotency keys to prevent duplicate sends
-- **Retry Logic**: Implement exponential backoff for transient failures
+- **Retry logic**: Do not resend after an uncertain delivery without a provider idempotency guarantee
 - **Error Handling**: Return normalized error codes
 - **Timeout Handling**: Respect context timeouts
-- **Logging**: Log provider operations for debugging
+- **Logging**: Use bounded reason codes; never log OTP bodies, destinations or credentials
 
 ### Example Provider
 
-See existing providers in `internal/provider/` for reference:
-- `internal/provider/smtp.go` - SMTP email provider
-- `internal/provider/sms.go` - SMS provider interface
+See the maintained implementations in provider-kit:
+- [SMTP](https://github.com/soulteary/provider-kit/blob/v1.7.4/smtp.go)
+- [HTTP adapter](https://github.com/soulteary/provider-kit/blob/v1.7.4/http.go)
 
-## 🎯 Getting Started
+## Getting Started
 
 If you want to contribute but don't know where to start, you can focus on:
 
