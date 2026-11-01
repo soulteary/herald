@@ -9,6 +9,12 @@ export PATH
 
 # The English dictionary is not suitable for translated documentation.
 # English docs retain a separate, failing spelling check.
-"$HERALD_REAL_MISSPELL" -error README.md docs/enUS
+for document in ./*.md; do
+    case "$document" in
+        ./README.*.md) continue ;;
+    esac
+    "$HERALD_REAL_MISSPELL" -error "$document"
+done
+"$HERALD_REAL_MISSPELL" -error docs/enUS internal/tracing/README.md
 sh "$script_dir/test-report-spelling.sh"
 goreportcard-cli -d . -svg .github/goreportcard.svg -report .github/goreportcard-report.md -t 0
