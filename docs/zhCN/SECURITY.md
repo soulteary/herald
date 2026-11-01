@@ -359,3 +359,11 @@ exception 事件、审计失败记录只保留已知原因码。未知原因码�
 前拒绝。显式 key map 保留配置中的身份，HMAC v2/v3 格式不变。旧记录保持原样；直接将旧
 自定义 ID 改为 `default` 不能解决不确定发送，需遵循
 [部署迁移与回滚要求](DEPLOYMENT.md#单密钥-key-id-白名单)。
+
+## CORS 通配项
+
+生产部署不能在 `HERALD_CORS_ALLOW_ORIGINS` 中混用独立 `*` 和其他来源。此前校验接受
+这类列表，中间件向未列出的来源返回 `Access-Control-Allow-Origin: *`。此风险要求存在
+该配置，默认仍关闭 CORS；它不会绕过 API Key 或 HMAC，无签名业务请求仍返回 401。
+现在启动和路由构建都会拒绝生产列表任意位置的独立通配项，详见
+[部署要求](DEPLOYMENT.md#生产-cors-来源列表)。

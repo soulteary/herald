@@ -379,3 +379,13 @@ Unknown IDs fail before nonce consumption or handler side effects. Explicit key
 maps retain their configured identities; HMAC v2/v3 wire formats are unchanged.
 Old records remain intact. Renaming an old custom ID does not reconcile its
 unresolved sends. Follow the [migration and rollback requirements](DEPLOYMENT.md#single-secret-key-id-allowlist).
+
+## CORS wildcard entries
+
+Production deployments must not combine a standalone `*` with other origins in
+`HERALD_CORS_ALLOW_ORIGINS`. Older validation accepted those lists and the CORS
+middleware returned `Access-Control-Allow-Origin: *` to unlisted origins. This
+requires such a configuration; the default remains CORS-disabled. It does not
+bypass API Key or HMAC verification, and unsigned business requests still return
+401. Startup and router construction now reject wildcard entries anywhere in a
+production list. See [deployment requirements](DEPLOYMENT.md#production-cors-origin-lists).

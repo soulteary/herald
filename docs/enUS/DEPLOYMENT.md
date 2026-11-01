@@ -454,3 +454,19 @@ IDs again; during rollback keep creation disabled until affected identities and
 records are reconciled and an external allowlist enforces the same restriction.
 The earlier empty-key-ID guard remains in effect, and no record is migrated or
 deleted by this fix.
+
+## Production CORS origin lists
+
+CORS is disabled when `HERALD_CORS_ALLOW_ORIGINS` is empty. In production, a
+standalone `*` entry is rejected anywhere in the comma-separated list, including
+`https://trusted.example,*` and entries surrounded by whitespace. Both startup
+validation and router construction reject it before installing middleware.
+Previously, only a configuration consisting entirely of `*` was rejected; a
+mixed list enabled wildcard responses to unlisted origins.
+
+Before upgrading, remove standalone wildcard entries and retain only the intended
+origins, or clear the setting to disable CORS. Correct the configuration before
+rolling back too: older releases accept mixed wildcard lists. Development/test
+wildcard support, valid explicit lists, and request authentication are unchanged.
+No Redis record or client signature migration is required. CORS origin policy
+is a browser boundary; API Key/HMAC authentication is still required independently.
