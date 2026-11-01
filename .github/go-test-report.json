@@ -1,15 +1,15 @@
 {
   "schema_version": "1.0",
   "tests": {
-    "total": 306,
-    "passed": 305,
+    "total": 313,
+    "passed": 312,
     "failed": 0,
     "skipped": 1
   },
   "coverage": {
-    "covered_statements": 2172,
-    "total_statements": 2280,
-    "percentage": 95.26,
+    "covered_statements": 2266,
+    "total_statements": 2374,
+    "percentage": 95.45,
     "threshold": 95
   },
   "packages": [
@@ -25,35 +25,35 @@
       "status": "pass",
       "tests": 22,
       "failed": 0,
-      "coverage": 96.12
+      "coverage": 96.25
     },
     {
       "name": "internal/auth",
       "status": "pass",
-      "tests": 16,
+      "tests": 18,
       "failed": 0,
-      "coverage": 98.37
+      "coverage": 97.89
     },
     {
       "name": "internal/config",
       "status": "pass",
       "tests": 43,
       "failed": 0,
-      "coverage": 97.63
+      "coverage": 97.93
     },
     {
       "name": "internal/destination",
       "status": "pass",
       "tests": 4,
       "failed": 0,
-      "coverage": 89.47
+      "coverage": 90
     },
     {
       "name": "internal/handlers",
       "status": "pass",
-      "tests": 82,
+      "tests": 83,
       "failed": 0,
-      "coverage": 93.55
+      "coverage": 93.91
     },
     {
       "name": "internal/idempotency",
@@ -79,9 +79,9 @@
     {
       "name": "internal/router",
       "status": "pass",
-      "tests": 30,
+      "tests": 31,
       "failed": 0,
-      "coverage": 93.48
+      "coverage": 93.66
     },
     {
       "name": "internal/security",
@@ -93,9 +93,9 @@
     {
       "name": "internal/server",
       "status": "pass",
-      "tests": 12,
+      "tests": 13,
       "failed": 0,
-      "coverage": 94.85
+      "coverage": 95
     },
     {
       "name": "internal/template",
@@ -121,9 +121,9 @@
     {
       "name": "pkg/herald",
       "status": "pass",
-      "tests": 33,
+      "tests": 35,
       "failed": 0,
-      "coverage": 97.16
+      "coverage": 97.21
     }
   ],
   "failures": null
