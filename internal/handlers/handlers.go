@@ -742,6 +742,8 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 // idempotencyPrincipal derives a per-caller principal for idempotency
 // namespacing from the authenticated service/key headers, falling back to the
 // client IP when unauthenticated. It never returns an empty string.
+// Request auth rejects the reserved |kid: delimiter in either header before
+// this function is reached, so distinct component pairs cannot alias.
 func idempotencyPrincipal(c fiber.Ctx) string {
 	svc := c.Get("X-Service")
 	keyID := c.Get("X-Key-Id")

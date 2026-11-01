@@ -21,6 +21,12 @@ http://localhost:8082
 
 发送 `X-Signature-Version: v2`、`X-Signature`、`X-Timestamp`、`X-Nonce`、`X-Service`；多密钥且未配置默认密钥时还必须发送 `X-Key-Id`。
 
+`X-Service` 和 `X-Key-Id` 不能包含保留文本 `|kid:`。所有请求认证模式（包括旧版 v1
+回退）都会在认证、nonce 使用和业务写入前返回 `401/invalid_auth_headers`。
+该文本用于分隔幂等命名空间中的服务和密钥字段。普通命名空间和已有 Redis 记录保持
+不变。如果现有集成使用了该文本，需调整服务标识或配置中的 key ID；改变命名空间或
+使用新幂等键重试前，应先核对尚未确认的发送结果。
+
 签名的规范字符串以换行符分隔：
 
 ```text
