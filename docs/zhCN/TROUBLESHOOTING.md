@@ -36,10 +36,10 @@
 3. **检查 Prometheus 指标**
    ```promql
    # 检查发送失败率
-   rate(herald_otp_sends_total{result="failed"}[5m]) / rate(herald_otp_sends_total[5m])
+   sum by (provider) (rate(herald_otp_sends_total{result="failure"}[5m])) / sum by (provider) (rate(herald_otp_sends_total[5m]))
    
    # 按提供者检查发送成功率
-   rate(herald_otp_sends_total{result="success"}[5m]) by (provider)
+   sum by (provider) (rate(herald_otp_sends_total{result="success"}[5m]))
    ```
 
 4. **检查审计日志**
@@ -63,7 +63,7 @@
 
 在本地或集成测试中若不想依赖真实短信/邮件送达：
 
-- 将 **Herald** 的 `HERALD_TEST_MODE=true`。创建 challenge 的响应会包含 `debug_code`，并开放 `GET /v1/test/code/:challenge_id` 用于查询验证码。
+- 将 **Herald** 的 `ENVIRONMENT=test`、`HERALD_TEST_MODE=true` 和 `HERALD_TEST_API_KEY` 设置好。创建 challenge 的响应会包含 `debug_code`，并开放 `GET /v1/test/code/:challenge_id` 用于查询验证码。
 - 将 **Stargate** 的 `DEBUG=true`。`/_send_verify_code` 的响应会包含验证码，登录页会直接展示（如「验证码（调试）：123456」）。
 
 详见 [API.md](API.md)（创建挑战、获取测试验证码）与 [DEPLOYMENT.md](DEPLOYMENT.md)（测试模式与调试）。**生产环境请勿开启测试模式或 DEBUG。**
@@ -96,10 +96,10 @@
 4. **检查 Prometheus 指标**
    ```promql
    # 检查验证失败原因
-   rate(herald_otp_verifications_total{result="failed"}[5m]) by (reason)
+   sum by (reason) (rate(herald_otp_verifications_total{result="failure"}[5m]))
    
    # 检查锁定的挑战
-   rate(herald_otp_verifications_total{result="failed",reason="locked"}[5m])
+   rate(herald_otp_verifications_total{result="failure",reason="locked"}[5m])
    ```
 
 5. **查看审计日志**
@@ -130,16 +130,16 @@
 2. **对于 HMAC 身份验证**
    ```bash
    # 验证 HMAC_SECRET 已配置
-   echo $HMAC_SECRET
+   test -n "$HMAC_SECRET" || test -n "$HERALD_HMAC_KEYS"
    
-   # 检查时间戳是否在 5 分钟窗口内
+   # 检查时间戳是否在 HMAC_MAX_DRIFT 窗口内（默认 60 秒）
    # 验证签名计算是否与 Herald 的实现匹配
    ```
 
 3. **对于 API 密钥身份验证**
    ```bash
    # 验证 API_KEY 已设置
-   echo $API_KEY
+   test -n "$API_KEY"
    
    # 检查 X-API-Key 请求头是否匹配配置的密钥
    ```
@@ -152,14 +152,14 @@
 5. **检查 Herald 日志**
    ```bash
    # 检查身份验证错误
-   grep "unauthorized\|invalid_signature\|timestamp_expired" /var/log/herald.log
+   grep "unauthorized\|invalid_signature\|timestamp_out_of_range" /var/log/herald.log
    ```
 
 ### 解决方案
 
 - **缺少凭据**：设置 `API_KEY` 或 `HMAC_SECRET` 环境变量
 - **无效签名**：验证 HMAC 签名计算是否与 Herald 的实现匹配
-- **时间戳过期**：确保客户端和服务器时钟已同步（在 5 分钟内）
+- **时间戳过期**：确保客户端和服务器时钟已同步（HMAC_MAX_DRIFT 默认 60 秒）
 - **证书问题**：验证 mTLS 证书是否有效且受信任
 
 ## 速率限制问题
@@ -183,7 +183,7 @@
 2. **检查 Prometheus 指标**
    ```promql
    # 按范围检查速率限制命中
-   rate(herald_rate_limit_hits_total[5m]) by (scope)
+   sum by (scope) (rate(herald_rate_limit_hits_total[5m]))
    
    # 检查速率限制命中率
    rate(herald_rate_limit_hits_total[5m])
@@ -192,10 +192,11 @@
 3. **查看 Redis 键**
    ```bash
    # 检查速率限制键
-   redis-cli KEYS "otp:rate:*"
+   redis-cli --scan --pattern "ratelimit:*"
    
    # 检查特定速率限制键
-   redis-cli GET "otp:rate:user:{user_id}"
+   redis-cli TYPE "ratelimit:user:{peppered_user_digest}"
+   redis-cli ZCARD "ratelimit:user:{peppered_user_digest}"
    ```
 
 4. **分析使用模式**
@@ -246,10 +247,10 @@
 4. **检查 Prometheus 指标**
    ```promql
    # 检查 Redis 延迟
-   histogram_quantile(0.99, rate(herald_redis_latency_seconds_bucket[5m]))
+   histogram_quantile(0.99, rate(herald_redis_operation_duration_seconds_bucket[5m]))
    
    # 检查 Redis 操作错误
-   rate(herald_redis_latency_seconds_count[5m])
+   rate(herald_redis_operation_duration_seconds_count[5m])
    ```
 
 5. **查看 Herald 日志**
@@ -278,10 +279,10 @@
 1. **检查提供者指标**
    ```promql
    # 按提供者检查发送失败率
-   rate(herald_otp_sends_total{result="failed"}[5m]) by (provider)
+   sum by (provider) (rate(herald_otp_sends_total{result="failure"}[5m]))
    
    # 按提供者检查发送持续时间
-   histogram_quantile(0.95, rate(herald_otp_send_duration_seconds_bucket[5m])) by (provider)
+   histogram_quantile(0.95, sum by (le, provider) (rate(herald_otp_send_duration_seconds_bucket[5m])))
    ```
 
 2. **查看提供者日志**
@@ -323,7 +324,7 @@
    histogram_quantile(0.95, rate(herald_otp_send_duration_seconds_bucket[5m]))
    
    # 检查 Redis 延迟
-   histogram_quantile(0.99, rate(herald_redis_latency_seconds_bucket[5m]))
+   histogram_quantile(0.99, rate(herald_redis_operation_duration_seconds_bucket[5m]))
    ```
 
 2. **检查资源使用**
@@ -375,3 +376,9 @@
 - [API 文档](API.md) - API 端点详情
 - [部署指南](DEPLOYMENT.md) - 部署和配置
 - [监控指南](MONITORING.md) - 监控和指标
+
+## 发送渠道失败诊断
+
+发送失败使用受控 `reason` 字段，不再记录上游错误消息；span 状态和 exception 事件也只保留安全原因码。
+排障时不要启用原始渠道响应体日志。若历史日志或导出的 span 含敏感数据，应核查访问与保留策略，
+并轮换已暴露凭据，字段变化见 [安全说明](SECURITY.md#发送渠道失败诊断)。

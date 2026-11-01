@@ -1,5 +1,10 @@
 # Herald 배포 가이드
 
+> **오래된 번역 / Historical translation.** This page predates current security changes.
+> Do not use its commands or configuration as current instructions. See the
+> [current English guide](../enUS/DEPLOYMENT.md) or [中文](../zhCN/DEPLOYMENT.md)
+> and [translation status](STALE.md). HMAC creation requires v3; builds and validation use Linux.
+
 ## 빠른 시작
 
 ### Docker Compose 사용
@@ -23,7 +28,7 @@ go build -o herald main.go
 
 ### 환경 변수
 
-**코드와 일치하는 전체 목록:** [English](enUS/DEPLOYMENT.md#environment-variables) | [中文](zhCN/DEPLOYMENT.md#环境变量)
+**코드와 일치하는 전체 목록:** [English](../enUS/DEPLOYMENT.md#environment-variables) | [中文](../zhCN/DEPLOYMENT.md#环境变量)
 
 | 변수 | 설명 | 기본값 | 필수 |
 |------|------|-------|------|
@@ -72,7 +77,7 @@ go build -o herald main.go
 
 ### TOTP (herald-totp)
 
-`HERALD_TOTP_ENABLED=true`이고 `HERALD_TOTP_BASE_URL`이 설정되면 Herald는 TOTP(Authenticator) 요청을 [herald-totp](https://github.com/soulteary/herald-totp)로 프록시합니다. 엔드포인트는 `/v1/totp/*`(status, verify, enroll/start, enroll/confirm, revoke). 자세한 내용은 [API (enUS)](enUS/API.md#totp-proxy-optional) 참조.
+`HERALD_TOTP_ENABLED=true`이고 `HERALD_TOTP_BASE_URL`이 설정되면 Herald는 TOTP(Authenticator) 요청을 [herald-totp](https://github.com/soulteary/herald-totp)로 프록시합니다. 엔드포인트는 `/v1/totp/*`(status, verify, enroll/start, enroll/confirm, revoke). 자세한 내용은 [API (enUS)](../enUS/API.md#totp-proxy-optional) 참조.
 
 ## 다른 서비스와의 통합 (선택사항)
 

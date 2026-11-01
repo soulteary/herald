@@ -1,5 +1,10 @@
 # Guida alla Risoluzione dei Problemi Herald
 
+> **Traduzione non aggiornata / Historical translation.** This page predates current security changes.
+> Do not use its commands or configuration as current instructions. See the
+> [current English guide](../enUS/TROUBLESHOOTING.md) or [中文](../zhCN/TROUBLESHOOTING.md)
+> and [translation status](STALE.md). HMAC creation requires v3; builds and validation use Linux.
+
 Questa guida ti aiuta a diagnosticare e risolvere problemi comuni con il servizio Herald OTP e codici di verifica.
 
 ## Indice

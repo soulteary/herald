@@ -80,7 +80,7 @@ export REDIS_ADDR="redis:6379"
 **Recommended Configuration**:
 - Use reverse proxy (such as Nginx or Traefik) to handle SSL/TLS
 - Ensure your reverse proxy forwards client IP (e.g. X-Forwarded-For) if rate limiting by IP is used
-- Use strong HMAC secrets (minimum 32 characters)
+- Use strong HMAC secrets (minimum 32 bytes)
 - Disable insecure authentication methods in production (use mTLS or HMAC, avoid API Key if possible)
 
 ### 4. Rate Limiting Configuration
@@ -165,7 +165,7 @@ When `X-Key-Id` is omitted, the signer must keep the `KEY_ID` line in the canoni
 **Server configuration**:
 ```bash
 export REQUEST_AUTH_MODE=hmac_v2
-export HERALD_HMAC_KEYS='{"key-id-1":"secret-key-1","key-id-2":"secret-key-2"}'
+: "${HERALD_HMAC_KEYS:?load the key map with production-strength secrets}"
 export HERALD_HMAC_DEFAULT_KEY_ID=key-id-1
 export HMAC_MAX_DRIFT=60s
 export HMAC_V1_ENABLED=false
@@ -201,7 +201,8 @@ export CLIENT_CERT_MODE=require
 - Restrict Redis network access (only allow Herald service access)
 - Use Redis AUTH for authentication
 - Regularly update Redis to fix known vulnerabilities
-- Consider using Redis over TLS for production
+- Herald has no native Redis TLS configuration. Use a protected private network
+  or an authenticated encryption tunnel when Redis transport encryption is required
 
 ### Audit Logging
 
@@ -273,24 +274,22 @@ In production (with `ENVIRONMENT=production`; `HERALD_TEST_MODE=true` is rejecte
 
 - Hide detailed error information to prevent information leakage
 - Return generic error messages
-- Detailed error information is only recorded in logs
-- Audit logs contain full details for security analysis
+- Delivery failures expose only bounded reason codes in logs and tracing
+- Audit records follow the configured masking and retention policy
 
 ### Development Mode
 
 In development mode:
 
-- Display detailed error information for debugging
-- Include stack trace information
-- More verbose logging
+- Generic API errors remain in use; development does not enable plaintext provider diagnostics
+- Test code exposure requires the explicit test environment and test-mode settings
 
 ## Security Response Headers
 
-Herald automatically adds the following security-related HTTP response headers:
-
-- `X-Content-Type-Options: nosniff` - Prevents MIME type sniffing
-- `X-Frame-Options: DENY` - Prevents clickjacking
-- `X-XSS-Protection: 1; mode=block` - XSS protection
+Herald does not install a browser security-header middleware by default.
+Configure headers such as `X-Content-Type-Options`, `Content-Security-Policy`
+and HSTS at the HTTPS reverse proxy where appropriate; do not assume these
+headers are emitted by Herald.
 
 ## Vulnerability Reporting
 
@@ -343,3 +342,7 @@ echoed sensitive data, and rotate any credentials exposed there.
 - [Deployment Documentation](DEPLOYMENT.md) - Learn about production environment deployment recommendations
 - [Monitoring Documentation](MONITORING.md) - Learn about security monitoring and alerting
 - [Troubleshooting Documentation](TROUBLESHOOTING.md) - Learn about security-related troubleshooting
+
+Test-only exception: `ENVIRONMENT=test` plus `HERALD_TEST_MODE=true` stores
+plaintext codes in the test-code cache and exposes them through the guarded test
+listener and `debug_code`. Production rejects this mode.

@@ -1,5 +1,10 @@
 # Herald アーキテクチャ
 
+> **古い翻訳 / Historical translation.** This page predates current security changes.
+> Do not use its commands or configuration as current instructions. See the
+> [current English guide](../enUS/ARCHITECTURE.md) or [中文](../zhCN/ARCHITECTURE.md)
+> and [translation status](STALE.md). HMAC creation requires v3; builds and validation use Linux.
+
 このドキュメントでは、Stargate、Warden、Herald、Redis、および外部プロバイダー（SMS、メール、DingTalk）を含む認証フローのフルスタックアーキテクチャについて説明します。
 
 ## 概要

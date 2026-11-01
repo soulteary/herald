@@ -1,5 +1,10 @@
 # Herald デプロイメントガイド
 
+> **古い翻訳 / Historical translation.** This page predates current security changes.
+> Do not use its commands or configuration as current instructions. See the
+> [current English guide](../enUS/DEPLOYMENT.md) or [中文](../zhCN/DEPLOYMENT.md)
+> and [translation status](STALE.md). HMAC creation requires v3; builds and validation use Linux.
+
 ## クイックスタート
 
 ### Docker Compose の使用
@@ -23,7 +28,7 @@ go build -o herald main.go
 
 ### 環境変数
 
-**コードベースと一致した完全な一覧：** [English](enUS/DEPLOYMENT.md#environment-variables) | [中文](zhCN/DEPLOYMENT.md#环境变量)
+**コードベースと一致した完全な一覧：** [English](../enUS/DEPLOYMENT.md#environment-variables) | [中文](../zhCN/DEPLOYMENT.md#环境变量)
 
 | 変数 | 説明 | デフォルト | 必須 |
 |------|------|-----------|------|
@@ -72,7 +77,7 @@ go build -o herald main.go
 
 ### TOTP（herald-totp）
 
-`HERALD_TOTP_ENABLED=true` かつ `HERALD_TOTP_BASE_URL` を設定すると、Herald は TOTP（Authenticator）リクエストを [herald-totp](https://github.com/soulteary/herald-totp) にプロキシします。エンドポイントは `/v1/totp/*`（status、verify、enroll/start、enroll/confirm、revoke）。詳細は [API (enUS)](enUS/API.md#totp-proxy-optional) を参照。
+`HERALD_TOTP_ENABLED=true` かつ `HERALD_TOTP_BASE_URL` を設定すると、Herald は TOTP（Authenticator）リクエストを [herald-totp](https://github.com/soulteary/herald-totp) にプロキシします。エンドポイントは `/v1/totp/*`（status、verify、enroll/start、enroll/confirm、revoke）。詳細は [API (enUS)](../enUS/API.md#totp-proxy-optional) を参照。
 
 ## 他のサービスとの統合（オプション）
 

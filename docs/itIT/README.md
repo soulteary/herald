@@ -1,5 +1,10 @@
 # Indice della Documentazione
 
+> **Traduzione non aggiornata / Historical translation.** This page predates current security changes.
+> Do not use its commands or configuration as current instructions. See the
+> [current English guide](../enUS/README.md) or [中文](../zhCN/README.md)
+> and [translation status](STALE.md). HMAC creation requires v3; builds and validation use Linux.
+
 Benvenuti nella documentazione del servizio Herald OTP e codici di verifica.
 
 ## 🌐 Documentazione Multilingue
@@ -50,7 +55,7 @@ Benvenuti nella documentazione del servizio Herald OTP e codici di verifica.
 
 1. Leggi [README.itIT.md](../../README.itIT.md) per comprendere il progetto
 2. Controlla la sezione [Avvio Rapido](../../README.itIT.md#avvio-rapido)
-3. Fai riferimento a [Configurazione](../../README.itIT.md#configurazione) per configurare il servizio
+3. Fai riferimento a [Configurazione](../../README.itIT.md#configurazione-di-base) per configurare il servizio
 
 ### Sviluppatori
 
@@ -109,7 +114,7 @@ herald/
 ### Monitoraggio e Operazioni
 
 - Metriche Prometheus : [MONITORING.md](MONITORING.md)
-- Dashboard Grafana : [MONITORING.md#grafana-dashboards](MONITORING.md#grafana-dashboards)
+- Dashboard Grafana : [MONITORING.md#dashboard-grafana](MONITORING.md#dashboard-grafana)
 - Risoluzione problemi : [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ## 💡 Raccomandazioni d'Uso

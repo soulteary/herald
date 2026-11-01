@@ -21,12 +21,11 @@ GET http://localhost:8082/metrics
 **标签：**
 - `channel`: 通道类型（`sms`、`email` 或 `dingtalk`）
 - `purpose`: 挑战目的（例如：`login`、`reset`、`bind`）
-- `result`: 操作结果（`success` 或 `failed`）
+- `result`: 当前在 challenge 写入后、发送前记录 `success`，不能用它计算创建 API 的成功率。
 
 **示例：**
 ```
 herald_otp_challenges_total{channel="email",purpose="login",result="success"} 1234
-herald_otp_challenges_total{channel="sms",purpose="login",result="failed"} 5
 ```
 
 ### 发送指标
@@ -38,12 +37,12 @@ herald_otp_challenges_total{channel="sms",purpose="login",result="failed"} 5
 **标签：**
 - `channel`: 通道类型（`sms`、`email` 或 `dingtalk`）
 - `provider`: 提供者名称（例如：`smtp`、`aliyun`、`placeholder`）
-- `result`: 发送操作结果（`success` 或 `failed`）
+- `result`: 发送操作结果（`success` 或 `failure`）
 
 **示例：**
 ```
 herald_otp_sends_total{channel="email",provider="smtp",result="success"} 1200
-herald_otp_sends_total{channel="sms",provider="placeholder",result="failed"} 10
+herald_otp_sends_total{channel="sms",provider="placeholder",result="failure"} 10
 ```
 
 #### `herald_otp_send_duration_seconds`
@@ -53,7 +52,7 @@ herald_otp_sends_total{channel="sms",provider="placeholder",result="failed"} 10
 **标签：**
 - `provider`: 提供者名称
 
-**桶：** 默认 Prometheus 桶（0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10）
+**桶：** 外部 API 桶（0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30）
 
 **示例：**
 ```
@@ -69,15 +68,15 @@ herald_otp_send_duration_seconds_count{provider="smtp"} 1200
 计数器，跟踪 OTP 验证总数。
 
 **标签：**
-- `result`: 验证结果（`success` 或 `failed`）
+- `result`: 验证结果（`success` 或 `failure`）
 - `reason`: 失败原因（例如：`expired`、`invalid`、`locked`、`too_many_attempts`）
 
 **示例：**
 ```
 herald_otp_verifications_total{result="success",reason=""} 1100
-herald_otp_verifications_total{result="failed",reason="expired"} 50
-herald_otp_verifications_total{result="failed",reason="invalid"} 30
-herald_otp_verifications_total{result="failed",reason="locked"} 5
+herald_otp_verifications_total{result="failure",reason="expired"} 50
+herald_otp_verifications_total{result="failure",reason="invalid"} 30
+herald_otp_verifications_total{result="failure",reason="locked"} 5
 ```
 
 ### 速率限制指标
@@ -99,20 +98,20 @@ herald_rate_limit_hits_total{scope="resend_cooldown"} 200
 
 ### Redis 指标
 
-#### `herald_redis_latency_seconds`
+#### `herald_redis_operation_duration_seconds`
 
 直方图，跟踪 Redis 操作延迟。
 
 **标签：**
 - `operation`: Redis 操作类型（`get`、`set`、`del`、`exists`）
 
-**桶：** [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
+**桶：** [0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0]
 
 **示例：**
 ```
-herald_redis_latency_seconds_bucket{operation="get",le="0.01"} 5000
-herald_redis_latency_seconds_sum{operation="get"} 12.5
-herald_redis_latency_seconds_count{operation="get"} 10000
+herald_redis_operation_duration_seconds_bucket{operation="get",le="0.01"} 5000
+herald_redis_operation_duration_seconds_sum{operation="get"} 12.5
+herald_redis_operation_duration_seconds_count{operation="get"} 10000
 ```
 
 ## Prometheus 配置
@@ -161,19 +160,19 @@ scrape_configs:
    rate(herald_otp_challenges_total[5m])
    ```
 
-2. **挑战成功率**
+2. **按渠道与用途统计已创建挑战的速率**
    ```
-   rate(herald_otp_challenges_total{result="success"}[5m]) / rate(herald_otp_challenges_total[5m])
+   sum by (channel, purpose) (rate(herald_otp_challenges_total{result="success"}[5m]))
    ```
 
 3. **验证成功率**
    ```
-   rate(herald_otp_verifications_total{result="success"}[5m]) / rate(herald_otp_verifications_total[5m])
+   sum(rate(herald_otp_verifications_total{result="success"}[5m])) / sum(rate(herald_otp_verifications_total[5m]))
    ```
 
 4. **按提供者的发送成功率**
    ```
-   rate(herald_otp_sends_total{result="success"}[5m]) / rate(herald_otp_sends_total[5m])
+   sum by (provider) (rate(herald_otp_sends_total{result="success"}[5m])) / sum by (provider) (rate(herald_otp_sends_total[5m]))
    ```
 
 ### 性能指标
@@ -190,7 +189,7 @@ scrape_configs:
 
 3. **Redis P99 延迟**
    ```
-   histogram_quantile(0.99, rate(herald_redis_latency_seconds_bucket[5m]))
+   histogram_quantile(0.99, rate(herald_redis_operation_duration_seconds_bucket[5m]))
    ```
 
 ### 错误指标
@@ -202,12 +201,12 @@ scrape_configs:
 
 2. **验证失败原因**
    ```
-   rate(herald_otp_verifications_total{result="failed"}[5m]) by (reason)
+   sum by (reason) (rate(herald_otp_verifications_total{result="failure"}[5m]))
    ```
 
 3. **发送失败率**
    ```
-   rate(herald_otp_sends_total{result="failed"}[5m]) / rate(herald_otp_sends_total[5m])
+   sum by (provider) (rate(herald_otp_sends_total{result="failure"}[5m])) / sum by (provider) (rate(herald_otp_sends_total[5m]))
    ```
 
 ## 告警规则
@@ -222,8 +221,7 @@ groups:
       # 高失败率
       - alert: HeraldHighVerificationFailureRate
         expr: |
-          rate(herald_otp_verifications_total{result="failed"}[5m]) / 
-          rate(herald_otp_verifications_total[5m]) > 0.1
+          sum(rate(herald_otp_verifications_total{result="failure"}[5m])) / sum(rate(herald_otp_verifications_total[5m])) > 0.1
         for: 5m
         labels:
           severity: warning
@@ -234,8 +232,7 @@ groups:
       # 高发送失败率
       - alert: HeraldHighSendFailureRate
         expr: |
-          rate(herald_otp_sends_total{result="failed"}[5m]) / 
-          rate(herald_otp_sends_total[5m]) > 0.05
+          sum by (provider) (rate(herald_otp_sends_total{result="failure"}[5m])) / sum by (provider) (rate(herald_otp_sends_total[5m])) > 0.05
         for: 5m
         labels:
           severity: critical
@@ -246,7 +243,7 @@ groups:
       # 高 Redis 延迟
       - alert: HeraldHighRedisLatency
         expr: |
-          histogram_quantile(0.99, rate(herald_redis_latency_seconds_bucket[5m])) > 0.1
+          histogram_quantile(0.99, rate(herald_redis_operation_duration_seconds_bucket[5m])) > 0.1
         for: 5m
         labels:
           severity: warning
@@ -318,3 +315,9 @@ groups:
 `herald_audit_dropped_total` 现在统计持久化接收前被拒绝的事件，对应接口返回
 `503/audit_unavailable`，不再统计可恢复的后端投递失败。存储恢复后应确认缓冲逐步清空，
 不要通过删除待投递文件来消除告警。
+
+## 发送渠道失败诊断
+
+发送失败使用受控 `reason` 字段，不再记录上游错误消息；span 状态和 exception 事件也只保留安全原因码。
+排障时不要启用原始渠道响应体日志。若历史日志或导出的 span 含敏感数据，应核查访问与保留策略，
+并轮换已暴露凭据，字段变化见 [安全说明](SECURITY.md#发送渠道失败诊断)。

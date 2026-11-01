@@ -21,12 +21,12 @@ Counter tracking the total number of OTP challenges created.
 **Labels:**
 - `channel`: Channel type (`sms`, `email`, or `dingtalk`)
 - `purpose`: Purpose of the challenge (e.g., `login`, `reset`, `bind`)
-- `result`: Result of the operation (`success` or `failed`)
+- `result`: Currently emitted as `success` after challenge storage, before delivery.
+  This counter does not measure successful HTTP creation responses.
 
 **Example:**
 ```
 herald_otp_challenges_total{channel="email",purpose="login",result="success"} 1234
-herald_otp_challenges_total{channel="sms",purpose="login",result="failed"} 5
 ```
 
 ### Send Metrics
@@ -38,12 +38,12 @@ Counter tracking the total number of OTP sends via providers.
 **Labels:**
 - `channel`: Channel type (`sms`, `email`, or `dingtalk`)
 - `provider`: Provider name (e.g., `smtp`, `aliyun`, `placeholder`)
-- `result`: Result of the send operation (`success` or `failed`)
+- `result`: Result of the send operation (`success` or `failure`)
 
 **Example:**
 ```
 herald_otp_sends_total{channel="email",provider="smtp",result="success"} 1200
-herald_otp_sends_total{channel="sms",provider="placeholder",result="failed"} 10
+herald_otp_sends_total{channel="sms",provider="placeholder",result="failure"} 10
 ```
 
 #### `herald_otp_send_duration_seconds`
@@ -53,7 +53,7 @@ Histogram tracking the duration of OTP send operations.
 **Labels:**
 - `provider`: Provider name
 
-**Buckets:** Default Prometheus buckets (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10)
+**Buckets:** External API buckets (0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30)
 
 **Example:**
 ```
@@ -69,15 +69,15 @@ herald_otp_send_duration_seconds_count{provider="smtp"} 1200
 Counter tracking the total number of OTP verifications.
 
 **Labels:**
-- `result`: Verification result (`success` or `failed`)
+- `result`: Verification result (`success` or `failure`)
 - `reason`: Failure reason (e.g., `expired`, `invalid`, `locked`, `too_many_attempts`)
 
 **Example:**
 ```
 herald_otp_verifications_total{result="success",reason=""} 1100
-herald_otp_verifications_total{result="failed",reason="expired"} 50
-herald_otp_verifications_total{result="failed",reason="invalid"} 30
-herald_otp_verifications_total{result="failed",reason="locked"} 5
+herald_otp_verifications_total{result="failure",reason="expired"} 50
+herald_otp_verifications_total{result="failure",reason="invalid"} 30
+herald_otp_verifications_total{result="failure",reason="locked"} 5
 ```
 
 ### Rate Limiting Metrics
@@ -99,20 +99,20 @@ herald_rate_limit_hits_total{scope="resend_cooldown"} 200
 
 ### Redis Metrics
 
-#### `herald_redis_latency_seconds`
+#### `herald_redis_operation_duration_seconds`
 
 Histogram tracking Redis operation latency.
 
 **Labels:**
 - `operation`: Redis operation type (`get`, `set`, `del`, `exists`)
 
-**Buckets:** [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
+**Buckets:** [0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0]
 
 **Example:**
 ```
-herald_redis_latency_seconds_bucket{operation="get",le="0.01"} 5000
-herald_redis_latency_seconds_sum{operation="get"} 12.5
-herald_redis_latency_seconds_count{operation="get"} 10000
+herald_redis_operation_duration_seconds_bucket{operation="get",le="0.01"} 5000
+herald_redis_operation_duration_seconds_sum{operation="get"} 12.5
+herald_redis_operation_duration_seconds_count{operation="get"} 10000
 ```
 
 ## Prometheus Configuration
@@ -161,19 +161,19 @@ scrape_configs:
    rate(herald_otp_challenges_total[5m])
    ```
 
-2. **Challenge Success Rate**
+2. **Created Challenge Rate by Channel and Purpose**
    ```
-   rate(herald_otp_challenges_total{result="success"}[5m]) / rate(herald_otp_challenges_total[5m])
+   sum by (channel, purpose) (rate(herald_otp_challenges_total{result="success"}[5m]))
    ```
 
 3. **Verification Success Rate**
    ```
-   rate(herald_otp_verifications_total{result="success"}[5m]) / rate(herald_otp_verifications_total[5m])
+   sum(rate(herald_otp_verifications_total{result="success"}[5m])) / sum(rate(herald_otp_verifications_total[5m]))
    ```
 
 4. **Send Success Rate by Provider**
    ```
-   rate(herald_otp_sends_total{result="success"}[5m]) / rate(herald_otp_sends_total[5m])
+   sum by (provider) (rate(herald_otp_sends_total{result="success"}[5m])) / sum by (provider) (rate(herald_otp_sends_total[5m]))
    ```
 
 ### Performance Metrics
@@ -190,7 +190,7 @@ scrape_configs:
 
 3. **Redis P99 Latency**
    ```
-   histogram_quantile(0.99, rate(herald_redis_latency_seconds_bucket[5m]))
+   histogram_quantile(0.99, rate(herald_redis_operation_duration_seconds_bucket[5m]))
    ```
 
 ### Error Metrics
@@ -202,12 +202,12 @@ scrape_configs:
 
 2. **Verification Failure Reasons**
    ```
-   rate(herald_otp_verifications_total{result="failed"}[5m]) by (reason)
+   sum by (reason) (rate(herald_otp_verifications_total{result="failure"}[5m]))
    ```
 
 3. **Send Failure Rate**
    ```
-   rate(herald_otp_sends_total{result="failed"}[5m]) / rate(herald_otp_sends_total[5m])
+   sum by (provider) (rate(herald_otp_sends_total{result="failure"}[5m])) / sum by (provider) (rate(herald_otp_sends_total[5m]))
    ```
 
 ## Alerting Rules
@@ -222,8 +222,7 @@ groups:
       # High failure rate
       - alert: HeraldHighVerificationFailureRate
         expr: |
-          rate(herald_otp_verifications_total{result="failed"}[5m]) / 
-          rate(herald_otp_verifications_total[5m]) > 0.1
+          sum(rate(herald_otp_verifications_total{result="failure"}[5m])) / sum(rate(herald_otp_verifications_total[5m])) > 0.1
         for: 5m
         labels:
           severity: warning
@@ -234,8 +233,7 @@ groups:
       # High send failure rate
       - alert: HeraldHighSendFailureRate
         expr: |
-          rate(herald_otp_sends_total{result="failed"}[5m]) / 
-          rate(herald_otp_sends_total[5m]) > 0.05
+          sum by (provider) (rate(herald_otp_sends_total{result="failure"}[5m])) / sum by (provider) (rate(herald_otp_sends_total[5m])) > 0.05
         for: 5m
         labels:
           severity: critical
@@ -246,7 +244,7 @@ groups:
       # High Redis latency
       - alert: HeraldHighRedisLatency
         expr: |
-          histogram_quantile(0.99, rate(herald_redis_latency_seconds_bucket[5m])) > 0.1
+          histogram_quantile(0.99, rate(herald_redis_operation_duration_seconds_bucket[5m])) > 0.1
         for: 5m
         labels:
           severity: warning
@@ -320,3 +318,11 @@ but undelivered records remain in the local buffer for retry. Monitor pending
 acceptance. Such failures return `503/audit_unavailable`; it no longer counts
 recoverable backend delivery failures. Verify that retries drain the buffer
 after storage recovery. Never delete pending files to silence an alert.
+
+## Provider failure diagnostics
+
+Delivery failures are logged with a bounded `reason` field, not the upstream
+message. Span status and exception events use the same safe reason. Do not
+enable raw provider-body logging to investigate failures. Review historical
+logs and exported spans for echoed sensitive data and rotate exposed credentials.
+See [security](SECURITY.md#provider-failure-diagnostics) for compatibility details.

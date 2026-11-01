@@ -1,5 +1,10 @@
 # Beitragsleitfaden
 
+> **Veraltete Übersetzung / Historical translation.** This page predates current security changes.
+> Do not use its commands or configuration as current instructions. See the
+> [current English guide](../enUS/CONTRIBUTING.md) or [中文](../zhCN/CONTRIBUTING.md)
+> and [translation status](STALE.md). HMAC creation requires v3; builds and validation use Linux.
+
 > 🌐 **Language / 语言**: [English](../enUS/CONTRIBUTING.md) | [中文](../zhCN/CONTRIBUTING.md) | [Français](../frFR/CONTRIBUTING.md) | [Italiano](../itIT/CONTRIBUTING.md) | [日本語](../jaJP/CONTRIBUTING.md) | [Deutsch](CONTRIBUTING.md) | [한국어](../koKR/CONTRIBUTING.md)
 
 Vielen Dank für Ihr Interesse am Herald-Projekt! Wir begrüßen alle Formen von Beiträgen.

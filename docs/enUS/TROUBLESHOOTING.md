@@ -36,10 +36,10 @@ This guide helps you diagnose and resolve common issues with Herald OTP and veri
 3. **Check Prometheus Metrics**
    ```promql
    # Check send failure rate
-   rate(herald_otp_sends_total{result="failed"}[5m]) / rate(herald_otp_sends_total[5m])
+   sum by (provider) (rate(herald_otp_sends_total{result="failure"}[5m])) / sum by (provider) (rate(herald_otp_sends_total[5m]))
    
    # Check send success by provider
-   rate(herald_otp_sends_total{result="success"}[5m]) by (provider)
+   sum by (provider) (rate(herald_otp_sends_total{result="success"}[5m]))
    ```
 
 4. **Check Audit Logs**
@@ -63,7 +63,7 @@ This guide helps you diagnose and resolve common issues with Herald OTP and veri
 
 For local or integration testing when you do not want to rely on real SMS/email delivery:
 
-1. Set **Herald** `HERALD_TEST_MODE=true`. Herald will then return the verification code in the create-challenge response (`debug_code`) and expose `GET /v1/test/code/:challenge_id`.
+1. Set **Herald** `ENVIRONMENT=test`, `HERALD_TEST_MODE=true` and `HERALD_TEST_API_KEY`. Herald will then return the verification code in the create-challenge response (`debug_code`) and expose `GET /v1/test/code/:challenge_id`.
 2. Set **Stargate** `DEBUG=true`. Stargate will include the verification code in the `/_send_verify_code` response and display it on the login page (e.g. "Verification code (debug): 123456").
 
 See [API.md](API.md) (Create Challenge response, Get Test Code) and [DEPLOYMENT.md](DEPLOYMENT.md) (Test mode and debugging). **Never enable test mode or DEBUG in production.**
@@ -96,10 +96,10 @@ See [API.md](API.md) (Create Challenge response, Get Test Code) and [DEPLOYMENT.
 4. **Check Prometheus Metrics**
    ```promql
    # Check verification failure reasons
-   rate(herald_otp_verifications_total{result="failed"}[5m]) by (reason)
+   sum by (reason) (rate(herald_otp_verifications_total{result="failure"}[5m]))
    
    # Check locked challenges
-   rate(herald_otp_verifications_total{result="failed",reason="locked"}[5m])
+   rate(herald_otp_verifications_total{result="failure",reason="locked"}[5m])
    ```
 
 5. **Review Audit Logs**
@@ -130,16 +130,16 @@ See [API.md](API.md) (Create Challenge response, Get Test Code) and [DEPLOYMENT.
 2. **For HMAC Authentication**
    ```bash
    # Verify HMAC_SECRET is configured
-   echo $HMAC_SECRET
+   test -n "$HMAC_SECRET" || test -n "$HERALD_HMAC_KEYS"
    
-   # Check timestamp is within 5-minute window
+   # Check timestamp is within HMAC_MAX_DRIFT window (default 60 seconds)
    # Verify signature calculation matches Herald's implementation
    ```
 
 3. **For API Key Authentication**
    ```bash
    # Verify API_KEY is set
-   echo $API_KEY
+   test -n "$API_KEY"
    
    # Check X-API-Key header matches configured key
    ```
@@ -152,14 +152,14 @@ See [API.md](API.md) (Create Challenge response, Get Test Code) and [DEPLOYMENT.
 5. **Check Herald Logs**
    ```bash
    # Check for authentication errors
-   grep "unauthorized\|invalid_signature\|timestamp_expired" /var/log/herald.log
+   grep "unauthorized\|invalid_signature\|timestamp_out_of_range" /var/log/herald.log
    ```
 
 ### Solutions
 
 - **Missing Credentials**: Set `API_KEY` or `HMAC_SECRET` environment variables
 - **Invalid Signature**: Verify HMAC signature calculation matches Herald's implementation
-- **Timestamp Expired**: Ensure client and server clocks are synchronized (within 5 minutes)
+- **Timestamp Expired**: Ensure client and server clocks are synchronized (within HMAC_MAX_DRIFT; default 60 seconds)
 - **Certificate Issues**: Verify mTLS certificates are valid and trusted
 
 ## Rate Limiting Issues
@@ -183,7 +183,7 @@ See [API.md](API.md) (Create Challenge response, Get Test Code) and [DEPLOYMENT.
 2. **Check Prometheus Metrics**
    ```promql
    # Check rate limit hits by scope
-   rate(herald_rate_limit_hits_total[5m]) by (scope)
+   sum by (scope) (rate(herald_rate_limit_hits_total[5m]))
    
    # Check rate limit hit rate
    rate(herald_rate_limit_hits_total[5m])
@@ -192,10 +192,11 @@ See [API.md](API.md) (Create Challenge response, Get Test Code) and [DEPLOYMENT.
 3. **Review Redis Keys**
    ```bash
    # Check rate limit keys
-   redis-cli KEYS "otp:rate:*"
+   redis-cli --scan --pattern "ratelimit:*"
    
    # Check specific rate limit key
-   redis-cli GET "otp:rate:user:{user_id}"
+   redis-cli TYPE "ratelimit:user:{peppered_user_digest}"
+   redis-cli ZCARD "ratelimit:user:{peppered_user_digest}"
    ```
 
 4. **Analyze Usage Patterns**
@@ -246,10 +247,10 @@ See [API.md](API.md) (Create Challenge response, Get Test Code) and [DEPLOYMENT.
 4. **Check Prometheus Metrics**
    ```promql
    # Check Redis latency
-   histogram_quantile(0.99, rate(herald_redis_latency_seconds_bucket[5m]))
+   histogram_quantile(0.99, rate(herald_redis_operation_duration_seconds_bucket[5m]))
    
    # Check Redis operation errors
-   rate(herald_redis_latency_seconds_count[5m])
+   rate(herald_redis_operation_duration_seconds_count[5m])
    ```
 
 5. **Review Herald Logs**
@@ -271,21 +272,21 @@ See [API.md](API.md) (Create Challenge response, Get Test Code) and [DEPLOYMENT.
 ### Symptoms
 - High send failure rate in metrics
 - `send_failed` errors in logs
-- Provider-specific error messages
+- Bounded provider failure reason codes
 
 ### Diagnostic Steps
 
 1. **Check Provider Metrics**
    ```promql
    # Check send failure rate by provider
-   rate(herald_otp_sends_total{result="failed"}[5m]) by (provider)
+   sum by (provider) (rate(herald_otp_sends_total{result="failure"}[5m]))
    
    # Check send duration by provider
-   histogram_quantile(0.95, rate(herald_otp_send_duration_seconds_bucket[5m])) by (provider)
+   histogram_quantile(0.95, sum by (le, provider) (rate(herald_otp_send_duration_seconds_bucket[5m])))
    ```
 
 2. **Review Provider Logs**
-   - Check provider-specific error messages
+   - Check the safe `reason` field; raw provider messages are not exported
    - Review audit logs for provider errors
    - Check provider API response codes
 
@@ -323,7 +324,7 @@ See [API.md](API.md) (Create Challenge response, Get Test Code) and [DEPLOYMENT.
    histogram_quantile(0.95, rate(herald_otp_send_duration_seconds_bucket[5m]))
    
    # Check Redis latency
-   histogram_quantile(0.99, rate(herald_redis_latency_seconds_bucket[5m]))
+   histogram_quantile(0.99, rate(herald_redis_operation_duration_seconds_bucket[5m]))
    ```
 
 2. **Check Resource Usage**
@@ -375,3 +376,11 @@ If you're unable to resolve an issue:
 - [API Documentation](API.md) - API endpoint details
 - [Deployment Guide](DEPLOYMENT.md) - Deployment and configuration
 - [Monitoring Guide](MONITORING.md) - Monitoring and metrics
+
+## Provider failure diagnostics
+
+Delivery failures are logged with a bounded `reason` field, not the upstream
+message. Span status and exception events use the same safe reason. Do not
+enable raw provider-body logging to investigate failures. Review historical
+logs and exported spans for echoed sensitive data and rotate exposed credentials.
+See [security](SECURITY.md#provider-failure-diagnostics) for compatibility details.

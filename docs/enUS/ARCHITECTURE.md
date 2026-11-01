@@ -4,7 +4,7 @@ This document describes the full-stack architecture of the authentication flow i
 
 ## Overview
 
-Herald is the OTP and verification code service in the Stargate + Warden + Herald stack. Stargate (forwardAuth) orchestrates login; Warden provides user whitelist and contact info; Herald creates challenges, sends codes via providers, and verifies codes. Herald does not hold SMS/email/DingTalk credentials for external providers—those live in provider services (e.g. [herald-smtp](https://github.com/soulteary/herald-smtp) for email when `HERALD_SMTP_API_URL` is set, [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) for DingTalk).
+Herald is the OTP and verification code service in the Stargate + Warden + Herald stack. Stargate (forwardAuth) orchestrates login; Warden provides user whitelist and contact info; Herald creates challenges, sends codes via providers, and verifies codes. In HTTP adapter mode, SMTP and DingTalk credentials live in provider services; Herald holds their adapter API keys. Built-in SMTP instead uses Herald's `SMTP_*` credentials. External provider credentials live in provider services (e.g. [herald-smtp](https://github.com/soulteary/herald-smtp) for email when `HERALD_SMTP_API_URL` is set, [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) for DingTalk).
 
 ## Full-Stack Architecture
 
@@ -60,7 +60,7 @@ flowchart LR
 2. User enters identifier (email/phone/username). **Stargate** calls **Warden** to resolve user and get `user_id` + destination (email/phone/userid).
 3. **Stargate** calls **Herald** `POST /v1/otp/challenges` (user_id, channel, destination, purpose). Herald creates a challenge in **Redis**, sends the code via **SMS**, **Email** (built-in SMTP or [herald-smtp](https://github.com/soulteary/herald-smtp) when `HERALD_SMTP_API_URL` is set), or **herald-dingtalk** (provider send).
 4. Herald returns `challenge_id`, `expires_in`, `next_resend_in` to Stargate.
-5. User submits the code. **Stargate** calls **Herald** `POST /v1/otp/verifications` (challenge_id, code).
+5. User submits the code. **Stargate** calls **Herald** `POST /v2/otp/verifications` with the challenge ID, code and trusted expected user, purpose and channel.
 6. Herald verifies against Redis, returns `ok`, `user_id`, `amr`, `issued_at`. Stargate creates session (cookie/JWT).
 7. Subsequent forwardAuth: Stargate only validates session; it does **not** call Warden or Herald.
 
@@ -69,7 +69,7 @@ flowchart LR
 | Interface | Direction | Description |
 |-----------|-----------|-------------|
 | **Challenge create** | Stargate → Herald | `POST /v1/otp/challenges` — create OTP challenge and send code |
-| **Verify** | Stargate → Herald | `POST /v1/otp/verifications` — verify code and get user_id/amr |
+| **Verify** | Stargate → Herald | `POST /v2/otp/verifications` — verify code with expected user/purpose/channel; v1 remains unbound |
 | **Revoke challenge** | Stargate → Herald | `POST /v1/otp/challenges/{id}/revoke` — optional revoke |
 | **TOTP (optional)** | Stargate → Herald | `GET /v1/totp/status`, `POST /v1/totp/verify`, `POST /v1/totp/enroll/start`, `POST /v1/totp/enroll/confirm`, `POST /v1/totp/revoke` — Herald proxies to herald-totp when `HERALD_TOTP_ENABLED` and `HERALD_TOTP_BASE_URL` are set |
 | **Provider send** | Herald → Provider | `POST /v1/send` (HTTP) — Herald calls SMS/Email/DingTalk adapter; for email when `HERALD_SMTP_API_URL` is set, Herald calls herald-smtp; for DingTalk, Herald calls herald-dingtalk |
@@ -78,13 +78,13 @@ flowchart LR
 ### Herald ↔ Redis
 
 - **Challenge data**: `otp:ch:*` — challenge payload, code hash, TTL, attempts.
-- **Rate limits**: `otp:rate:*` — per user, per IP, per destination.
+- **Rate limits**: `ratelimit:*` — per user, per IP, per destination.
 - **Idempotency**: `otp:idem2:*` — pre-send claim, non-expiring send record, or cached challenge response.
 
 ## Security Boundaries
 
-- **Stargate ↔ Herald**: Authenticated by **mTLS**, **HMAC** (X-Signature, X-Timestamp, X-Service), or **API Key** (X-API-Key). Herald rejects missing or invalid auth.
-- **Herald ↔ Provider (e.g. herald-smtp, herald-dingtalk)**: Optional API Key (`HERALD_SMTP_API_KEY`, `HERALD_DINGTALK_API_KEY`). SMTP and DingTalk credentials exist only in herald-smtp and herald-dingtalk respectively; Herald never stores them.
+- **Stargate ↔ Herald**: Request authentication requires HMAC (v3 for creation; version, timestamp, nonce, service and key ID headers) or API key. Optional mTLS is a separate transport policy and does not replace request authentication.
+- **Herald ↔ Provider (e.g. herald-smtp, herald-dingtalk)**: Optional API Key (`HERALD_SMTP_API_KEY`, `HERALD_DINGTALK_API_KEY`). SMTP and DingTalk credentials stay in adapter services when those adapters are used; built-in SMTP reads `SMTP_*` in Herald.
 - **PII**: Verification codes are stored only as hashes (e.g. Argon2) in Redis. Destination (email/phone) is used for sending and may appear in audit logs in masked form; avoid logging raw codes.
 
 ## Related Documentation
@@ -93,3 +93,11 @@ flowchart LR
 - [DEPLOYMENT.md](DEPLOYMENT.md) — Configuration, Redis, and provider setup
 - [SECURITY.md](SECURITY.md) — Authentication and security practices
 - [TROUBLESHOOTING.md](TROUBLESHOOTING.md) — Common issues (no code received, invalid code, 401, rate limits)
+
+## Activation and persistence
+
+The versioned `otp:active:v2:*` index preserves exact identity fields. Activation
+and superseded-code deletion are atomic; legacy indexes migrate only after exact
+identity checks. Follow the [upgrade procedure](API.md#activation-index-upgrade).
+Audit-enabled instances also need a persistent, private local audit directory;
+Redis alone does not preserve the pending audit backlog.

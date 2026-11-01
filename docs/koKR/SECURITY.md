@@ -1,5 +1,10 @@
 # 보안 문서
 
+> **오래된 번역 / Historical translation.** This page predates current security changes.
+> Do not use its commands or configuration as current instructions. See the
+> [current English guide](../enUS/SECURITY.md) or [中文](../zhCN/SECURITY.md)
+> and [translation status](STALE.md). HMAC creation requires v3; builds and validation use Linux.
+
 > 🌐 **Language / 语言**: [English](../enUS/SECURITY.md) | [中文](../zhCN/SECURITY.md) | [Français](../frFR/SECURITY.md) | [Italiano](../itIT/SECURITY.md) | [日本語](../jaJP/SECURITY.md) | [Deutsch](../deDE/SECURITY.md) | [한국어](SECURITY.md)
 
 이 문서는 Herald의 보안 기능, 보안 구성 및 모범 사례를 설명합니다.

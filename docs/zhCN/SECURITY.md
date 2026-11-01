@@ -163,7 +163,7 @@ SHA256_HEX(RAW_BODY)
 **服务端配置**:
 ```bash
 export REQUEST_AUTH_MODE=hmac_v2
-export HERALD_HMAC_KEYS='{"key-id-1":"secret-key-1","key-id-2":"secret-key-2"}'
+: "${HERALD_HMAC_KEYS:?load the key map with production-strength secrets}"
 export HERALD_HMAC_DEFAULT_KEY_ID=key-id-1
 export HMAC_MAX_DRIFT=60s
 export HMAC_V1_ENABLED=false
@@ -199,7 +199,7 @@ export CLIENT_CERT_MODE=require
 - 限制 Redis 的网络访问（仅允许 Herald 服务访问）
 - 使用 Redis AUTH 进行认证
 - 定期更新 Redis 以修复已知漏洞
-- 生产环境考虑使用 Redis over TLS
+- Herald 未提供原生 Redis TLS 配置；需要 Redis 传输加密时，使用受保护的私有网络或经过认证的加密隧道
 
 ### 审计日志
 
@@ -278,17 +278,13 @@ export RESEND_COOLDOWN=60s
 
 在开发模式下：
 
-- 显示详细错误信息以便调试
-- 包含堆栈跟踪信息
-- 更详细的日志记录
+- API 仍返回通用错误，开发环境不会启用明文渠道错误诊断
+- 验证码暴露要求明确配置测试环境和测试模式
 
 ## 安全响应头
 
-Herald 自动添加以下安全相关的 HTTP 响应头：
-
-- `X-Content-Type-Options: nosniff` - 防止 MIME 类型嗅探
-- `X-Frame-Options: DENY` - 防止点击劫持
-- `X-XSS-Protection: 1; mode=block` - XSS 保护
+Herald 默认未安装浏览器安全响应头中间件。按需在 HTTPS 反向代理上配置
+`X-Content-Type-Options`、`Content-Security-Policy` 和 HSTS，不能假定 Herald 会自动发送这些头。
 
 ## 漏洞报告
 
@@ -337,3 +333,6 @@ exception 事件、审计失败记录只保留已知原因码。未知原因码�
 - [部署文档](DEPLOYMENT.md) - 了解生产环境部署建议
 - [监控文档](MONITORING.md) - 了解安全监控和告警
 - [故障排查文档](TROUBLESHOOTING.md) - 了解安全相关的故障排查
+
+测试专用例外：`ENVIRONMENT=test` 且 `HERALD_TEST_MODE=true` 时，测试缓存保存明文验证码，
+可通过受保护的独立测试监听器和 `debug_code` 读取；生产环境拒绝此模式。

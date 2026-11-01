@@ -1,5 +1,10 @@
 # Herald API ドキュメント
 
+> **古い翻訳 / Historical translation.** This page predates current security changes.
+> Do not use its commands or configuration as current instructions. See the
+> [current English guide](../enUS/API.md) or [中文](../zhCN/API.md)
+> and [translation status](STALE.md). HMAC creation requires v3; builds and validation use Linux.
+
 Herald は、SMS・電子メール・DingTalk で検証コードを送信する検証コードおよび OTP サービスです（電子メールは `HERALD_SMTP_API_URL` 設定時は [herald-smtp](https://github.com/soulteary/herald-smtp)、DingTalk は [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) を利用）。組み込みのレート制限とセキュリティ制御を備えています。
 
 ## ベース URL
@@ -192,7 +197,7 @@ HTTP ステータスコード：
 - `400 Bad Request`：無効なリクエスト
 - `500 Internal Server Error`：内部サーバーエラー
 
-**TOTP プロキシ（オプション）**：`HERALD_TOTP_ENABLED=true` かつ `HERALD_TOTP_BASE_URL` を設定すると、Herald は TOTP（Authenticator）リクエストを [herald-totp](https://github.com/soulteary/herald-totp) にプロキシします。エンドポイントと形式は [API (enUS)](enUS/API.md#totp-proxy-optional) を参照。
+**TOTP プロキシ（オプション）**：`HERALD_TOTP_ENABLED=true` かつ `HERALD_TOTP_BASE_URL` を設定すると、Herald は TOTP（Authenticator）リクエストを [herald-totp](https://github.com/soulteary/herald-totp) にプロキシします。エンドポイントと形式は [API (enUS)](../enUS/API.md#totp-proxy-optional) を参照。
 
 ## レート制限
 

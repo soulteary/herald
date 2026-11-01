@@ -1,5 +1,10 @@
 # Herald トラブルシューティングガイド
 
+> **古い翻訳 / Historical translation.** This page predates current security changes.
+> Do not use its commands or configuration as current instructions. See the
+> [current English guide](../enUS/TROUBLESHOOTING.md) or [中文](../zhCN/TROUBLESHOOTING.md)
+> and [translation status](STALE.md). HMAC creation requires v3; builds and validation use Linux.
+
 このガイドは、Herald OTP および検証コードサービスの一般的な問題を診断して解決するのに役立ちます。
 
 ## 目次

@@ -1,5 +1,8 @@
 # Herald - Servizio OTP e Codici di Verifica
 
+> **Traduzione non aggiornata / Historical translation.** For current deployment and security instructions,
+> use [English](README.md) or [中文](README.zhCN.md). See [translation status](docs/itIT/STALE.md).
+
 [![Go Test Coverage](./.github/coverage.svg)](./.github/go-test-report.md) [![Go Report Card](./.github/goreportcard.svg)](./.github/goreportcard-report.md) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go Version](https://img.shields.io/badge/go-1.27.3+-blue.svg)](https://golang.org)
 
 
@@ -84,7 +87,7 @@ Herald richiede una configurazione minima per iniziare:
 | `REDIS_ADDR` | Redis address | `localhost:6379` | No |
 | `API_KEY` | API key for authentication | - | Recommended |
 
-Per le opzioni di configurazione complete, inclusi limiti di velocità, scadenza delle sfide e impostazioni del provider, vedere la [Guida alla Distribuzione](docs/itIT/DEPLOYMENT.md#configuration).
+Per le opzioni di configurazione complete, inclusi limiti di velocità, scadenza delle sfide e impostazioni del provider, vedere la [Guida alla Distribuzione](docs/itIT/DEPLOYMENT.md#configurazione).
 
 ## Documentazione
 

@@ -21,7 +21,11 @@ The checked-in Compose service sets `PROVIDER_FAILURE_POLICY=strict`, which is r
 # Build
 go build -o herald main.go
 
-# Run
+# Configure the password-protected Redis endpoint before running.
+export ENVIRONMENT=production REQUEST_AUTH_MODE=api_key PROVIDER_FAILURE_POLICY=strict
+: "${API_KEY:?load a secret of at least 32 bytes}"
+: "${REDIS_PASSWORD:?load the Redis password}"
+: "${AUDIT_SPOOL_DIR:?set a private persistent audit directory}"
 ./herald
 ```
 
@@ -33,7 +37,9 @@ go build -o herald main.go
 - Some variables use `HERALD_*` prefix (e.g., `HERALD_TEST_MODE`, `HERALD_HMAC_KEYS`)
 - Some variables use shorter names (e.g., `REDIS_ADDR`, `API_KEY`, `HMAC_SECRET`)
 
-For consistency and future compatibility, consider using `HERALD_*` prefix when possible. The service supports both naming conventions.
+Use the exact variable names listed below. Prefixes are not interchangeable.
+`HERALD_API_KEY` is a Compose input mapped to the process variable `API_KEY`;
+`HERALD_REDIS_ADDR` is not read by Herald. Only documented aliases are supported.
 
 ### Environment Variables
 
@@ -45,10 +51,18 @@ The following match the implementation in `internal/config/config.go`.
 |----------|-------------|---------|----------|
 | `PORT` | Server listen port (with or without leading colon, e.g. `8082` or `:8082`) | `:8082` | No |
 | `REDIS_ADDR` | Redis address | `localhost:6379` | No |
-| `REDIS_PASSWORD` | Redis password | (empty) | No |
+| `REDIS_PASSWORD` | Redis password | (empty) | Production, unless explicitly risk-acknowledged |
 | `REDIS_DB` | Redis database index | `0` | No |
 | `LOG_LEVEL` | Log level | `info` | No |
 | `SERVICE_NAME` | Service identifier (HMAC, logging, health) | `herald` | No |
+| `HERALD_READ_TIMEOUT` | Request read timeout | `15s` | No |
+| `HERALD_WRITE_TIMEOUT` | Response write timeout | `15s` | No |
+| `HERALD_IDLE_TIMEOUT` | Idle connection timeout | `60s` | No |
+| `HERALD_CORS_ALLOW_ORIGINS` | Explicit comma-separated origin allowlist; empty disables CORS, wildcard forbidden in production | (empty) | No |
+| `HERALD_RISK_ACK_PASSWORDLESS_REDIS` | Explicit production acknowledgement for passwordless Redis; prefer a password | `false` | Only for that exception |
+| `HERALD_NONCE_PREFIX` | Redis nonce key prefix; keep stable across instances/upgrades | `otp:nonce:` | No |
+| `PROVIDER_TIMEOUT` | Positive provider request timeout | `10s` | No |
+| `PROVIDER_REDIRECT_POLICY` | HTTP provider redirects: `deny` or `same-origin`; TOTP always denies redirects | `deny` | No |
 | `HERALD_TRUSTED_PROXY_HEADER` | Forwarded client-IP header; only read from trusted proxies | (empty) | With trusted proxies |
 | `HERALD_TRUSTED_PROXIES` | Comma-separated trusted proxy IP/CIDR allowlist | (empty) | With proxy header |
 
@@ -63,7 +77,7 @@ Forwarded IP chains are parsed from right to left. Herald skips only explicitly 
 | `HMAC_SECRET` | Single HMAC secret; at least 32 bytes in production | (empty) | HMAC single-key mode |
 | `HERALD_HMAC_KEYS` | HMAC key map; IDs/secrets must be non-empty and production secrets at least 32 bytes | (empty) | HMAC multi-key mode |
 | `HERALD_HMAC_DEFAULT_KEY_ID` | Explicit default key ID; otherwise multi-key requests must send `X-Key-Id` | (empty) | Optional |
-| `HMAC_MAX_DRIFT` | Accepted HMAC v2 timestamp drift | `60s` | No |
+| `HMAC_MAX_DRIFT` | Accepted HMAC v2/v3 timestamp drift | `60s` | No |
 | `HMAC_V1_ENABLED` | Temporarily enable legacy HMAC v1 | `false` | No |
 | `HERALD_IDEMPOTENCY_SECRET` | Key for opaque idempotency records; required for production multi-key-only auth | (empty) | Conditional |
 | `HERALD_PII_PEPPER` | Pepper for PII-derived Redis/metric keys; at least 32 bytes in production | (empty) | Recommended |
@@ -170,7 +184,7 @@ responses. API Key and HMAC wire formats are unchanged.
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
 | `AUDIT_ENABLED` | Enable audit | `true` | No |
-| `AUDIT_MASK_DESTINATION` | Mask destination in audit | `false` | No |
+| `AUDIT_MASK_DESTINATION` | Mask destination in audit | `true` in production unless explicitly set; otherwise `false` | No |
 | `AUDIT_TTL` | Audit record TTL in Redis (e.g. `168h` = 7 days) | `168h` | No |
 | `AUDIT_STORAGE_TYPE` | Persistent storage: `database`, `file`, `redis`, or comma-separated | (empty) | No |
 | `AUDIT_DATABASE_URL` | DB URL when `AUDIT_STORAGE_TYPE` includes database | (empty) | No |
@@ -230,10 +244,12 @@ these checks and audit recording.
 
 ### Test mode and debugging
 
-When `HERALD_TEST_MODE=true`:
+Only when `ENVIRONMENT=test` and `HERALD_TEST_MODE=true`:
 
 - The create-challenge response may include a `debug_code` field (plain verification code) so callers (e.g. Stargate with `DEBUG=true`) can display it on the login page.
-- The endpoint `GET /v1/test/code/:challenge_id` is enabled and returns the verification code for the given challenge (for integration tests or as a fallback when the client does not receive `debug_code` in the create response).
+- `GET /v1/test/code/:challenge_id` is mounted on the separate
+  `HERALD_TEST_LISTENER_ADDR` listener (default `127.0.0.1:18082`), not the main
+  listener. Supply `X-Test-Api-Key: $HERALD_TEST_API_KEY` (or Bearer authentication).
 
 **Security:** Always set `HERALD_TEST_MODE=false` in production. Test mode exposes verification codes and must not be used in production environments.
 
@@ -268,7 +284,7 @@ For production deployments, it is **strongly recommended** to use a dedicated Re
 
 **Key Prefixes:**
 - `otp:ch:*` - Challenge data (TTL: challenge expiry time)
-- `otp:rate:*` - Rate limiting counters (TTL: rate limit window)
+- `ratelimit:*` - Rate limiting counters (TTL: rate limit window)
 - `otp:idem2:*` - Idempotency records (pending/completed: configured TTL; unresolved sending: no expiry)
 - `otp:lock:*` - User lockout records (TTL: lockout duration)
 
@@ -312,13 +328,17 @@ For high-availability deployments, consider Redis Cluster or Redis Sentinel.
 
 Herald is designed to work independently and can be integrated with other services as needed. If you want to integrate Herald with other authentication or gateway services, you can configure the following:
 
+These are caller-side examples, not additional Herald process variables.
+For Herald API-key mode set `REQUEST_AUTH_MODE=api_key` and `API_KEY`.
+
 **Example integration configuration:**
 ```bash
 # Service URL where Herald is accessible
 export HERALD_URL=http://herald:8082
 
 # API key for service-to-service authentication
-export HERALD_API_KEY=your-secret-key
+: "${API_KEY:?load the Herald server API key}"
+export HERALD_API_KEY="$API_KEY"
 
 # Enable Herald integration (if your service supports it)
 export HERALD_ENABLED=true
@@ -357,3 +377,11 @@ For detailed monitoring documentation, see [MONITORING.md](MONITORING.md).
 - Use TLS/HTTPS in production
 - Configure rate limits appropriately
 - Monitor Redis for suspicious activity
+
+## Provider failure diagnostics
+
+Delivery failures are logged with a bounded `reason` field, not the upstream
+message. Span status and exception events use the same safe reason. Do not
+enable raw provider-body logging to investigate failures. Review historical
+logs and exported spans for echoed sensitive data and rotate exposed credentials.
+See [security](SECURITY.md#provider-failure-diagnostics) for compatibility details.

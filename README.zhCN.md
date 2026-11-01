@@ -14,7 +14,8 @@
 
 Herald 是一个生产就绪的独立 OTP 和验证码服务，可通过电子邮件和 SMS 发送验证码。它具有内置的速率限制、安全控制和审计日志记录功能。Herald 设计为可独立工作，也可以根据需要与其他服务集成。
 
-HTTP 服务使用 Fiber v3.5.0 及与之匹配的 Fiber 相关 kit v2 模块版本。从源码构建需要 Go 1.27.3 或更高版本。
+HTTP 服务使用 Fiber v3；依赖及 Go 工具链以 `go.mod` 为准（Go 1.27.3 或以上）。
+构建与验证使用 Linux，macOS、Windows 等宿主环境建议运行 Linux 容器。
 
 ## 核心特性
 
@@ -96,7 +97,7 @@ Herald 需要最少的配置即可开始使用：
 
 使用 herald-smtp 发邮件时，请设置 `HERALD_SMTP_API_URL`（可选 `HERALD_SMTP_API_KEY`）；参见 [部署指南](docs/zhCN/DEPLOYMENT.md#email-通道herald-smtp)。使用 DingTalk 通道时，请设置 `HERALD_DINGTALK_API_URL`（可选 `HERALD_DINGTALK_API_KEY`）；参见 [部署指南](docs/zhCN/DEPLOYMENT.md#dingtalk-通道herald-dingtalk)。
 
-有关完整的配置选项，包括速率限制、挑战过期时间和提供者设置，请参阅 [部署指南](docs/zhCN/DEPLOYMENT.md#configuration)。
+有关完整的配置选项，包括速率限制、挑战过期时间和提供者设置，请参阅 [部署指南](docs/zhCN/DEPLOYMENT.md#配置)。
 
 ## 文档
 
@@ -117,3 +118,10 @@ Herald 需要最少的配置即可开始使用：
 ## License
 
 See [LICENSE](LICENSE) for details.
+
+## 当前安全升级
+
+HMAC 创建验证码要求 v3；业务验证应使用 v2 接口并从可信状态提供预期用户、用途和渠道。
+从 v1.3.10 之前的版本升级时，按 [激活索引升级](docs/zhCN/API.md#激活索引升级) 协调切换，
+保留 Redis 和审计持久卷。日志字段变化与历史诊断数据处理见 [安全说明](docs/zhCN/SECURITY.md#发送渠道失败诊断)。
+当前运维文档维护英文和中文，其余译文作为历史参考。

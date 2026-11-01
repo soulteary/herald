@@ -4,7 +4,7 @@
 
 ## 概述
 
-Herald 是 Stargate + Warden + Herald 体系中的 OTP 与验证码服务。Stargate（forwardAuth）负责登录编排；Warden 提供用户白名单与联系方式；Herald 负责创建 challenge、通过提供方发码、验码。Herald 不持有短信/邮件/钉钉的凭证，外部通道由独立服务提供（如配置 `HERALD_SMTP_API_URL` 时邮件由 [herald-smtp](https://github.com/soulteary/herald-smtp) 提供，钉钉由 [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) 提供）。
+Herald 是 Stargate + Warden + Herald 体系中的 OTP 与验证码服务。Stargate（forwardAuth）负责登录编排；Warden 提供用户白名单与联系方式；Herald 负责创建 challenge、通过提供方发码、验码。使用 HTTP 适配器时，外部渠道凭据由独立服务持有，Herald 保存适配器 API key；使用内置 SMTP 时，Herald 读取自身的 `SMTP_*` 凭据。外部通道可由独立服务提供（如配置 `HERALD_SMTP_API_URL` 时邮件由 [herald-smtp](https://github.com/soulteary/herald-smtp) 提供，钉钉由 [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) 提供）。
 
 ## 全栈架构
 
@@ -78,13 +78,13 @@ flowchart LR
 ### Herald ↔ Redis
 
 - **Challenge 数据**：`otp:ch:*` — challenge 载荷、验证码哈希、TTL、尝试次数。
-- **限流**：`otp:rate:*` — 按用户、IP、destination 限流。
+- **限流**：`ratelimit:*` — 按用户、IP、destination 限流。
 - **幂等**：`otp:idem2:*` — 发送前占位、不自动过期的发送记录或缓存的 challenge 响应。
 
 ## 安全边界
 
-- **Stargate ↔ Herald**：通过 **mTLS**、**HMAC**（X-Signature、X-Timestamp、X-Service）或 **API Key**（X-API-Key）鉴权；Herald 拒绝未认证或签名错误的请求。
-- **Herald ↔ Provider（如 herald-smtp、herald-dingtalk）**：可选 API Key（`HERALD_SMTP_API_KEY`、`HERALD_DINGTALK_API_KEY`）。SMTP 与钉钉凭证仅分别存在于 herald-smtp 与 herald-dingtalk；Herald 不存储这些凭证。
+- **Stargate ↔ Herald**：请求认证使用 HMAC（创建必须 v3，携带版本、时间戳、nonce、service 等签名头）或 API Key。mTLS 是独立传输策略，不代替请求认证。
+- **Herald ↔ Provider（如 herald-smtp、herald-dingtalk）**：可选 API Key（`HERALD_SMTP_API_KEY`、`HERALD_DINGTALK_API_KEY`）。使用适配器时，SMTP 与钉钉凭据位于对应服务；使用内置 SMTP 时，Herald 读取自身 `SMTP_*` 凭据。
 - **PII**：验证码仅以哈希（如 Argon2）形式存于 Redis。destination（邮箱/手机）用于发送，审计日志中建议脱敏；禁止记录明文验证码。
 
 ## 相关文档
@@ -93,3 +93,9 @@ flowchart LR
 - [DEPLOYMENT.md](DEPLOYMENT.md) — 配置、Redis 与 Provider 部署
 - [SECURITY.md](SECURITY.md) — 认证与安全实践
 - [TROUBLESHOOTING.md](TROUBLESHOOTING.md) — 常见问题（收不到验证码、验证码错误、401、限流等）
+
+## 激活与持久化
+
+`otp:active:v2:*` 按完整身份原值派生，激活与旧码删除原子执行；旧索引只有在身份完全匹配时才迁移。
+升级步骤见 [激活索引升级](API.md#激活索引升级)。启用审计的实例还需私有、持久的本地审计目录，
+仅保留 Redis 不能保存待投递审计积压。mTLS 是独立传输策略，不能代替 HMAC 或 API Key 请求认证。

@@ -1,5 +1,7 @@
 # Security Policy
 
+> Current operational documentation: [English](docs/enUS/README.md) and [中文](docs/zhCN/README.md). Other translations are historical; consult their translation-status notice before use.
+
 > 🌐 **Language / 语言**: [English](docs/enUS/SECURITY.md) | [中文](docs/zhCN/SECURITY.md) | [Français](docs/frFR/SECURITY.md) | [Italiano](docs/itIT/SECURITY.md) | [日本語](docs/jaJP/SECURITY.md) | [Deutsch](docs/deDE/SECURITY.md) | [한국어](docs/koKR/SECURITY.md)
 
 This document outlines the security policy for the Herald project. Please select your preferred language from the links above to view the complete security documentation.

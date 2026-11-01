@@ -1,5 +1,7 @@
 # 文档索引
 
+> Current operational documentation: [English](../enUS/README.md) and [中文](../zhCN/README.md). Other translations are historical; consult their translation-status notice before use.
+
 欢迎查阅 Herald OTP 和验证码服务的文档。
 
 ## 🌐 多语言文档 / Multi-language Documentation
@@ -51,7 +53,7 @@
 
 1. 阅读 [README.zhCN.md](../../README.zhCN.md) 了解项目
 2. 查看 [快速开始](../../README.zhCN.md#快速开始) 部分
-3. 参考 [配置说明](../../README.zhCN.md#配置说明) 配置服务
+3. 参考 [配置说明](../../README.zhCN.md#基本配置) 配置服务
 
 ### 开发人员
 

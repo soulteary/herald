@@ -150,7 +150,7 @@ Herald 在调用发送渠道前保存不自动过期的发送记录。进程退�
 }
 ```
 
-当 `HERALD_TEST_MODE=true` 时，响应中还会包含 `debug_code`（明文验证码），便于调用方（如 Stargate 调试模式）在本地/测试时直接展示。**生产环境请勿开启测试模式。**
+当同时设置 `ENVIRONMENT=test` 和 `HERALD_TEST_MODE=true` 时，响应中还会包含 `debug_code`（明文验证码），便于调用方（如 Stargate 调试模式）在本地/测试时直接展示。**生产环境请勿开启测试模式。**
 
 **错误响应：**
 
@@ -186,7 +186,8 @@ HTTP 状态代码：
 
 **GET /v1/test/code/:challenge_id**
 
-返回指定 challenge 的验证码。**仅当 `HERALD_TEST_MODE=true` 时可用。** 用于集成测试或 Stargate 调试模式下在创建 challenge 响应未包含 `debug_code` 时作为回退获取验证码。生产环境请勿开启测试模式。
+返回指定 challenge 的验证码。**要求 `ENVIRONMENT=test`、`HERALD_TEST_MODE=true` 和专用 `HERALD_TEST_API_KEY`。
+使用 `X-Test-Api-Key` 或 Bearer 认证访问独立测试监听器（默认 `http://127.0.0.1:18082`），主监听器不提供此路由。** 用于集成测试或 Stargate 调试模式下在创建 challenge 响应未包含 `debug_code` 时作为回退获取验证码。生产环境请勿开启测试模式。
 
 **响应（200 OK）：**
 ```json

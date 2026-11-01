@@ -1,5 +1,10 @@
 # Dokumentationsverzeichnis
 
+> **Veraltete Übersetzung / Historical translation.** This page predates current security changes.
+> Do not use its commands or configuration as current instructions. See the
+> [current English guide](../enUS/README.md) or [中文](../zhCN/README.md)
+> and [translation status](STALE.md). HMAC creation requires v3; builds and validation use Linux.
+
 Willkommen zur Dokumentation des Herald OTP- und Verifizierungscode-Services.
 
 ## 🌐 Mehrsprachige Dokumentation
@@ -50,7 +55,7 @@ Willkommen zur Dokumentation des Herald OTP- und Verifizierungscode-Services.
 
 1. Lesen Sie [README.deDE.md](../../README.deDE.md), um das Projekt zu verstehen
 2. Überprüfen Sie den Abschnitt [Schnellstart](../../README.deDE.md#schnellstart)
-3. Beziehen Sie sich auf [Konfiguration](../../README.deDE.md#konfiguration), um den Service zu konfigurieren
+3. Beziehen Sie sich auf [Konfiguration](../../README.deDE.md#grundkonfiguration), um den Service zu konfigurieren
 
 ### Entwickler
 

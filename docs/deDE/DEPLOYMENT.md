@@ -1,5 +1,10 @@
 # Herald Bereitstellungsanleitung
 
+> **Veraltete Übersetzung / Historical translation.** This page predates current security changes.
+> Do not use its commands or configuration as current instructions. See the
+> [current English guide](../enUS/DEPLOYMENT.md) or [中文](../zhCN/DEPLOYMENT.md)
+> and [translation status](STALE.md). HMAC creation requires v3; builds and validation use Linux.
+
 ## Schnellstart
 
 ### Verwendung von Docker Compose
@@ -23,7 +28,7 @@ go build -o herald main.go
 
 ### Umgebungsvariablen
 
-**Vollständige Liste (mit Code abgeglichen):** [Englisch](enUS/DEPLOYMENT.md#environment-variables) | [中文](zhCN/DEPLOYMENT.md#环境变量)
+**Vollständige Liste (mit Code abgeglichen):** [Englisch](../enUS/DEPLOYMENT.md#environment-variables) | [中文](../zhCN/DEPLOYMENT.md#环境变量)
 
 | Variable | Beschreibung | Standard | Erforderlich |
 |----------|-------------|----------|--------------|
@@ -72,7 +77,7 @@ Wenn `channel` `dingtalk` ist, sendet Herald keine Nachrichten selbst, sondern l
 
 ### TOTP (herald-totp)
 
-Wenn `HERALD_TOTP_ENABLED=true` und `HERALD_TOTP_BASE_URL` gesetzt sind, leitet Herald TOTP-Anfragen (Authenticator) an [herald-totp](https://github.com/soulteary/herald-totp) weiter. Endpunkte unter `/v1/totp/*` (status, verify, enroll/start, enroll/confirm, revoke). Details siehe [API (enUS)](enUS/API.md#totp-proxy-optional).
+Wenn `HERALD_TOTP_ENABLED=true` und `HERALD_TOTP_BASE_URL` gesetzt sind, leitet Herald TOTP-Anfragen (Authenticator) an [herald-totp](https://github.com/soulteary/herald-totp) weiter. Endpunkte unter `/v1/totp/*` (status, verify, enroll/start, enroll/confirm, revoke). Details siehe [API (enUS)](../enUS/API.md#totp-proxy-optional).
 
 ## Integration mit anderen Diensten (Optional)
 
