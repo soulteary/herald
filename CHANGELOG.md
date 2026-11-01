@@ -42,6 +42,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now return `502/proxy_failed`. Valid `200/ok:false` verification results and
   complete enrollment-confirm HTTP 400 responses retain their existing contract.
 
+## [1.3.9] - 2026-11-01
+
+### Changed
+
+- Publish the maintained Go module dependency graph used by the bundled SDK
+  (`github.com/soulteary/herald/pkg/herald`) and the Herald service. Upgrade
+  `challenge-kit` to v1.10.4 and `provider-kit` to v1.7.4, together with the
+  released audit, cli, health, i18n, logger, metrics, middleware, redis, secure,
+  tracing and version kit patches. Keep `http-kit/v2` at v2.1.0.
+- Refresh module checksums, including the health-kit test graph's SQLite and
+  libc patches. Retain Go 1.27.3 and the SDK's public API. No SDK or service
+  production source changes are introduced after v1.3.8.
+
+### Compatibility
+
+- SDK and service share the root module version; consumers import
+  `github.com/soulteary/herald/pkg/herald` from module
+  `github.com/soulteary/herald@v1.3.9`.
+- Upgrading from v1.3.8 keeps its behavior and configuration. Consumers upgrading
+  from v1.3.6 or earlier also inherit the v1.3.7 HMAC v3 default and idempotency
+  header binding. HMAC challenge creation requires a v3-capable Herald server;
+  upgrade the server before routing new SDK challenge-creation calls to it.
+  Explicit v2 signing remains available for compatible non-creation routes;
+  API-key authentication is unchanged.
+- The release retains v1.3.8's atomic resend activation and its existing Redis
+  formats and TTLs. No new storage migration is required. Preserve pending
+  idempotency records and the per-instance audit spool during deployment.
+
 ## [1.3.3] - 2026-11-01
 
 ### Fixed
