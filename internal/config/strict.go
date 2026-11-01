@@ -92,6 +92,9 @@ func validateStrictSettings() error {
 	if HMACMaxDrift <= 0 {
 		problems = append(problems, "HMAC_MAX_DRIFT must be positive")
 	}
+	if AuditEnabled && (strings.TrimSpace(AuditSpoolDir) == "" || AuditSpoolMaxBytes <= 0) {
+		problems = append(problems, "AUDIT_SPOOL_DIR and positive AUDIT_SPOOL_MAX_BYTES are required when audit logging is enabled")
+	}
 	if AuditEnabled && AuditTTL <= 0 {
 		problems = append(problems, "AUDIT_TTL must be positive when audit logging is enabled")
 	}

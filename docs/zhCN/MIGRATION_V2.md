@@ -178,3 +178,11 @@ c, _ := herald.NewClient(herald.DefaultOptions().
 缺少上下文现在返回 `400/context_required`，上下文不匹配返回 `409/context_mismatch`，
 两种拒绝均不消费 challenge。升级前，请让现有 v2 调用方从业务后端可信状态中补齐三个值。
 v1 验证接口保留原有的无上下文绑定语义。
+
+## 持久化审计缓冲
+
+启用审计的部署现在需要可写、持久化的 `AUDIT_SPOOL_DIR`。Compose 增加了
+`audit_spool` 卷，升级和回滚时需保留，且新旧实例不能共用目录。
+`AUDIT_WRITER_QUEUE_SIZE` 现在只控制通知容量，不控制记录保留。本地接收需要 fsync，
+后端按至少一次语义投递。缓冲已满或不可用时返回 `503/audit_unavailable`。
+容量、权限及重复事件处理方式见部署指南。

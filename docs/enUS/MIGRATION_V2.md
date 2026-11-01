@@ -197,3 +197,13 @@ silently disabled the corresponding binding checks. Missing context now returns
 Neither rejection consumes the challenge. Supply all three values from trusted
 application state before upgrading existing v2 callers. The v1 verification
 endpoint retains its existing unbound semantics.
+
+## Durable audit buffering
+
+Audit-enabled deployments now need a writable, persistent `AUDIT_SPOOL_DIR`.
+The Compose file adds an `audit_spool` volume; retain it during upgrade and
+rollback, and do not run old and new instances against the same directory.
+`AUDIT_WRITER_QUEUE_SIZE` controls notification capacity rather than record
+retention. Local acceptance requires fsync; backend delivery is at least once.
+A full or unavailable buffer returns `503/audit_unavailable`. See the deployment
+guide for capacity, permissions, and duplicate-event handling.

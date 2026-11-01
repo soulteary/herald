@@ -58,6 +58,9 @@ RUN addgroup -g 10001 -S herald && \
 
 COPY --from=builder /out/herald /bin/herald
 
+RUN mkdir -p /var/lib/herald/audit && chown 10001:10001 /var/lib/herald/audit && chmod 0700 /var/lib/herald/audit
+ENV AUDIT_SPOOL_DIR=/var/lib/herald/audit
+
 USER 10001:10001
 WORKDIR /app
 EXPOSE 8082

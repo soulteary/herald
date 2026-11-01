@@ -32,12 +32,16 @@ func TestAuditLogFunctions(t *testing.T) {
 	// Reset logger for testing
 	auditLogger = nil
 	auditLoggerInit = sync.Once{}
+	auditInitErr = nil
+	config.AuditSpoolDir = t.TempDir()
+	t.Cleanup(func() { _ = Stop() })
 
 	// Initialize with no-op storage for testing
 	storage := audit.NewNoopStorage()
 	cfg := audit.DefaultConfig()
 	cfg.Enabled = true
-	auditLogger = audit.NewLoggerWithWriter(storage, cfg)
+	auditStorage = storage
+	auditLogger = audit.NewLogger(storage, cfg)
 
 	l := GetLogger()
 	assert.NotNil(t, l)
@@ -46,27 +50,27 @@ func TestAuditLogFunctions(t *testing.T) {
 
 	// Test all logging functions (should not panic)
 	t.Run("LogChallengeCreated", func(t *testing.T) {
-		LogChallengeCreated(ctx, "ch_123", "user1", "email", "test@example.com", "login", "127.0.0.1")
+		assert.NoError(t, LogChallengeCreated(ctx, "ch_123", "user1", "email", "test@example.com", "login", "127.0.0.1"))
 	})
 
 	t.Run("LogSendSuccess", func(t *testing.T) {
-		LogSendSuccess(ctx, "ch_123", "user1", "email", "test@example.com", "login", "smtp", "msg_123", "127.0.0.1")
+		assert.NoError(t, LogSendSuccess(ctx, "ch_123", "user1", "email", "test@example.com", "login", "smtp", "msg_123", "127.0.0.1"))
 	})
 
 	t.Run("LogSendFailed", func(t *testing.T) {
-		LogSendFailed(ctx, "ch_123", "user1", "email", "test@example.com", "login", "smtp", "connection_failed", "127.0.0.1")
+		assert.NoError(t, LogSendFailed(ctx, "ch_123", "user1", "email", "test@example.com", "login", "smtp", "connection_failed", "127.0.0.1"))
 	})
 
 	t.Run("LogVerificationSuccess", func(t *testing.T) {
-		LogVerificationSuccess(ctx, "ch_123", "user1", "email", "test@example.com", "login", "127.0.0.1")
+		assert.NoError(t, LogVerificationSuccess(ctx, "ch_123", "user1", "email", "test@example.com", "login", "127.0.0.1"))
 	})
 
 	t.Run("LogVerificationFailed", func(t *testing.T) {
-		LogVerificationFailed(ctx, "ch_123", "invalid", "127.0.0.1")
+		assert.NoError(t, LogVerificationFailed(ctx, "ch_123", "invalid", "127.0.0.1"))
 	})
 
 	t.Run("LogChallengeRevoked", func(t *testing.T) {
-		LogChallengeRevoked(ctx, "ch_123", "127.0.0.1")
+		assert.NoError(t, LogChallengeRevoked(ctx, "ch_123", "127.0.0.1"))
 	})
 
 	// Test Stop
@@ -78,6 +82,9 @@ func TestGetLoggerWithoutInit(t *testing.T) {
 	// Reset logger
 	auditLogger = nil
 	auditLoggerInit = sync.Once{}
+	auditInitErr = nil
+	config.AuditSpoolDir = t.TempDir()
+	t.Cleanup(func() { _ = Stop() })
 
 	// GetLogger should auto-initialize with no-op storage
 	l := GetLogger()
@@ -88,12 +95,16 @@ func TestQuery(t *testing.T) {
 	// Reset logger for testing
 	auditLogger = nil
 	auditLoggerInit = sync.Once{}
+	auditInitErr = nil
+	config.AuditSpoolDir = t.TempDir()
+	t.Cleanup(func() { _ = Stop() })
 
 	// Initialize with no-op storage for testing
 	storage := audit.NewNoopStorage()
 	cfg := audit.DefaultConfig()
 	cfg.Enabled = true
-	auditLogger = audit.NewLoggerWithWriter(storage, cfg)
+	auditStorage = storage
+	auditLogger = audit.NewLogger(storage, cfg)
 
 	ctx := context.Background()
 	filter := audit.DefaultQueryFilter()
@@ -111,6 +122,9 @@ func TestSetLogger(t *testing.T) {
 func TestInit_WithNilRedis(t *testing.T) {
 	auditLogger = nil
 	auditLoggerInit = sync.Once{}
+	auditInitErr = nil
+	config.AuditSpoolDir = t.TempDir()
+	t.Cleanup(func() { _ = Stop() })
 
 	Init(nil)
 	l := GetLogger()
@@ -126,6 +140,9 @@ func TestStop_WhenNil(t *testing.T) {
 func TestInit_WithRedisClient(t *testing.T) {
 	auditLogger = nil
 	auditLoggerInit = sync.Once{}
+	auditInitErr = nil
+	config.AuditSpoolDir = t.TempDir()
+	t.Cleanup(func() { _ = Stop() })
 
 	// Use real Redis from testutil so Init picks Redis storage path
 	redisClient, err := testutil.NewTestRedisClient()
@@ -143,6 +160,9 @@ func TestInit_WithRedisClient(t *testing.T) {
 func TestInit_StorageErrorFallback(t *testing.T) {
 	auditLogger = nil
 	auditLoggerInit = sync.Once{}
+	auditInitErr = nil
+	config.AuditSpoolDir = t.TempDir()
+	t.Cleanup(func() { _ = Stop() })
 
 	origStorageType := config.AuditStorageType
 	origDBURL := config.AuditDatabaseURL
@@ -187,6 +207,9 @@ func TestSetLoggerConcurrent(t *testing.T) {
 func TestStop_KeepsSharedRedisClientOpen(t *testing.T) {
 	auditLogger = nil
 	auditLoggerInit = sync.Once{}
+	auditInitErr = nil
+	config.AuditSpoolDir = t.TempDir()
+	t.Cleanup(func() { _ = Stop() })
 
 	redisClient, err := testutil.NewTestRedisClient()
 	if err != nil {

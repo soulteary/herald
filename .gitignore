@@ -2,3 +2,5 @@ coverage.*
 audit.log
 *.test
 herald
+
+/audit-spool/

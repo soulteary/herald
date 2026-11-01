@@ -29,6 +29,7 @@ var (
 	nonceReplayTotal       prometheus.Counter
 	challengeStateTotal    *prometheus.CounterVec // label: state
 	auditDroppedTotal      prometheus.Counter
+	auditWriteFailureTotal prometheus.Counter
 )
 
 func init() {
@@ -55,7 +56,8 @@ func Init() {
 	challengeStateTotal = Registry.Counter("challenge_state_total").
 		Help("Challenge state transitions").Labels("state").BuildVec()
 	auditDroppedTotal = Registry.Counter("audit_dropped_total").
-		Help("Audit records dropped due to backend/queue failure").Build()
+		Help("Audit records rejected before durable acceptance").Build()
+	auditWriteFailureTotal = Registry.Counter("audit_write_failure_total").Help("Audit delivery or cleanup failures; undelivered records retained for retry").Build()
 }
 
 // RecordIdempotency records an idempotency outcome. result is one of:
@@ -96,10 +98,17 @@ func RecordChallengeState(state string) {
 	}
 }
 
-// RecordAuditDropped records an audit record dropped due to backend failure.
+// RecordAuditDropped records rejection before durable local acceptance.
 func RecordAuditDropped() {
 	if auditDroppedTotal != nil {
 		auditDroppedTotal.Inc()
+	}
+}
+
+// RecordAuditWriteFailure records a failed delivery whose local copy is retained.
+func RecordAuditWriteFailure() {
+	if auditWriteFailureTotal != nil {
+		auditWriteFailureTotal.Inc()
 	}
 }
 

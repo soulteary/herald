@@ -308,3 +308,15 @@ When `OTLP_ENABLED=true` and `OTLP_ENDPOINT` is set, Herald enables OpenTelemetr
 - [API Documentation](API.md) - API endpoint details
 - [Deployment Guide](DEPLOYMENT.md) - Deployment and configuration
 - [Troubleshooting Guide](TROUBLESHOOTING.md) - Common issues and solutions
+
+## Audit delivery
+
+Alert on `herald_audit_write_failure_total`: backend or cleanup writes failed,
+but undelivered records remain in the local buffer for retry. Monitor pending
+`*.json` files and free space in `AUDIT_SPOOL_DIR`; sustained growth can reach
+`AUDIT_SPOOL_MAX_BYTES` and reject new audit events.
+
+`herald_audit_dropped_total` now counts events rejected before durable local
+acceptance. Such failures return `503/audit_unavailable`; it no longer counts
+recoverable backend delivery failures. Verify that retries drain the buffer
+after storage recovery. Never delete pending files to silence an alert.

@@ -22,6 +22,8 @@ services:
       - REQUEST_AUTH_MODE=api_key
       - API_KEY=${HERALD_API_KEY:?set HERALD_API_KEY}
       - PROVIDER_FAILURE_POLICY=strict
+    volumes:
+      - audit_spool:/var/lib/herald/audit
     depends_on:
       redis:
         condition: service_healthy
@@ -59,3 +61,4 @@ services:
 
 volumes:
   redis_data:
+  audit_spool:

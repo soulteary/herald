@@ -28,3 +28,5 @@ coverage.html
 
 # Compose is not needed inside the build context.
 docker-compose*.yml
+
+/audit-spool/
