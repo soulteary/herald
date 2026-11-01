@@ -1,15 +1,15 @@
 {
   "schema_version": "1.0",
   "tests": {
-    "total": 323,
-    "passed": 321,
+    "total": 325,
+    "passed": 323,
     "failed": 0,
     "skipped": 2
   },
   "coverage": {
-    "covered_statements": 2287,
-    "total_statements": 2392,
-    "percentage": 95.61,
+    "covered_statements": 2295,
+    "total_statements": 2400,
+    "percentage": 95.63,
     "threshold": 95
   },
   "packages": [
@@ -51,9 +51,9 @@
     {
       "name": "internal/handlers",
       "status": "pass",
-      "tests": 93,
+      "tests": 95,
       "failed": 0,
-      "coverage": 94.53
+      "coverage": 94.59
     },
     {
       "name": "internal/idempotency",
