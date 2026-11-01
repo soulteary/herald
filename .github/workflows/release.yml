@@ -188,13 +188,13 @@ jobs:
           body: |
             ## Changes
             
-            See [CHANGELOG](CHANGELOG.md) for details.
+            See [CHANGELOG](https://github.com/${{ github.repository }}/blob/${{ steps.release.outputs.tag }}/CHANGELOG.md) for details.
             
             ## Downloads
             
             ### Docker Image
             ```bash
-            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }}
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
             ```
             
             ### Binaries
