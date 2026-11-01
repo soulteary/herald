@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.12] - 2026-11-01
+
+### Fixed
+
+- Bound OTP creation and v1/v2 verification with a shared, non-queueing hash
+  work budget. Creation previously had no aggregate Argon2 concurrency cap;
+  authenticated requests for distinct identities could exhaust memory when
+  permitted by their configured rate limits.
+- Release capacity before provider delivery and after completed, failed or
+  panicking operations. Canceled work retains its slot until it actually ends.
+  Attempt verification locks once rather than polling with shared capacity held.
+
+### Configuration and compatibility
+
+- `HERALD_MAX_CONCURRENT_HASH_OPERATIONS` is a positive integer, default `4`,
+  local to each handler instance. Size it for the current roughly 64 MiB Argon2
+  cost per operation plus garbage collection and process overhead; it is not
+  a hard RSS limit or a budget shared across replicas.
+- Overload returns `503/backend_unavailable` and `Retry-After: 1`. Rejected
+  creation requests do not reserve rate/cooldown capacity; their pre-send
+  idempotency claims are released when Redis is available. Completed responses
+  remain replayable. Rejected verifications consume no code or attempt.
+- Lock contention immediately returns the existing `409/lock_contention` with
+  `Retry-After: 1`. Retry with the same idempotency key and fresh HMAC timestamp
+  and nonce. Redis records, signature formats and Argon2 parameters are unchanged.
+
+### Validation
+
+- Linux regressions cover shared admission, safe retries/replays, unchanged
+  attempts, slow-provider isolation, lock contention, cancellation and error/panic
+  release. Full race suite passed with 95.7% statement coverage; vet, lint and
+  Linux amd64/arm64 builds passed.
+
 ## [1.3.11] - 2026-11-01
 
 ### Fixed
