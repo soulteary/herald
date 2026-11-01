@@ -26,8 +26,8 @@ type NonceStore struct {
 	ttl    time.Duration
 }
 
-// NewNonceStore creates a NonceStore. ttl should cover the maximum allowed
-// timestamp drift so a nonce cannot be replayed within the acceptance window.
+// NewNonceStore creates a NonceStore. New raises short TTLs to cover the full
+// timestamp acceptance window (2*MaxDrift plus a margin) before using the store.
 func NewNonceStore(client *redis.Client, prefix string, secret []byte, ttl time.Duration) *NonceStore {
 	if prefix == "" {
 		prefix = "otp:nonce:"

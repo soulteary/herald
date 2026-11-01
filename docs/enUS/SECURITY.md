@@ -165,7 +165,7 @@ export HMAC_MAX_DRIFT=60s
 export HMAC_V1_ENABLED=false
 ```
 
-Herald verifies the signature before atomically consuming the nonce in Redis. Reusing a nonce is rejected. The default timestamp drift is 60 seconds. Legacy v1 is disabled by default and should only be enabled temporarily during migration with `HMAC_V1_ENABLED=true`.
+Herald verifies the signature before atomically consuming the nonce in Redis. Reusing a nonce is rejected. The default timestamp drift is 60 seconds. Nonces are retained for at least twice the allowed drift plus 30 seconds (150 seconds by default), covering the full acceptance window even for future-dated requests. Legacy v1 is disabled by default and should only be enabled temporarily during migration with `HMAC_V1_ENABLED=true`.
 
 ### mTLS
 

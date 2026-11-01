@@ -88,6 +88,25 @@ func New(cfg Config) fiber.Handler {
 	if cfg.Clock == nil {
 		cfg.Clock = time.Now
 	}
+	if cfg.NonceStore != nil {
+		// A timestamp first accepted MaxDrift in the future remains acceptable
+		// for another 2*MaxDrift, including the exact lower boundary. Keep a
+		// margin beyond that boundary, and saturate rather than overflow for
+		// unusually large drift settings.
+		const margin = 30 * time.Second
+		const maxTTL = time.Duration(1<<63 - 1)
+		minTTL := maxTTL
+		if cfg.MaxDrift <= (maxTTL-margin)/2 {
+			minTTL = 2*cfg.MaxDrift + margin
+		}
+		// Copy the store so constructing middleware cannot mutate a store
+		// shared with another middleware or a caller using a longer TTL.
+		store := *cfg.NonceStore
+		if store.ttl < minTTL {
+			store.ttl = minTTL
+		}
+		cfg.NonceStore = &store
+	}
 
 	return func(c fiber.Ctx) error {
 		switch cfg.Mode {
