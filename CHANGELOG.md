@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Update the imported herald-totp client module from v1.2.5 to v1.2.6 and document the matching provider deployment pins. Existing authentication, TOTP requests and stored credentials remain compatible.
+
 ## [1.3.13] - 2026-11-02
 
 ### Fixed
