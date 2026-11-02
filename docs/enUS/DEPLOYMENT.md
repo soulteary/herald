@@ -255,6 +255,18 @@ Only when `ENVIRONMENT=test` and `HERALD_TEST_MODE=true`:
 
 **Security:** Always set `HERALD_TEST_MODE=false` in production. Test mode exposes verification codes and must not be used in production environments.
 
+### Provider deployment versions
+
+Pin `ghcr.io/soulteary/herald-dingtalk:1.2.6`,
+`ghcr.io/soulteary/herald-smtp:1.2.6`, and
+`ghcr.io/soulteary/herald-totp:1.2.6` (or their verified immutable digests).
+Herald imports the TOTP client module at v1.2.6. These provider patch versions
+retain the v1 HTTP routes, API-key/HMAC authentication and Redis credential
+formats. Preserve provider credentials, TOTP encryption keys and Redis data;
+there is no data migration from provider v1.2.5. Before restoring traffic,
+check health/readiness and a representative authenticated request. Real email
+and DingTalk sends have external effects; rehearse using isolated destinations.
+
 ### Email channel (herald-smtp)
 
 When `HERALD_SMTP_API_URL` is set, Herald does not use built-in SMTP. It forwards email sends to [herald-smtp](https://github.com/soulteary/herald-smtp) over HTTP. All SMTP credentials and sending logic live in herald-smtp; Herald does not store any SMTP credentials for the email channel in this mode.

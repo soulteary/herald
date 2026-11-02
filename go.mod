@@ -16,7 +16,7 @@ require (
 	github.com/soulteary/challenge-kit v1.10.4
 	github.com/soulteary/cli-kit v1.9.3
 	github.com/soulteary/health-kit/v4 v4.0.5
-	github.com/soulteary/herald-totp v1.2.5
+	github.com/soulteary/herald-totp v1.2.6
 	github.com/soulteary/http-kit/v2 v2.1.0
 	github.com/soulteary/i18n-kit/v4 v4.0.4
 	github.com/soulteary/logger-kit/v3 v3.0.4
@@ -29,6 +29,7 @@ require (
 	github.com/soulteary/version-kit/v4 v4.0.3
 	github.com/stretchr/testify v1.12.1
 	go.opentelemetry.io/otel v1.47.0
+	go.opentelemetry.io/otel/sdk v1.47.0
 	go.opentelemetry.io/otel/trace v1.47.0
 )
 
@@ -68,7 +69,6 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.47.0 // indirect
 	go.opentelemetry.io/otel/log v1.47.0 // indirect
 	go.opentelemetry.io/otel/metric v1.47.0 // indirect
-	go.opentelemetry.io/otel/sdk v1.47.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.11.1 // indirect
 	go.uber.org/atomic v1.12.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.6 // indirect
