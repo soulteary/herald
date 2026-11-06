@@ -339,3 +339,33 @@ See [security](SECURITY.md#provider-failure-diagnostics) for compatibility detai
 There is no separate hash-budget occupancy metric. Observe overload through
 `503/backend_unavailable`, retry headers, runtime memory and request outcomes.
 Do not add raw service/key IDs, destinations or client keys as metric labels.
+
+### Metrics authentication
+
+In production, `/metrics` requires a separate `HERALD_METRICS_API_KEY` of at
+least 32 bytes. If no metrics key is configured, the endpoint returns 401.
+Business API keys do not grant scraping access, and the metrics key does not
+grant OTP or TOTP access. Generate independent random credentials for each.
+Startup rejects reuse of the metrics key as an API key or any configured HMAC
+secret, including in development and test environments.
+
+Development and test environments allow anonymous scraping only when the metrics
+key is unset. Configuring a key protects scraping in every environment. Acceptable
+headers are `Authorization: Bearer <key>` and `X-Metrics-API-Key: <key>`; query
+parameters are not accepted.
+
+Before upgrading production, provision the key and update the scraper together:
+
+```yaml
+scrape_configs:
+  - job_name: herald
+    static_configs:
+      - targets: ['herald:8082']
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/herald_metrics_key
+```
+
+Keep the endpoint on a private network or restrict it at the reverse proxy even
+when authentication is enabled. Liveness and readiness probes are unchanged.

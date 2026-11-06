@@ -8,6 +8,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/rs/zerolog"
 	"github.com/soulteary/herald/internal/metrics"
+	"github.com/soulteary/herald/internal/serviceauth"
 )
 
 // Clock is injectable for deterministic tests.
@@ -17,33 +18,27 @@ type Clock func() time.Time
 type KeyProvider func(keyID string) string
 
 // Mode selects the request-body authentication scheme.
-type Mode string
+type Mode = serviceauth.Mode
 
 const (
-	// ModeHMACV2 selects HMAC authentication; v2/v3 acceptance is route-specific.
-	ModeHMACV2 Mode = "hmac_v2"
-	// ModeAPIKey requires a matching API key (no HMAC).
-	ModeAPIKey Mode = "api_key"
-	// ModeNone disables request-body auth (development only).
-	ModeNone Mode = "none"
+	ModeHMACV2 = serviceauth.ModeHMACV2
+	ModeAPIKey = serviceauth.ModeAPIKey
+	ModeNone   = serviceauth.ModeNone
 )
 
-// ParseMode maps a config string to a Mode, defaulting to ModeHMACV2.
-func ParseMode(s string) Mode {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "api_key", "apikey":
-		return ModeAPIKey
-	case "none", "off", "disabled":
-		return ModeNone
-	default:
-		return ModeHMACV2
-	}
-}
+// ParseMode maps supported aliases; unknown values return an empty mode.
+func ParseMode(s string) Mode { mode, _ := ParseModeStrict(s); return mode }
+
+// ParseModeStrict rejects unrecognized authentication modes.
+func ParseModeStrict(s string) (Mode, error) { return serviceauth.ParseMode(s) }
 
 // Config configures the Herald auth middleware.
 type Config struct {
 	// RequireV3 rejects older HMAC schemes on routes whose side effects depend on idempotency.
 	RequireV3 bool
+
+	// ServicePolicies binds a key to its configured service after signature verification.
+	ServicePolicies serviceauth.ServicePolicies
 
 	Mode Mode
 
@@ -124,8 +119,10 @@ func New(cfg Config) fiber.Handler {
 			return c.Next()
 		case ModeAPIKey:
 			return verifyAPIKey(c, cfg)
-		default:
+		case ModeHMACV2:
 			return verifyHMACV2(c, cfg)
+		default:
+			return deny(c, "invalid_auth_mode")
 		}
 	}
 }
@@ -214,6 +211,12 @@ func verifyHMACV2(c fiber.Ctx, cfg Config) error {
 		return deny(c, "invalid_signature")
 	}
 
+	if cfg.ServicePolicies != nil {
+		policy, ok := cfg.ServicePolicies[lookupKeyID]
+		if !ok || policy.Service != service {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"ok": false, "reason": "forbidden"})
+		}
+	}
 	if cfg.NonceStore == nil {
 		return deny(c, "unauthorized")
 	}

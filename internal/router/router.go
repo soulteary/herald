@@ -203,6 +203,14 @@ func NewRouterWithClientAndHandlers(redisClient *redis.Client, log *logger.Logge
 // NewRouterWithClientAndHandlersE creates a router and reports handler/provider
 // initialization failures to the startup path.
 func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logger) (*RouterWithHandlers, error) {
+	authMode, err := auth.ParseModeStrict(config.RequestAuthMode)
+	if err != nil {
+		return nil, err
+	}
+	policies, err := config.ServicePolicies()
+	if err != nil {
+		return nil, err
+	}
 	corsOrigins, err := config.CORSOrigins()
 	if err != nil {
 		return nil, err
@@ -298,7 +306,7 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 	})
 
 	// Prometheus metrics endpoint
-	app.Get("/metrics", metricsfiber.HandlerFor(metrics.Registry))
+	app.Get("/metrics", metricsAuthMiddleware(config.MetricsAPIKey, config.IsProduction()), metricsfiber.HandlerFor(metrics.Registry))
 
 	// Test mode endpoint: build a separate app so the route can only be exposed
 	// on the dedicated loopback/admin listener. It is never part of the public
@@ -331,7 +339,6 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 	//   - there is no silent HMAC -> API-key downgrade,
 	//   - client-cert (mTLS) handling is independent of request-body auth.
 	zerologLogger := log.Zerolog()
-	authMode := auth.ParseMode(config.RequestAuthMode)
 
 	// Legacy v1 handler (middleware-kit) is only constructed when explicitly
 	// enabled for a migration cycle.
@@ -359,18 +366,20 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 	// Auth middleware enforces nonce retention from its effective MaxDrift.
 	nonceStore := auth.NewNonceStore(redisClient, config.NonceStorePrefix, []byte(config.IdempotencySecret), 0)
 	authConfig := auth.Config{
-		Mode:         authMode,
-		KeyProvider:  config.GetHMACSecret,
-		DefaultKeyID: defaultKeyID,
-		APIKey:       config.APIKey,
-		NonceStore:   nonceStore,
-		MaxDrift:     config.HMACMaxDrift,
-		V1Enabled:    config.HMACV1Enabled,
-		V1Handler:    v1Handler,
-		FailClosed:   config.IsProduction(),
-		Logger:       &zerologLogger,
+		Mode:            authMode,
+		ServicePolicies: policies,
+		KeyProvider:     config.GetHMACSecret,
+		DefaultKeyID:    defaultKeyID,
+		APIKey:          config.APIKey,
+		NonceStore:      nonceStore,
+		MaxDrift:        config.HMACMaxDrift,
+		V1Enabled:       config.HMACV1Enabled,
+		V1Handler:       v1Handler,
+		FailClosed:      config.IsProduction(),
+		Logger:          &zerologLogger,
 	}
 	authHandler := auth.New(authConfig)
+	authorize := func(action string) fiber.Handler { return auth.AuthorizeService(policies, action) }
 	// All HMAC creation requests require v3, even without a key. Otherwise
 	// stripping an unsigned key from a v2 request would bypass the binding.
 	createAuthConfig := authConfig
@@ -379,23 +388,23 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 
 	// OTP routes
 	otp := api.Group("/otp")
-	otp.Post("/challenges", createAuthHandler, h.CreateChallenge)
-	otp.Post("/verifications", authHandler, h.VerifyChallenge)
-	otp.Post("/challenges/:id/revoke", authHandler, h.RevokeChallenge)
+	otp.Post("/challenges", createAuthHandler, authorize("otp:create"), h.CreateChallenge)
+	otp.Post("/verifications", authHandler, authorize("otp:verify"), h.VerifyChallenge)
+	otp.Post("/challenges/:id/revoke", authHandler, authorize("otp:revoke"), h.RevokeChallenge)
 
 	// v2 OTP routes: context-bound verification. v1 is kept for backward
 	// compatibility; new integrations should prefer v2.
 	apiV2 := app.Group("/v2")
 	otpV2 := apiV2.Group("/otp")
-	otpV2.Post("/verifications", authHandler, h.VerifyChallengeV2)
+	otpV2.Post("/verifications", authHandler, authorize("otp:verify"), h.VerifyChallengeV2)
 
 	// TOTP proxy routes (forward to herald-totp when HERALD_TOTP_ENABLED and HERALD_TOTP_BASE_URL are set)
 	totp := api.Group("/totp")
-	totp.Get("/status", authHandler, h.TOTPStatus)
-	totp.Post("/verify", authHandler, h.TOTPVerify)
-	totp.Post("/enroll/start", authHandler, h.TOTPEnrollStart)
-	totp.Post("/enroll/confirm", authHandler, h.TOTPEnrollConfirm)
-	totp.Post("/revoke", authHandler, h.TOTPRevoke)
+	totp.Get("/status", authHandler, authorize("totp:status"), h.TOTPStatus)
+	totp.Post("/verify", authHandler, authorize("totp:verify"), h.TOTPVerify)
+	totp.Post("/enroll/start", authHandler, authorize("totp:enroll"), h.TOTPEnrollStart)
+	totp.Post("/enroll/confirm", authHandler, authorize("totp:enroll"), h.TOTPEnrollConfirm)
+	totp.Post("/revoke", authHandler, authorize("totp:revoke"), h.TOTPRevoke)
 
 	return &RouterWithHandlers{
 		App:      app,

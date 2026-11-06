@@ -13,6 +13,7 @@ func validateProductionSecretMaterial() []string {
 	}
 
 	check("API_KEY", APIKey)
+	check("HERALD_METRICS_API_KEY", MetricsAPIKey)
 	check("HMAC_SECRET", HMACSecret)
 	check("HERALD_IDEMPOTENCY_SECRET", IdempotencySecret)
 	check("HERALD_PII_PEPPER", PIIPepper)
@@ -22,4 +23,20 @@ func validateProductionSecretMaterial() []string {
 		}
 	}
 	return problems
+}
+
+// strictCredentialProblems prevents a read-only scraping credential from also
+// authenticating business requests, in every deployment environment.
+func strictCredentialProblems() []string {
+	if MetricsAPIKey == "" {
+		return nil
+	}
+	reused := MetricsAPIKey == APIKey || MetricsAPIKey == HMACSecret
+	for _, secret := range hmacKeysMap {
+		reused = reused || MetricsAPIKey == secret
+	}
+	if reused {
+		return []string{"HERALD_METRICS_API_KEY must differ from all business authentication secrets"}
+	}
+	return nil
 }
