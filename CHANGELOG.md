@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   responses still fail as `502/proxy_failed`.
 
 
+### Dependencies
+
+- Pin the merged herald-totp/v2 confirmation-quota fix at `8d40647e0f85` using
+  its real Go pseudo-version. Published v2.0.0 remains unchanged.
+
 ## [1.4.0] - 2026-11-07
 
 ### Security changes
