@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve a complete upstream enrollment-confirmation rate-limit response as
+  `429/rate_limited` instead of masking it as a proxy failure. Return fixed error
+  fields without forwarding upstream bodies or headers; truncated or oversized
+  responses still fail as `502/proxy_failed`.
+
+
 ## [1.4.0] - 2026-11-07
 
 ### Security changes

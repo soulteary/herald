@@ -16,6 +16,7 @@ func TestClassifyEnrollConfirmError(t *testing.T) {
 		reason string
 	}{
 		{name: "invalid enrollment", err: &heraldtotp.HTTPError{StatusCode: 400}, status: fiber.StatusBadRequest, reason: "invalid"},
+		{name: "rate limited", err: &heraldtotp.HTTPError{StatusCode: 429, Body: "untrusted upstream body"}, status: fiber.StatusTooManyRequests, reason: "rate_limited"},
 		{name: "upstream failure", err: &heraldtotp.HTTPError{StatusCode: 500}, status: fiber.StatusBadGateway, reason: "proxy_failed"},
 		{name: "untrusted error text", err: errors.New("enroll/confirm returned 400: invalid"), status: fiber.StatusBadGateway, reason: "proxy_failed"},
 		{name: "transport failure", err: errors.New("connection refused"), status: fiber.StatusBadGateway, reason: "proxy_failed"},

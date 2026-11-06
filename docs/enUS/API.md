@@ -404,7 +404,7 @@ Confirm TOTP enrollment with a code from the app.
 }
 ```
 
-**Response:** Proxied from herald-totp. On failure, Herald may return `400` with `invalid` or proxy error.
+**Response:** Proxied from herald-totp. A complete upstream `400` returns `400/invalid`; a complete upstream `429` returns `429/rate_limited`. Other upstream failures, incomplete responses and oversized bodies return `502/proxy_failed`. Upstream error bodies and headers are not forwarded.
 
 #### Revoke TOTP
 
