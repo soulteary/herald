@@ -16,7 +16,7 @@ require (
 	github.com/soulteary/challenge-kit v1.10.5-0.20261106114854-bd13b0bb3478
 	github.com/soulteary/cli-kit v1.9.3
 	github.com/soulteary/health-kit/v4 v4.0.5
-	github.com/soulteary/herald-totp v1.2.6
+	github.com/soulteary/herald-totp v1.2.9-0.20261106120143-a63b98b0523d
 	github.com/soulteary/http-kit/v2 v2.1.0
 	github.com/soulteary/i18n-kit/v4 v4.0.4
 	github.com/soulteary/logger-kit/v3 v3.0.4
@@ -39,6 +39,7 @@ require (
 	atomicgo.dev/schedule v0.1.0 // indirect
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/boombuler/barcode v1.1.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
@@ -58,6 +59,7 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/pandatix/go-abnf v0.5.5 // indirect
 	github.com/philhofer/fwd v1.2.1 // indirect
+	github.com/pquerna/otp v1.5.0 // indirect
 	github.com/prometheus/common v0.73.1 // indirect
 	github.com/prometheus/procfs v0.23.0 // indirect
 	github.com/tinylib/msgp v1.6.5 // indirect
