@@ -3,9 +3,6 @@ package handlers
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"github.com/stretchr/testify/require"
@@ -124,11 +121,11 @@ func TestTOTPSecurityAllEndpointsDenyRedirects(t *testing.T) {
 func TestTOTPSecurityPreservesSuccessfulWireContract(t *testing.T) {
 	for _, endpoint := range totpSecurityEndpoints {
 		t.Run(endpoint.path, func(t *testing.T) {
-			type observed struct{ method, path, subject, contentType, apiKey, service, timestamp, signature, body string }
+			type observed struct{ method, path, query, subject, contentType, apiKey, service, timestamp, signature, version, keyID, nonce, body string }
 			requests := make(chan observed, 1)
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				body, _ := io.ReadAll(r.Body)
-				requests <- observed{r.Method, r.URL.Path, r.URL.Query().Get("subject"), r.Header.Get("Content-Type"), r.Header.Get("X-API-Key"), r.Header.Get("X-Service"), r.Header.Get("X-Timestamp"), r.Header.Get("X-Signature"), string(body)}
+				requests <- observed{r.Method, r.URL.EscapedPath(), r.URL.RawQuery, r.URL.Query().Get("subject"), r.Header.Get("Content-Type"), r.Header.Get("X-API-Key"), r.Header.Get("X-Service"), r.Header.Get("X-Timestamp"), r.Header.Get("X-Signature"), r.Header.Get("X-Signature-Version"), r.Header.Get("X-Key-Id"), r.Header.Get("X-Nonce"), string(body)}
 				_, _ = io.WriteString(w, endpoint.response)
 			}))
 			defer upstream.Close()
@@ -148,14 +145,14 @@ func TestTOTPSecurityPreservesSuccessfulWireContract(t *testing.T) {
 			}
 			r := <-requests
 			path := strings.Split(endpoint.path, "?")[0]
-			if r.path != "/proxy/v1"+path || r.method != endpoint.method || r.apiKey != "totp-api-secret" || r.service != "stargate" || r.timestamp == "" {
+			if r.path != "/proxy/v1"+path || r.method != endpoint.method || r.apiKey != "" || r.service != "stargate" || r.timestamp == "" {
 				t.Fatalf("request changed: %+v", r)
 			}
-			mac := hmac.New(sha256.New, []byte("totp-hmac-secret"))
-			_, _ = io.WriteString(mac, r.timestamp+":stargate:"+r.body)
-			if r.signature != hex.EncodeToString(mac.Sum(nil)) {
-				t.Fatal("HMAC wire format changed")
+			expected := heraldtotp.SignV2("totp-hmac-secret", heraldtotp.RequestSignature{Method: r.method, Path: r.path, Query: r.query, KeyID: r.keyID, Timestamp: r.timestamp, Service: r.service, Nonce: r.nonce, Body: []byte(r.body)})
+			if r.signature != expected || r.version != "v2" || len(r.nonce) != 32 {
+				t.Fatal("operation-bound TOTP signature missing")
 			}
+
 			if endpoint.method == http.MethodGet {
 				if r.subject != "user+tag@example.com" || r.body != "" {
 					t.Fatalf("query changed: %+v", r)

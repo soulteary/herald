@@ -111,8 +111,8 @@ fails activation without discarding the current one.
 An activation error still fails the creation request. If an idempotency key was
 used, the sending record remains non-expiring: retrying the same key returns
 `delivery_unknown`, rather than sending another code. A lost activation reply
-can mean both old and new codes were invalidated; reconcile delivery before
-retrying with another key.
+can mean the replacement is already active and the previous code was invalidated;
+reconcile delivery before retrying with another key.
 
 Challenge record keys and lifetimes are preserved; activation indexes migrate as
 described under "Activation index upgrade" below. No new configuration is required. This fix does not scan for
@@ -565,3 +565,15 @@ Preserve unresolved sending records and the idempotency derivation secret.
 Reconcile legacy conflicts using delivery/audit evidence; do not switch client
 keys or clear non-expiring records to force a resend. Completed legacy records
 keep their ordinary expiry. See [upgrade requirements](DEPLOYMENT.md#hmac-identity-upgrade).
+
+### Pending challenge state
+
+New challenges cannot be verified before activation. If activation and pending
+cleanup both fail, the original pending record may remain until expiry but
+verification returns `not_active` without consuming an attempt. A successful
+activation preserves the record's remaining lifetime. If its reply is lost, the
+record may already be active; pending cleanup leaves that committed state intact.
+Creation still reports an error and an unresolved idempotency key still returns
+`delivery_unknown`. Follow the pending-protocol migration procedure in
+[MIGRATION_V2.md](MIGRATION_V2.md#pending-challenge-verification-protocol) before
+upgrading or rolling back a running cluster.

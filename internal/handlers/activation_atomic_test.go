@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -59,7 +60,7 @@ func TestResendCannotLeaveSupersededCodeRedeemable(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 200, first.status)
 	old := <-p.messages
-	hook := &failSupersededDelete{key: "otp:ch:" + old.id}
+	hook := &failSupersededDelete{key: challengeRecordPrefix + old.id}
 	rc.AddHook(hook)
 	mr.FastForward(61 * time.Second)
 	second, err := idemRequest(app, "second", faultBody)
@@ -83,7 +84,7 @@ func (*activationReplyFault) ProcessPipelineHook(next redis.ProcessPipelineHook)
 }
 func (h *activationReplyFault) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
 	return func(ctx context.Context, cmd redis.Cmder) error {
-		if cmd.Name() == "eval" && len(cmd.Args()) > 1 && cmd.Args()[1] == activateAndRevokeScript {
+		if cmd.Name() == "eval" && len(cmd.Args()) > 1 && (cmd.Args()[1] == activateAndRevokeScript || strings.Contains(fmt.Sprint(cmd.Args()[1]), "challenge changed before activation")) {
 			if h.after {
 				if err := next(ctx, cmd); err != nil {
 					return err
@@ -117,8 +118,8 @@ func TestActivationFailureKeepsDeliveryUncertainWithoutResend(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, 500, second.status)
 			replacement := <-p.messages
-			require.False(t, mr.Exists("otp:ch:"+replacement.id))
-			require.Equal(t, !after, mr.Exists("otp:ch:"+old.id))
+			require.Equal(t, after, mr.Exists(challengeRecordPrefix+replacement.id), "committed active code survives ambiguous cleanup")
+			require.Equal(t, !after, mr.Exists(challengeRecordPrefix+old.id))
 			retry, err := idemRequest(app, "new-key", faultBody)
 			require.NoError(t, err)
 			require.Equal(t, 409, retry.status)

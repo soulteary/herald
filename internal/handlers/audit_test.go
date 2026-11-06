@@ -139,7 +139,7 @@ func TestStrictRevocationSurvivesAuditFailure(t *testing.T) {
 	if id == "" {
 		t.Fatal("provider was not called after the initial audit")
 	}
-	exists, err := rc.Exists(context.Background(), "otp:ch:"+id).Result()
+	exists, err := rc.Exists(context.Background(), challengeRecordPrefix+id).Result()
 	require.NoError(t, err)
 	if exists != 0 {
 		t.Fatalf("strict-policy challenge %s survived failed result auditing", id)
@@ -161,6 +161,8 @@ func checkAuditVerificationAndRevoke(t *testing.T, app *fiber.App, h *Handlers, 
 	t.Helper()
 	for _, path := range []string{"/v1/otp/verifications", "/v2/otp/verifications", "revoke"} {
 		ch, code, err := h.challengeManager.Create(context.Background(), challengekit.CreateRequest{UserID: "u", Channel: challengekit.ChannelEmail, Destination: "a@b.com", Purpose: "login"})
+		require.NoError(t, err)
+		_, err = h.challengeManager.SwapActive(context.Background(), ch)
 		require.NoError(t, err)
 		body := map[string]string{"challenge_id": ch.ID, "code": code}
 		if strings.HasPrefix(path, "/v2") {

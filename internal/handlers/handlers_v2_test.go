@@ -28,7 +28,7 @@ func setupV2(t *testing.T) (*Handlers, *challengekit.Challenge, string) {
 
 	handlers := NewHandlers(redisClient, testLogger())
 
-	challengeMgr := challengekit.NewManager(redisClient, challengekit.Config{
+	challengeMgr := newActiveTestChallengeManager(redisClient, challengekit.Config{
 		Expiry:          config.ChallengeExpiry,
 		MaxAttempts:     config.MaxAttempts,
 		LockoutDuration: config.LockoutDuration,
