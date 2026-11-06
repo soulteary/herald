@@ -37,6 +37,7 @@ func validateStrictSettings() error {
 	var problems []string
 
 	problems = append(problems, strictEnumProblems()...)
+	problems = append(problems, strictCredentialProblems()...)
 	problems = append(problems, strictProxyProblems()...)
 	problems = append(problems, strictHTTPProblems()...)
 	problems = append(problems, strictDeliveryProblems()...)

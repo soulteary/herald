@@ -101,3 +101,32 @@ func TestInitializePolicyRejectsMalformedHMACKeys(t *testing.T) {
 		t.Fatal("malformed key map accepted with policies")
 	}
 }
+
+func TestMetricsCredentialCannotAuthenticateBusinessRequests(t *testing.T) {
+	oldMetrics, oldAPI, oldHMAC, oldKeys := MetricsAPIKey, APIKey, HMACSecret, hmacKeysMap
+	defer func() { MetricsAPIKey, APIKey, HMACSecret, hmacKeysMap = oldMetrics, oldAPI, oldHMAC, oldKeys }()
+	for _, tc := range []struct {
+		name, metrics, api, hmac string
+		keys                     map[string]string
+		bad                      bool
+	}{
+		{name: "disabled"},
+		{name: "distinct", metrics: "metrics", api: "api", hmac: "hmac", keys: map[string]string{"k": "other"}},
+		{name: "API key", metrics: "shared", api: "shared", bad: true},
+		{name: "single HMAC", metrics: "shared", hmac: "shared", bad: true},
+		{name: "rotation key", metrics: "shared", keys: map[string]string{"primary": "other", "rotating": "shared"}, bad: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			MetricsAPIKey, APIKey, HMACSecret, hmacKeysMap = tc.metrics, tc.api, tc.hmac, tc.keys
+			problems := strictCredentialProblems()
+			if (len(problems) > 0) != tc.bad {
+				t.Fatalf("problems=%v", problems)
+			}
+			if tc.bad {
+				if err := validateStrictSettings(); err == nil || !strings.Contains(err.Error(), "must differ") {
+					t.Fatalf("strict validation error=%v", err)
+				}
+			}
+		})
+	}
+}

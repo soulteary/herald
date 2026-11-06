@@ -2,8 +2,13 @@ package router
 
 import (
 	"fmt"
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -89,6 +94,64 @@ func TestRouterAppliesServicePoliciesToEveryProtectedRoute(t *testing.T) {
 		_ = resp.Body.Close()
 		if resp.StatusCode != tc.want {
 			t.Errorf("%s: status=%d,want %d", tc.path, resp.StatusCode, tc.want)
+		}
+	}
+}
+
+func TestReaderPolicyAllowsVerificationWithoutBusinessSideEffects(t *testing.T) {
+	defer withV2Config(t)()
+	oldPolicy, oldAudit, oldTOTP, oldBase, oldEnv := config.ServicePoliciesJSON, config.AuditEnabled, config.TOTPEnabled, config.TOTPBaseURL, config.Env
+	defer func() {
+		config.ServicePoliciesJSON, config.AuditEnabled, config.TOTPEnabled, config.TOTPBaseURL, config.Env = oldPolicy, oldAudit, oldTOTP, oldBase, oldEnv
+	}()
+	var upstreamCalls atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { upstreamCalls.Add(1); w.WriteHeader(200) }))
+	defer upstream.Close()
+	config.ServicePoliciesJSON = `{"default":{"service":"reader","actions":["otp:verify"]}}`
+	config.AuditEnabled, config.TOTPEnabled, config.TOTPBaseURL, config.Env = false, true, upstream.URL, config.EnvDevelopment
+	mr := miniredis.RunT(t)
+	rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer func() { _ = rc.Close() }()
+	rw := NewRouterWithClientAndHandlers(rc, testLogger())
+	for i, tc := range []struct {
+		path, body string
+		want       int
+		reason     string
+	}{
+		{"/v1/otp/verifications", `{}`, 400, "challenge_id_required"},
+		{"/v1/otp/challenges", `{"user_id":"user","channel":"email","destination":"user@example.com","purpose":"login"}`, 403, "forbidden"},
+		{"/v1/totp/revoke", `{"subject":"other-user"}`, 403, "forbidden"},
+	} {
+		req := httptest.NewRequest("POST", tc.path, strings.NewReader(tc.body))
+		req.Header.Set("Content-Type", "application/json")
+		for k, v := range v3Sign("v2-secret", "", "reader", "POST", tc.path, "", fmt.Sprintf("reader-%d", i), time.Now().Unix(), []byte(tc.body)) {
+			req.Header.Set(k, v)
+		}
+		resp, err := rw.App.Test(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode != tc.want || !strings.Contains(string(body), tc.reason) {
+			t.Fatalf("%s status=%d body=%s", tc.path, resp.StatusCode, body)
+		}
+	}
+	if upstreamCalls.Load() != 0 {
+		t.Fatalf("denied TOTP revoke reached upstream %d times", upstreamCalls.Load())
+	}
+	// Verified requests consume nonces, including action denials. No challenge,
+	// limiter, audit, or idempotency records may be created by these requests.
+	keys := mr.Keys()
+	if len(keys) != 3 {
+		t.Fatalf("expected exactly 3 consumed nonces, got %v", keys)
+	}
+	for _, key := range keys {
+		if !strings.HasPrefix(key, config.NonceStorePrefix) {
+			t.Fatalf("unexpected backend mutation: %s", key)
 		}
 	}
 }
