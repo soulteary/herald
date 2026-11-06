@@ -1,7 +1,9 @@
 package config
 
 import (
+	logger "github.com/soulteary/logger-kit/v3"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -58,5 +60,44 @@ func TestMetricsProductionSecretLength(t *testing.T) {
 		if found != tc.bad {
 			t.Fatalf("key length=%d invalid=%v", len(tc.key), found)
 		}
+	}
+}
+
+func TestServicePoliciesRejectSharedSecretsAcrossAllKeys(t *testing.T) {
+	oldPolicy, oldMode, oldV1, oldMap := ServicePoliciesJSON, RequestAuthMode, HMACV1Enabled, hmacKeysMap
+	defer func() {
+		ServicePoliciesJSON, RequestAuthMode, HMACV1Enabled, hmacKeysMap = oldPolicy, oldMode, oldV1, oldMap
+	}()
+	ServicePoliciesJSON = `{"admin":{"service":"admin","actions":["totp:revoke"]}}`
+	RequestAuthMode, HMACV1Enabled = "hmac_v2", false
+	for _, keys := range []map[string]string{
+		{"admin": "shared", "reader": "shared"},
+		{"admin": "admin-secret", "unmapped-a": "shared", "unmapped-b": "shared"},
+	} {
+		hmacKeysMap = keys
+		if _, err := ServicePolicies(); err == nil || !strings.Contains(err.Error(), "distinct secrets") {
+			t.Fatalf("shared keys error=%v", err)
+		}
+	}
+	hmacKeysMap = map[string]string{"admin": "admin-secret", "reader": "reader-secret"}
+	if _, err := ServicePolicies(); err != nil {
+		t.Fatalf("distinct keys error=%v", err)
+	}
+}
+
+func TestInitializePolicyRejectsMalformedHMACKeys(t *testing.T) {
+	oldPolicy, oldRaw := ServicePoliciesJSON, HMACKeysJSON
+	oldMap, oldDefault := hmacKeysMap, hmacDefaultKeyID
+	defer func() {
+		ServicePoliciesJSON, HMACKeysJSON = oldPolicy, oldRaw
+		hmacKeysMap, hmacDefaultKeyID = oldMap, oldDefault
+		hmacKeysMapOnce = sync.Once{}
+	}()
+	ServicePoliciesJSON = `{"default":{"service":"gateway","actions":["otp:verify"]}}`
+	HMACKeysJSON = "{"
+	hmacKeysMap = nil
+	hmacKeysMapOnce = sync.Once{}
+	if err := Initialize(logger.New(logger.Config{Level: logger.ErrorLevel, Format: logger.FormatJSON})); err == nil {
+		t.Fatal("malformed key map accepted with policies")
 	}
 }

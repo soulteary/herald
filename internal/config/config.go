@@ -258,6 +258,9 @@ func Initialize(l *logger.Logger) error {
 	// Parse HMAC keys if provided
 	if HMACKeysJSON != "" {
 		if err := parseHMACKeys(); err != nil {
+			if strings.TrimSpace(ServicePoliciesJSON) != "" {
+				return err
+			}
 			log.Warn().Err(err).Msg("Failed to parse HERALD_HMAC_KEYS, falling back to HMAC_SECRET")
 		} else {
 			log.Info().Int("count", len(hmacKeysMap)).Msg("HMAC keys loaded")

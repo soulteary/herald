@@ -409,7 +409,10 @@ map of HMAC key IDs to fixed service names and allowed actions:
 }
 ```
 
-Configure corresponding secrets in `HERALD_HMAC_KEYS`. In single-secret mode,
+Configure distinct random secrets for every key in `HERALD_HMAC_KEYS`, including
+keys omitted from the policy. Shared secrets are rejected when policies are
+enabled: a caller with a shared secret could otherwise sign as a privileged key ID.
+Invalid HMAC key maps cannot fall back to a single secret in policy mode. In single-secret mode,
 the only key ID is `default`. Policies require `REQUEST_AUTH_MODE=hmac_v2` and
 `HMAC_V1_ENABLED=false`. Unknown keys and mismatched signed `X-Service` values
 are rejected; callers cannot select their service identity by changing a header.
