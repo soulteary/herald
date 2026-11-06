@@ -1,11 +1,11 @@
 # Go Report Card
 
-**Grade: A+** (100.0%)
+**Grade: A+** (99.5%)
 
 | Metric | Value |
 | ------ | ----- |
-| Files | 110 |
-| Issues | 0 |
+| Files | 125 |
+| Issues | 5 |
 
 ## Checks
 
@@ -14,11 +14,24 @@
 | gofmt | 100% |
 | go_vet | 100% |
 | ineffassign | 100% |
-| gocyclo | 100% |
+| gocyclo | 96% |
 | license | 100% |
 | misspell | 100% |
 
-No issues found. Nice work!
+## Issues
+
+### gocyclo
+
+- `internal/router/router.go`
+  - Line 205: cyclomatic complexity 16 for function NewRouterWithClientAndHandlersE
+- `internal/config/config.go`
+  - Line 237: cyclomatic complexity 16 for function Initialize
+- `internal/auth/middleware.go`
+  - Line 144: cyclomatic complexity 18 for function verifyHMACV2
+- `internal/handlers/totp_security_test.go`
+  - Line 121: cyclomatic complexity 17 for function TestTOTPSecurityPreservesSuccessfulWireContract
+- `internal/serviceauth/policy.go`
+  - Line 27: cyclomatic complexity 16 for function ParseServicePolicies
 
 ---
 
