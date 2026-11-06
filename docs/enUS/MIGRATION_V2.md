@@ -247,8 +247,8 @@ requires v3. The legacy v1 fallback remains deprecated and has no nonce protecti
 ## Pending challenge verification protocol
 
 Herald now enables challenge-kit's `RequireActiveVerification` and uses separate
-record (`otp:ch:v2:`), verification-lock (`otp:vlock:v2:`), and activation-index
-(`otp:active:strict:v2:`) namespaces. Creation stores a pending record; provider
+record (`otp2:ch:`), verification-lock (`otp2:vlock:`), and activation-index
+(`otp2:active:v2:`) namespaces. Creation stores a pending record; provider
 success alone does not make it redeemable. Activation changes its state and
 supersedes the prior active code atomically. A failed activation and failed cleanup
 can leave a pending record until its original TTL, but verification rejects it.
@@ -257,7 +257,10 @@ Stop creation, drain in-flight requests, wait the maximum configured previous
 challenge lifetime, and replace all Herald instances before resuming. Do not
 fallback to `otp:ch:` on a miss or point an older binary at the new prefix. Older
 challenge-kit versions ignore activation state; namespace isolation prevents them
-from seeing new pending records. Existing user lockouts remain in `otp:lock:`.
+from seeing new pending records. The new record prefix is not an extension of
+`otp:ch:`: older verifiers concatenate unvalidated challenge IDs to that prefix,
+so a suffix-only namespace such as `otp:ch:v2:` can still be reached by supplying
+`v2:<new-id>`. Existing user lockouts remain in `otp:lock:`.
 
 Keep `otp:idem2:*`, its derivation secret, nonce state and audit volumes intact.
 Unresolved `sending` records still return `delivery_unknown` and require provider

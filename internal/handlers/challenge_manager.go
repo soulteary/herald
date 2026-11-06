@@ -15,9 +15,9 @@ import (
 // Separate record and mutex namespaces prevent older verifiers, which ignore
 // activation_state, from redeeming newly pending challenges.
 const (
-	challengeRecordPrefix      = "otp:ch:v2:"
-	challengeVerifyLockPrefix  = "otp:vlock:v2:"
-	challengeActiveIndexPrefix = "otp:active:strict:"
+	challengeRecordPrefix      = "otp2:ch:"
+	challengeVerifyLockPrefix  = "otp2:vlock:"
+	challengeActiveIndexPrefix = "otp2:active:"
 )
 
 // The compatibility manager swaps the index and asks its caller to revoke the old

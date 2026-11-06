@@ -90,3 +90,21 @@ func TestUnactivatedCodeCannotVerifyAfterActivationAndCleanupFailure(t *testing.
 	require.Equal(t, 409, retry.status)
 	require.Contains(t, string(retry.body), "delivery_unknown")
 }
+
+// Prefix separation must hold independently of activation-state decoding: old
+// challenge-kit versions concatenate arbitrary challenge IDs to their prefix.
+func TestStrictRecordNamespaceCannotAliasLegacyChallengeIDs(t *testing.T) {
+	const oldPrefix = "otp:ch:"
+	require.False(t, strings.HasPrefix(challengeRecordPrefix, oldPrefix))
+	mr := miniredis.RunT(t)
+	rc := redis.NewClient(&redis.Options{Addr: mr.Addr(), MaxRetries: -1})
+	defer func() { _ = rc.Close() }()
+	h := newIdemHandlers(t, rc)
+	ch, _, err := h.challengeManager.Create(context.Background(), challengekit.CreateRequest{UserID: "user", Channel: challengekit.ChannelEmail, Destination: "user@example.com", Purpose: "login"})
+	require.NoError(t, err)
+	require.True(t, mr.Exists(challengeRecordPrefix+ch.ID))
+	for _, id := range []string{ch.ID, "v2:" + ch.ID, "otp2:" + ch.ID} {
+		_, err := rc.Get(context.Background(), oldPrefix+id).Result()
+		require.ErrorIs(t, err, redis.Nil, "old record-prefix concatenation must not find new pending records")
+	}
+}
