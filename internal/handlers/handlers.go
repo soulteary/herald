@@ -17,7 +17,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	challengekit "github.com/soulteary/challenge-kit"
-	"github.com/soulteary/herald-totp/pkg/heraldtotp"
+	"github.com/soulteary/herald-totp/v2/pkg/heraldtotp"
 	provider "github.com/soulteary/provider-kit"
 	"github.com/soulteary/tracing-kit/v2"
 

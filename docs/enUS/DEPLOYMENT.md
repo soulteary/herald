@@ -259,13 +259,18 @@ Only when `ENVIRONMENT=test` and `HERALD_TEST_MODE=true`:
 
 Pin `ghcr.io/soulteary/herald-dingtalk:1.2.6`,
 `ghcr.io/soulteary/herald-smtp:1.2.6`, and
-`ghcr.io/soulteary/herald-totp:1.2.6` (or their verified immutable digests).
-Herald imports the TOTP client module at v1.2.6. These provider patch versions
-retain the v1 HTTP routes, API-key/HMAC authentication and Redis credential
-formats. Preserve provider credentials, TOTP encryption keys and Redis data;
-there is no data migration from provider v1.2.5. Before restoring traffic,
-check health/readiness and a representative authenticated request. Real email
-and DingTalk sends have external effects; rehearse using isolated destinations.
+`ghcr.io/soulteary/herald-totp:2.0.0` (or verified immutable digests).
+Herald v1.4.0 imports `github.com/soulteary/herald-totp/v2` v2.0.0. SMTP and
+DingTalk retain their existing patch-level interfaces. TOTP keeps its `/v1` HTTP
+routes and credential storage, but its HMAC protocol changes to operation-bound
+v2 with nonce protection. Upgrade the TOTP service and Herald proxy together;
+old HMAC signatures are not accepted. API-key-only mode remains available.
+Preserve provider credentials, TOTP encryption keys and Redis data. Before
+restoring traffic, check health/readiness and an authenticated operation using
+the deployed mode. See [security requirements](SECURITY.md) and the
+[pending challenge migration](MIGRATION_V2.md#pending-challenge-verification-protocol).
+Real email and DingTalk sends have external effects; rehearse using isolated
+destinations.
 
 ### Email channel (herald-smtp)
 

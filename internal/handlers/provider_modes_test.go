@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/soulteary/herald-totp/pkg/heraldtotp"
+	"github.com/soulteary/herald-totp/v2/pkg/heraldtotp"
 	"github.com/soulteary/herald/internal/config"
 	provider "github.com/soulteary/provider-kit"
 )
