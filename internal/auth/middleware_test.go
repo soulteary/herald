@@ -60,7 +60,7 @@ func TestParseMode(t *testing.T) {
 	tests := map[string]Mode{
 		"api_key": ModeAPIKey, " APIKEY ": ModeAPIKey,
 		"none": ModeNone, "off": ModeNone, "DISABLED": ModeNone,
-		"hmac_v2": ModeHMACV2, "unknown": ModeHMACV2,
+		"hmac_v2": ModeHMACV2, "unknown": "",
 	}
 	for input, want := range tests {
 		if got := ParseMode(input); got != want {

@@ -13,6 +13,7 @@ func validateProductionSecretMaterial() []string {
 	}
 
 	check("API_KEY", APIKey)
+	check("HERALD_METRICS_API_KEY", MetricsAPIKey)
 	check("HMAC_SECRET", HMACSecret)
 	check("HERALD_IDEMPOTENCY_SECRET", IdempotencySecret)
 	check("HERALD_PII_PEPPER", PIIPepper)

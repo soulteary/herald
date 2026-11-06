@@ -285,7 +285,7 @@ func TestParseEnvironment(t *testing.T) {
 		"test":        EnvTest,
 		"development": EnvDevelopment,
 		"":            EnvDevelopment,
-		"garbage":     EnvDevelopment,
+		"garbage":     "",
 	}
 	for in, want := range cases {
 		if got := parseEnvironment(in); got != want {

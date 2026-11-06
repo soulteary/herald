@@ -477,3 +477,20 @@ rolling back too: older releases accept mixed wildcard lists. Development/test
 wildcard support, valid explicit lists, and request authentication are unchanged.
 No Redis record or client signature migration is required. CORS origin policy
 is a browser boundary; API Key/HMAC authentication is still required independently.
+
+### Service permissions and metrics credentials
+
+`HERALD_SERVICE_POLICIES` optionally binds each configured HMAC key ID to a
+service and allowed actions. It requires HMAC v2/v3 authentication and disables
+legacy v1 compatibility. See [service action policies](SECURITY.md#limit-service-actions)
+for the policy format and the shared-user-namespace limitation.
+
+Production metrics scraping now requires `HERALD_METRICS_API_KEY` (at least 32
+bytes); without it `/metrics` returns 401. Configure a random key distinct from
+business credentials and update Prometheus before deploying. See
+[metrics authentication](MONITORING.md#metrics-authentication).
+
+Unknown `ENVIRONMENT` and `REQUEST_AUTH_MODE` values are rejected before startup.
+Supported authentication aliases are normalized through the same parser used by
+the router. Explicit development and test environments retain their existing
+policy; an unset environment still defaults to development.

@@ -389,3 +389,42 @@ requires such a configuration; the default remains CORS-disabled. It does not
 bypass API Key or HMAC verification, and unsigned business requests still return
 401. Startup and router construction now reject wildcard entries anywhere in a
 production list. See [deployment requirements](DEPLOYMENT.md#production-cors-origin-lists).
+
+### Limit service actions
+
+The default service credential remains trusted for every OTP and TOTP action.
+For callers with different permissions, set `HERALD_SERVICE_POLICIES` to a JSON
+map of HMAC key IDs to fixed service names and allowed actions:
+
+```json
+{
+  "gateway": {
+    "service": "stargate",
+    "actions": ["otp:create", "otp:verify", "totp:status", "totp:verify"]
+  },
+  "account-admin": {
+    "service": "account-admin",
+    "actions": ["totp:enroll", "totp:revoke", "otp:revoke"]
+  }
+}
+```
+
+Configure corresponding secrets in `HERALD_HMAC_KEYS`. In single-secret mode,
+the only key ID is `default`. Policies require `REQUEST_AUTH_MODE=hmac_v2` and
+`HMAC_V1_ENABLED=false`. Unknown keys and mismatched signed `X-Service` values
+are rejected; callers cannot select their service identity by changing a header.
+A denied action returns 403 before the handler or provider runs. Authentication
+failures still return 401. Rejected service identities do not consume a nonce;
+authenticated requests denied by action policy do consume their nonce.
+
+Supported actions are `otp:create`, `otp:verify`, `otp:revoke`, `totp:status`,
+`totp:verify`, `totp:enroll`, and `totp:revoke`. The enrollment action covers both
+start and confirm. The verification action covers both OTP verification versions.
+An empty policy variable preserves the previous trusted-service behavior; an
+explicit empty map, invalid entry, or reference to an unconfigured key prevents
+startup. Deploy the policy with all currently required callers before restricting
+credentials.
+
+This is a service/action boundary, not tenant or user isolation. An authorized
+TOTP action still applies to the shared subject namespace. Use separate instances,
+Redis credentials and TOTP backends for callers that must not share that namespace.

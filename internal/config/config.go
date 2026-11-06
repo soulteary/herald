@@ -10,6 +10,7 @@ import (
 
 	"github.com/soulteary/cli-kit/env"
 	"github.com/soulteary/cli-kit/validator"
+	"github.com/soulteary/herald/internal/serviceauth"
 	logger "github.com/soulteary/logger-kit/v3"
 	secure "github.com/soulteary/secure-kit/v2"
 )
@@ -31,9 +32,8 @@ const (
 	EnvProduction Environment = "production"
 )
 
-// parseEnvironment normalizes the ENVIRONMENT value. Unknown values default to
-// development so a typo never silently grants production trust while still not
-// accidentally enabling test affordances.
+// parseEnvironment normalizes the ENVIRONMENT value. Unknown values return
+// an invalid value; strict validation rejects it before startup.
 func parseEnvironment(raw string) Environment {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "production", "prod":
@@ -43,7 +43,7 @@ func parseEnvironment(raw string) Environment {
 	case "development", "dev", "":
 		return EnvDevelopment
 	default:
-		return EnvDevelopment
+		return ""
 	}
 }
 
@@ -82,6 +82,13 @@ var (
 	// explicit proxy IP/CIDR allowlist are configured.
 	TrustedProxyHeader = env.Get("HERALD_TRUSTED_PROXY_HEADER", "")
 	TrustedProxies     = env.GetStringSlice("HERALD_TRUSTED_PROXIES", []string{}, ",")
+
+	// Metrics have a separate read-only credential. An empty key disables
+	// metrics access in production; development retains anonymous scraping.
+	MetricsAPIKey = env.Get("HERALD_METRICS_API_KEY", "")
+
+	// ServicePoliciesJSON optionally maps HMAC key IDs to fixed services/actions.
+	ServicePoliciesJSON = env.Get("HERALD_SERVICE_POLICIES", "")
 
 	// Dedicated auth + listener for the test-code endpoint. The endpoint is only
 	// mounted when TestCodeExposureEnabled() is true, is guarded by this key, and
@@ -229,6 +236,13 @@ var (
 // Initialize validates and initializes configuration
 func Initialize(l *logger.Logger) error {
 	log = l
+
+	if _, err := serviceauth.ParseMode(RequestAuthMode); err != nil {
+		return err
+	}
+	if parseEnvironment(EnvironmentValue) == "" {
+		return fmt.Errorf("ENVIRONMENT must be development, test, or production")
+	}
 
 	// Validate required configs
 	if RedisAddr == "" {

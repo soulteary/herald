@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"strings"
+
+	"github.com/soulteary/herald/internal/serviceauth"
 )
 
 // contextBoundVerificationRequestEnvelopeBytes is the size of the smallest
@@ -52,8 +54,11 @@ func strictEnumProblems() []string {
 	if !normalizedOneOf(EnvironmentValue, "", "development", "dev", "test", "testing", "production", "prod") {
 		problems = append(problems, "ENVIRONMENT must be development, test, or production")
 	}
-	if !normalizedOneOf(RequestAuthMode, "hmac_v2", "hmac-v2", "hmac", "api_key", "apikey", "none", "off", "disabled") {
-		problems = append(problems, "REQUEST_AUTH_MODE must be hmac_v2, api_key, or none")
+	if _, err := serviceauth.ParseMode(RequestAuthMode); err != nil {
+		problems = append(problems, err.Error())
+	}
+	if _, err := ServicePolicies(); err != nil {
+		problems = append(problems, err.Error())
 	}
 	if !normalizedOneOf(ClientCertMode, "off", "optional", "require") {
 		problems = append(problems, "CLIENT_CERT_MODE must be off, optional, or require")
