@@ -55,7 +55,7 @@ func testChallengeManager(t *testing.T, redisClient *redis.Client) challengekit.
 		LockoutDuration: config.LockoutDuration,
 		CodeLength:      config.CodeLength,
 	}
-	return challengekit.NewManager(redisClient, config)
+	return newActiveTestChallengeManager(redisClient, config)
 }
 
 func TestNewHandlers(t *testing.T) {
@@ -548,7 +548,7 @@ func TestHandlers_VerifyChallenge_Success(t *testing.T) {
 		LockoutDuration: config.LockoutDuration,
 		CodeLength:      config.CodeLength,
 	}
-	challengeMgr := challengekit.NewManager(redisClient, challengeConfig)
+	challengeMgr := newActiveTestChallengeManager(redisClient, challengeConfig)
 
 	ctx := context.Background()
 	createReq := challengekit.CreateRequest{
@@ -673,7 +673,7 @@ func TestHandlers_VerifyChallenge_AMR_ByChannel(t *testing.T) {
 				LockoutDuration: config.LockoutDuration,
 				CodeLength:      config.CodeLength,
 			}
-			challengeMgr := challengekit.NewManager(redisClient, challengeConfig)
+			challengeMgr := newActiveTestChallengeManager(redisClient, challengeConfig)
 
 			ctx := context.Background()
 			var channel challengekit.Channel
@@ -1528,7 +1528,7 @@ func TestHandlers_CreateChallenge_UserLocked(t *testing.T) {
 		LockoutDuration: config.LockoutDuration,
 		CodeLength:      6,
 	}
-	challengeMgr := challengekit.NewManager(redisClient, challengeConfig)
+	challengeMgr := newActiveTestChallengeManager(redisClient, challengeConfig)
 	ctx := context.Background()
 
 	// Create a challenge and fail verification maxAttempts times on the SAME challenge to trigger lock
@@ -1608,7 +1608,7 @@ func TestHandlers_VerifyChallenge_FailureReasons(t *testing.T) {
 	config.CodeLength = 6
 	config.MaxAttempts = 5
 	config.LockoutDuration = 10 * time.Minute
-	config.ChallengeExpiry = 1 * time.Millisecond // Very short expiry
+	config.ChallengeExpiry = time.Minute // Expiration is injected after activation below.
 
 	redisClient := testRedisClient(t)
 	defer func() {
@@ -1775,7 +1775,7 @@ func TestHandlers_GetTestCode(t *testing.T) {
 		LockoutDuration: 10 * time.Minute,
 		CodeLength:      6,
 	}
-	challengeMgr := challengekit.NewManager(redisClient, challengeConfig)
+	challengeMgr := newActiveTestChallengeManager(redisClient, challengeConfig)
 
 	ctx := context.Background()
 	createReq := challengekit.CreateRequest{
@@ -2005,8 +2005,16 @@ func checkVerificationExpiredChallenge(t *testing.T, redisClient *redis.Client, 
 		t.Fatalf("Failed to create challenge: %v", err)
 	}
 
-	// Wait for expiry
-	time.Sleep(10 * time.Millisecond)
+	// Persist an already-expired active snapshot instead of racing a sub-ms TTL
+	// against creation and activation round trips.
+	ch.ExpiresAt = time.Now().Add(-time.Second)
+	expired, err := json.Marshal(ch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := redisClient.Set(ctx, challengeRecordPrefix+ch.ID, expired, time.Minute).Err(); err != nil {
+		t.Fatal(err)
+	}
 
 	reqBody := VerifyChallengeRequest{
 		ChallengeID: ch.ID,
@@ -2048,7 +2056,7 @@ func checkVerificationLockedChallenge(t *testing.T, redisClient *redis.Client, a
 		LockoutDuration: config.LockoutDuration,
 		CodeLength:      config.CodeLength,
 	}
-	challengeMgr := challengekit.NewManager(redisClient, challengeConfig)
+	challengeMgr := newActiveTestChallengeManager(redisClient, challengeConfig)
 
 	ctx := context.Background()
 	createReq := challengekit.CreateRequest{

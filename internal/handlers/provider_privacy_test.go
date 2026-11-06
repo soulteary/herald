@@ -60,7 +60,7 @@ func TestProviderFailureDoesNotExportSensitiveMessage(t *testing.T) {
 	sent := <-captured
 	code := sent.code
 	require.NotEmpty(t, code)
-	require.EqualValues(t, 0, rc.Exists(context.Background(), "otp:ch:"+sent.id).Val())
+	require.EqualValues(t, 0, rc.Exists(context.Background(), challengeRecordPrefix+sent.id).Val())
 	require.Contains(t, logs.String(), `"reason":"timeout"`)
 	var spans bytes.Buffer
 	for _, span := range recorder.Ended() {

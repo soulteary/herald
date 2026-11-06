@@ -12,7 +12,15 @@ import (
 	challengekit "github.com/soulteary/challenge-kit"
 )
 
-// The stock manager swaps the index and asks its caller to revoke the old
+// Separate record and mutex namespaces prevent older verifiers, which ignore
+// activation_state, from redeeming newly pending challenges.
+const (
+	challengeRecordPrefix      = "otp:ch:v2:"
+	challengeVerifyLockPrefix  = "otp:vlock:v2:"
+	challengeActiveIndexPrefix = "otp:active:strict:"
+)
+
+// The compatibility manager swaps the index and asks its caller to revoke the old
 // challenge separately. Herald requires revocation to complete before a
 // successful activation, including when its process exits or loses a reply.
 type atomicChallengeManager struct {
@@ -64,6 +72,9 @@ return previous or (ownedLegacy and legacy) or ''
 `
 
 func (m *atomicChallengeManager) SwapActive(ctx context.Context, ch *challengekit.Challenge) (string, error) {
+	if m.config.RequireActiveVerification {
+		return m.ManagerInterface.SwapActive(ctx, ch)
+	}
 	if ch == nil {
 		return "", fmt.Errorf("nil challenge")
 	}

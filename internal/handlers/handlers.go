@@ -95,6 +95,9 @@ func NewHandlersWithError(redisClient *redis.Client, log *logger.Logger) (*Handl
 		return nil, err
 	}
 	challengeConfig := challengekit.Config{
+		RequireActiveVerification:  true,
+		VerifyLockPrefix:           challengeVerifyLockPrefix,
+		ActiveIndexPrefix:          challengeActiveIndexPrefix,
 		MaxConcurrentVerifications: config.MaxConcurrentHashOperations,
 		// Do not poll a contended challenge lock while holding the shared budget.
 		// A positive expired deadline permits one immediate lock attempt.
@@ -103,7 +106,7 @@ func NewHandlersWithError(redisClient *redis.Client, log *logger.Logger) (*Handl
 		MaxAttempts:        config.MaxAttempts,
 		LockoutDuration:    config.LockoutDuration,
 		CodeLength:         config.CodeLength,
-		ChallengeKeyPrefix: "otp:ch:",
+		ChallengeKeyPrefix: challengeRecordPrefix,
 		LockKeyPrefix:      "otp:lock:",
 	}
 	challengeMgr := newAtomicChallengeManager(redisClient, challengeConfig)

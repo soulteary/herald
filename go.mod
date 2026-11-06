@@ -13,7 +13,7 @@ require (
 	github.com/redis/go-redis/v9 v9.23.0
 	github.com/rs/zerolog v1.35.1
 	github.com/soulteary/audit-kit/v2 v2.1.3
-	github.com/soulteary/challenge-kit v1.10.4
+	github.com/soulteary/challenge-kit v1.10.5-0.20261106114854-bd13b0bb3478
 	github.com/soulteary/cli-kit v1.9.3
 	github.com/soulteary/health-kit/v4 v4.0.5
 	github.com/soulteary/herald-totp v1.2.6

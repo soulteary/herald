@@ -23,6 +23,10 @@ func createActivationOTP(t *testing.T, m challengekit.ManagerInterface, user str
 	t.Helper()
 	ch, code, err := m.Create(context.Background(), challengekit.CreateRequest{UserID: user, Channel: challengekit.ChannelEmail, Destination: "a@example.com", Purpose: "login"})
 	require.NoError(t, err)
+	if ch.ActivationState == challengekit.ActivationPending {
+		_, err = m.SwapActive(context.Background(), ch)
+		require.NoError(t, err)
+	}
 	return ch, code
 }
 
