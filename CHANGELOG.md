@@ -7,9 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
+## [1.4.0] - 2026-11-07
 
-- Update the imported herald-totp client module from v1.2.5 to v1.2.6 and document the matching provider deployment pins. Existing authentication, TOTP requests and stored credentials remain compatible.
+### Security changes
+
+- Add optional HMAC service/action policies binding each key ID to a service
+  principal and explicit OTP/TOTP actions. Policy mode rejects shared HMAC
+  secrets and legacy v1 signatures; it does not isolate tenants or subjects.
+- Separate metrics credentials from API and HMAC credentials. Production metrics
+  require a dedicated random key; provision the collector before upgrading.
+- Require explicit activation before OTP verification. Pending records remain
+  unverifiable if delivery, activation, or cleanup fails. Activation and final
+  verification compare stored snapshots, preserving revocation and replacement.
+- Write the activation index before marking a record active, preventing new
+  redeemable orphan records after a partial Redis script failure. Idempotent
+  activation retries never identify the new record as a previous ID to revoke.
+- Use operation-bound TOTP HMAC v2, covering method, escaped path, raw query,
+  key ID, timestamp, service, nonce, and body digest. Nonce protection unifies
+  aliases of the same secret. Invalid HMAC cannot fall back to API-key auth.
+- Reject oversized TOTP service/key identifiers locally before sending. HMAC
+  requests omit the static API key; API-key-only operation remains available.
+- Reject redirects in the public Herald SDK and TOTP proxy to prevent credential
+  forwarding. Keep bounded TOTP response decoding and production HTTPS checks.
+
+### Dependencies
+
+- Use released `challenge-kit` v1.11.0 and `herald-totp/v2` v2.0.0. The TOTP
+  module-path migration is internal; Herald's public Go module and HTTP paths,
+  request payloads, and response types remain unchanged.
+- Retain the provider patch updates for herald-smtp and herald-dingtalk v1.2.6.
+
+### Upgrade requirements
+
+- This release requires operational migration; it is not a drop-in upgrade.
+  Pause OTP creation, drain requests, wait the previous maximum challenge
+  lifetime, and replace every Herald verifier before resuming. Strict record,
+  verification-lock, and active-index namespaces are disjoint from historical
+  keys. Existing user lockouts remain intact; never fall back to old records.
+- Preserve unresolved idempotency records, their derivation secret, nonce state,
+  audit volumes, and provider credentials. Reconcile `delivery_unknown` with the
+  provider before resending. A lost activation reply may represent a committed
+  active challenge; pending cleanup deliberately preserves it.
+- Partial Redis errors can remove the previous active challenge or leave stale
+  indexes, reducing availability. They do not roll back preceding writes. Let
+  abandoned pending records and stale indexes expire with their original TTL.
+  Older active orphan records are not repaired automatically: affected operators
+  must wait the original TTL or explicitly revoke known IDs.
+- Upgrade the TOTP service and this proxy together for HMAC v2; old HMAC signatures
+  are rejected without a legacy fallback. Preserve TOTP encryption keys and Redis
+  credentials. HTTP `/v1` routes remain, but their HMAC wire protocol changes.
+- Configure the metrics collector with a separate credential and prepare service
+  policies before enabling them. See the current security and migration guides
+  for key rotation, strict namespaces, and rollback procedures.
 
 ## [1.3.13] - 2026-11-02
 

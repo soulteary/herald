@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/soulteary/herald-totp/pkg/heraldtotp"
+	"github.com/soulteary/herald-totp/v2/pkg/heraldtotp"
 	"github.com/soulteary/herald/internal/security"
 )
 

@@ -121,11 +121,14 @@ Herald 从右向左解析转发 IP 链，仅跳过明确配置为可信的代理
 
 固定使用 `ghcr.io/soulteary/herald-dingtalk:1.2.6`、
 `ghcr.io/soulteary/herald-smtp:1.2.6`、
-`ghcr.io/soulteary/herald-totp:1.2.6`，或经过核验的不可变摘要。
-Herald 导入的 TOTP 客户端模块为 v1.2.6。这些 provider 补丁版本保留 v1 HTTP
-路由、API Key/HMAC 认证与 Redis 凭据格式。从 provider v1.2.5 升级无需数据迁移；
-保留 provider 凭据、TOTP 加密密钥及 Redis 数据。恢复流量前检查健康/就绪状态和
-代表性的认证请求。邮件与钉钉发送有外部副作用，演练应使用隔离的目标地址。
+`ghcr.io/soulteary/herald-totp:2.0.0`，或经过核验的不可变摘要。
+Herald v1.4.0 导入 `github.com/soulteary/herald-totp/v2` v2.0.0。SMTP 和钉钉
+保留补丁版本接口。TOTP 保留 `/v1` HTTP 路由与凭据存储格式，但 HMAC 协议
+升级为绑定操作并带 nonce 防重放的 v2；必须协调升级 TOTP 服务和 Herald
+代理，旧 HMAC 签名不再接受。仅使用 API key 的模式仍可用。
+保留 provider 凭据、TOTP 加密密钥和 Redis 数据。恢复流量前检查健康/就绪状态
+及所用认证模式下的真实操作，并遵循[安全要求](SECURITY.md)与 OTP pending
+协议迁移说明。邮件和钉钉发送有外部副作用，演练应使用隔离目标。
 
 #### 邮件通道
 

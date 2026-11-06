@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/soulteary/herald-totp/pkg/heraldtotp"
+	"github.com/soulteary/herald-totp/v2/pkg/heraldtotp"
 )
 
 func TestTOTPProxySigningFailureDoesNotSend(t *testing.T) {

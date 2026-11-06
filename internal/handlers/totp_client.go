@@ -13,11 +13,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/soulteary/herald-totp/pkg/heraldtotp"
+	"github.com/soulteary/herald-totp/v2/pkg/heraldtotp"
 )
 
-// Keep the SDK wire types and authentication scheme, but own the transport:
-// the SDK client follows redirects and reads response bodies without a cap.
+// Keep the SDK wire types and signing helper while owning the transport
+// configuration, redirect policy, and bounded response decoding.
 type totpProxyClient struct {
 	baseURL          *url.URL
 	options          heraldtotp.Options

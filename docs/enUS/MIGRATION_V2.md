@@ -269,3 +269,27 @@ a new idempotency key. A lost activation reply may have committed the new active
 record. Pending cleanup does not remove an already-active record, and retries do
 not resend its code. Before rollback, stop creation and drain the new challenge
 lifetime as well; rollback does not make new records visible to old verifiers.
+
+## Herald v1.4.0 coordinated upgrade
+
+The public Herald Go module and external HTTP payloads remain unchanged. This
+security release still requires deployment preparation:
+
+1. Provision a dedicated metrics credential and update the collector. Production
+   rejects anonymous metrics; never reuse an API or HMAC credential for scraping.
+2. If using service policies, give each principal its own HMAC secret and prepare
+   every required action before enabling the policy. This does not isolate users
+   or tenants within the shared subject namespace.
+3. Pause OTP creation and follow the pending challenge migration above, preserving
+   user lockouts, unresolved idempotency records and audit data.
+4. Upgrade herald-totp to v2.0.0 and Herald to v1.4.0 together before restoring
+   HMAC traffic. The upstream `/v1` HTTP paths remain, but old HMAC signatures are
+   rejected. Keep encryption keys and stored credentials intact. API-key-only
+   operation remains supported.
+5. Configure final URLs: the Herald SDK and TOTP proxy reject redirects. Verify
+   authenticated OTP and TOTP operations with isolated recipients before resuming.
+
+The `herald-totp/v2` Go import is internal to Herald; callers of
+`github.com/soulteary/herald/pkg/herald` retain their existing import path and
+public TOTP request/response types. Applications that import herald-totp directly
+must migrate their own import to `/v2` and follow its separate major-version guide.
