@@ -129,12 +129,17 @@ func (h *Handlers) TOTPEnrollStart(c fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
-// Only a complete upstream HTTP 400 preserves the enrollment error contract.
-// Transport, malformed response, and other HTTP failures are proxy failures.
+// Complete upstream HTTP 400 and 429 preserve the enrollment error contract.
+// Transport, incomplete response, and other HTTP failures are proxy failures.
 func classifyEnrollConfirmError(err error) (int, string) {
 	var httpErr *heraldtotp.HTTPError
-	if errors.As(err, &httpErr) && httpErr.StatusCode == fiber.StatusBadRequest {
-		return fiber.StatusBadRequest, "invalid"
+	if errors.As(err, &httpErr) {
+		switch httpErr.StatusCode {
+		case fiber.StatusBadRequest:
+			return fiber.StatusBadRequest, "invalid"
+		case fiber.StatusTooManyRequests:
+			return fiber.StatusTooManyRequests, "rate_limited"
+		}
 	}
 	return fiber.StatusBadGateway, "proxy_failed"
 }
