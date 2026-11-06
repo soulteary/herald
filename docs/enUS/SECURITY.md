@@ -431,3 +431,18 @@ credentials.
 This is a service/action boundary, not tenant or user isolation. An authorized
 TOTP action still applies to the shared subject namespace. Use separate instances,
 Redis credentials and TOTP backends for callers that must not share that namespace.
+
+## Authenticated upstream requests
+
+The TOTP proxy uses operation-bound HMAC v2 from herald-totp. Upgrade the TOTP
+service and Herald together while callers are paused; legacy body-only
+signatures are rejected by the updated service. The proxy retains its TLS,
+redirect, and response-size checks. HMAC requests omit the optional API key.
+
+The public Herald SDK now rejects redirects, including same-origin redirects.
+Configure the final service URL so API keys and request bodies cannot be sent
+to an unintended endpoint.
+
+Signed paths and raw queries must reach herald-totp unchanged. Use its internal
+service origin when an ingress would strip or rewrite a public URL prefix.
+Permit expiring `totp:auth:nonce:*` keys in the upstream Redis ACL.

@@ -3,17 +3,13 @@ package handlers
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
 	"crypto/tls"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -84,22 +80,14 @@ func (c *totpProxyClient) call(ctx context.Context, method, endpoint string, que
 	if payload != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if c.options.APIKey != "" {
+	if c.options.HMACSecret != "" {
+		if err := heraldtotp.SignRequest(req, body, c.options.HMACSecret, c.options.Service, c.options.HMACKeyID); err != nil {
+			return fmt.Errorf("sign TOTP request: %w", err)
+		}
+	} else if c.options.APIKey != "" {
 		req.Header.Set("X-API-Key", c.options.APIKey)
 	}
-	if c.options.HMACSecret != "" {
-		// Match herald-totp v1.2.5: timestamp:service:raw-body.
-		timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-		mac := hmac.New(sha256.New, []byte(c.options.HMACSecret))
-		_, _ = fmt.Fprintf(mac, "%s:%s:", timestamp, c.options.Service)
-		_, _ = mac.Write(body)
-		req.Header.Set("X-Timestamp", timestamp)
-		req.Header.Set("X-Service", c.options.Service)
-		req.Header.Set("X-Signature", hex.EncodeToString(mac.Sum(nil)))
-		if c.options.HMACKeyID != "" {
-			req.Header.Set("X-Key-Id", c.options.HMACKeyID)
-		}
-	}
+
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("TOTP request failed: %w", err)

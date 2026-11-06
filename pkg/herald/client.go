@@ -256,6 +256,8 @@ func NewClient(opts *Options) (*Client, error) {
 		return nil, err
 	}
 
+	httpClient.GetHTTPClient().CheckRedirect = func(*http.Request, []*http.Request) error { return fmt.Errorf("herald redirects are disabled") }
+
 	client := &Client{
 		httpClient:       httpClient,
 		baseURL:          strings.TrimRight(opts.BaseURL, "/"),
