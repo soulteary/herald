@@ -18,6 +18,10 @@ The HTTP server uses Fiber v3. Dependency versions and the Go toolchain are pinn
 in `go.mod` (Go 1.27.3 or later). Builds and validation run on Linux; use Linux
 containers on macOS, Windows and other hosts.
 
+## Architecture
+
+![Herald architecture](.github/architecture.gif)
+
 ## Core Features
 
 - 🔒 **Secure by Design**: Challenge-based verification with Argon2 hash storage, multiple authentication methods (mTLS, HMAC, API Key)
