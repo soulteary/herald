@@ -446,3 +446,21 @@ to an unintended endpoint.
 Signed paths and raw queries must reach herald-totp unchanged. Use its internal
 service origin when an ingress would strip or rewrite a public URL prefix.
 Permit expiring `totp:auth:nonce:*` keys in the upstream Redis ACL.
+
+### Recovery after a failed OTP activation
+
+Strict activation writes the active index before marking the challenge active.
+Redis script runtime errors can retain earlier writes: an activation failure may
+remove the previous challenge or leave an index pointing at a pending record.
+The pending record remains unverifiable. Abandoned pending records and stale
+index entries expire with their original TTL; pending cleanup does not delete a
+successfully activated record after a lost reply.
+
+This ordering prevents new partial activations. If an older deployment experienced
+an activation error after its record was marked active, upgrading does not repair
+that record. Wait its original challenge lifetime or explicitly revoke known IDs.
+This fix does not require another namespace migration.
+
+TOTP HMAC service names and key IDs have a 128-byte limit, matching the upstream
+verifier. The proxy rejects oversized identifiers locally before sending a request.
+These limits do not apply to unused HMAC fields in API-key-only mode.
