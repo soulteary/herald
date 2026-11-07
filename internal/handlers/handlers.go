@@ -173,7 +173,10 @@ func NewHandlersWithError(redisClient *redis.Client, log *logger.Logger) (*Handl
 			WithAPIKey(config.TOTPAPIKey).
 			WithTimeout(10 * time.Second)
 		if config.TOTPHMACSecret != "" {
-			opts = opts.WithHMACSecret(config.TOTPHMACSecret)
+			opts = opts.WithHMACSecret(config.TOTPHMACSecret).WithHMACKeyID(config.TOTPHMACKeyID)
+			if config.TOTPHMACService != "" {
+				opts.Service = config.TOTPHMACService
+			}
 		}
 		if c, err := newTOTPProxyClient(opts, int64(config.ProviderMaxResponseBytes), config.IsProduction()); err != nil {
 			if config.IsProduction() {

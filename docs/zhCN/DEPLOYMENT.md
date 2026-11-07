@@ -187,6 +187,8 @@ HTTPS。请配置最终服务地址：包括同源跳转在内的所有重定向
 | `HERALD_TOTP_BASE_URL` | herald-totp 服务 Base URL（如 `http://herald-totp:8085`） | （空） | 启用 TOTP 时 |
 | `HERALD_TOTP_API_KEY` | Herald 调用 herald-totp 时使用的 API Key（若 herald-totp 需要） | （空） | 否 |
 | `HERALD_TOTP_HMAC_SECRET` | Herald 调用 herald-totp 时使用的 HMAC 密钥（若 herald-totp 使用 HMAC） | （空） | 否 |
+| `HERALD_TOTP_HMAC_KEY_ID` | TOTP 签名 key ID；后端配置多个密钥时需要显式指定 | （空，省略 ID） | 否 |
+| `HERALD_TOTP_HMAC_SERVICE` | TOTP 签名的服务身份 | （空，保留 SDK 默认 `stargate`） | 否 |
 
 #### TLS / mTLS
 
@@ -468,3 +470,12 @@ Redis 记录或客户端签名。CORS 是浏览器来源边界，API Key/HMAC �
 Herald 回滚至 v1.4.1 时接口保持兼容，不会随之回滚独立的 TOTP 服务。后端
 回滚至 v2.0.1 会失去快照提交校验。两个方向都应保留状态，不要清空记录
 绕过验证拒绝。
+
+
+### TOTP 代理签名身份与密钥轮换
+
+配置 `HERALD_TOTP_HMAC_SECRET` 时，使用 `HERALD_TOTP_HMAC_KEY_ID` 指定后端映射中的 key ID，可选设置 `HERALD_TOTP_HMAC_SERVICE`。两项遵循 SDK 的 128 字节上限，不接受控制字符或首尾空白。不设置时仍省略 key ID，并保留 SDK 默认服务名 `stargate`。仅 API key 配置不变；代理使用 HMAC 时不发送 API key。
+
+旧 Herald 无法显式选择 TOTP 签名密钥。省略 ID 可用于单密钥映射，但无法在不同密钥重叠期间选择目标密钥。先在全部代理部署本次改动，显式配置现有 key ID 与对应密钥并验证调用，再向后端添加新密钥。随后将代理切换为新的 ID 与对应密钥，排空旧在途调用，确认没有调用方依赖旧密钥后才移除它。不要复用 nonce 或清空重放记录来测试轮换。
+
+回滚代理会恢复省略 ID 和默认服务名的行为。回滚前应把后端协调为与旧代理密钥和预期服务身份兼容的单密钥配置，否则继续使用支持显式身份的代理版本。保留 TOTP Redis 数据、加密密钥、nonce/配额状态及 Herald 幂等和审计状态。本次是可选代理配置支持，不迁移 HTTP 协议或凭据记录。

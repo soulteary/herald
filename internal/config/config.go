@@ -157,10 +157,12 @@ var (
 	SMSAPIKey     = env.Get("SMS_API_KEY", "")      // HTTP API key for SMS provider
 
 	// TOTP (herald-totp): Herald proxies TOTP to herald-totp service when enabled
-	TOTPEnabled    = env.GetBool("HERALD_TOTP_ENABLED", false)
-	TOTPBaseURL    = env.Get("HERALD_TOTP_BASE_URL", "") // Base URL of herald-totp service
-	TOTPAPIKey     = env.Get("HERALD_TOTP_API_KEY", "")  // Optional API key for Herald to call herald-totp
-	TOTPHMACSecret = env.Get("HERALD_TOTP_HMAC_SECRET", "")
+	TOTPEnabled     = env.GetBool("HERALD_TOTP_ENABLED", false)
+	TOTPBaseURL     = env.Get("HERALD_TOTP_BASE_URL", "") // Base URL of herald-totp service
+	TOTPAPIKey      = env.Get("HERALD_TOTP_API_KEY", "")  // Optional API key for Herald to call herald-totp
+	TOTPHMACSecret  = env.Get("HERALD_TOTP_HMAC_SECRET", "")
+	TOTPHMACKeyID   = env.Get("HERALD_TOTP_HMAC_KEY_ID", "")
+	TOTPHMACService = env.Get("HERALD_TOTP_HMAC_SERVICE", "")
 
 	// DingTalk channel: Herald calls herald-dingtalk via HTTP (no DingTalk credentials in Herald)
 	HeraldDingtalkAPIURL = env.Get("HERALD_DINGTALK_API_URL", "") // Base URL of herald-dingtalk service
@@ -536,6 +538,7 @@ func listenerAndProviderProblems() []string {
 	}
 
 	problems = append(problems, providerTransportProblems()...)
+	problems = append(problems, totpSigningIdentityProblems()...)
 
 	return problems
 }
