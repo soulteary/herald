@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   does not change the authentication protocol or upgrade the TOTP backend.
   Reconcile single-key selection before rolling back to an older proxy.
 
+### Security hardening
+
+- Omit the configured API key from SDK requests when an HMAC secret is set.
+  HMAC authentication failures do not retry with the API key. Clients using
+  `REQUEST_AUTH_MODE=api_key` must leave the SDK HMAC secret empty. HMAC signature
+  formats and API-key-only requests are unchanged.
+
 ## [1.4.2] - 2026-11-07
 
 ### Dependencies

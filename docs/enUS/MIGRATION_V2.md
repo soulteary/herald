@@ -79,6 +79,12 @@ request only in non-production.
 
 ### 1.6 SDK
 
+The SDK selects HMAC when `HMACSecret` is nonempty and omits `X-API-Key`, even
+when `APIKey` is also configured. Rejected HMAC requests are not retried with
+another credential. For a server using `REQUEST_AUTH_MODE=api_key`, configure
+the SDK API key and leave its HMAC secret empty. This changes older clients
+that sent both credentials and relied on the server selecting the API key.
+
 The Go SDK now signs v3 by default. Set the key id and (optionally) a fixed clock/
 nonce for tests:
 
