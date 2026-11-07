@@ -374,6 +374,8 @@ Herald exposes Prometheus metrics at the `/metrics` endpoint. The following metr
 - `herald_rate_limit_hits_total{scope}` - Total number of rate limit hits (scope: user, ip, destination, resend_cooldown)
 - `herald_redis_operation_duration_seconds{operation}` - Redis wrapper latency (rate-limit and cooldown operations; see MONITORING.md)
 
+Configure a separate `HERALD_METRICS_API_KEY` on Herald and mount the same value at `/run/secrets/herald_metrics_key` in Prometheus. Do not reuse business API/HMAC credentials.
+
 **Example Prometheus scrape configuration:**
 ```yaml
 scrape_configs:
@@ -381,6 +383,9 @@ scrape_configs:
     static_configs:
       - targets: ['herald:8082']
     metrics_path: '/metrics'
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/herald_metrics_key
 ```
 
 For detailed monitoring documentation, see [MONITORING.md](MONITORING.md).

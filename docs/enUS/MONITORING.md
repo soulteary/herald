@@ -119,6 +119,8 @@ herald_redis_operation_duration_seconds_count{operation="ratelimit_user"} 10000
 
 ### Basic Scrape Configuration
 
+Provision a separate `HERALD_METRICS_API_KEY` and mount its value at the scraper credential file below. Production rejects anonymous scraping; business API/HMAC keys must not be reused.
+
 Add the following to your `prometheus.yml`:
 
 ```yaml
@@ -127,6 +129,9 @@ scrape_configs:
     static_configs:
       - targets: ['herald:8082']
     metrics_path: '/metrics'
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/herald_metrics_key
     scrape_interval: 15s
     scrape_timeout: 10s
 ```
@@ -138,6 +143,9 @@ For Kubernetes deployments, use service discovery:
 ```yaml
 scrape_configs:
   - job_name: 'herald'
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/herald_metrics_key
     kubernetes_sd_configs:
       - role: pod
         namespaces:

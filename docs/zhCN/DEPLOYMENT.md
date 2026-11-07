@@ -371,6 +371,8 @@ Herald 在 `/metrics` 端点暴露 Prometheus 指标。以下指标可用：
 - `herald_rate_limit_hits_total{scope}` - 速率限制命中总数（scope：user、ip、destination、resend_cooldown）
 - `herald_redis_operation_duration_seconds{operation}` - Redis 包装操作延迟（限流与冷却；见 MONITORING.md）
 
+先为 Herald 配置独立的 `HERALD_METRICS_API_KEY`，并把相同值挂载到 Prometheus 的 `/run/secrets/herald_metrics_key`。不得复用业务 API/HMAC 密钥。
+
 **Prometheus 抓取配置示例：**
 ```yaml
 scrape_configs:
@@ -378,6 +380,9 @@ scrape_configs:
     static_configs:
       - targets: ['herald:8082']
     metrics_path: '/metrics'
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/herald_metrics_key
 ```
 
 详细的监控文档，请参阅 [MONITORING.md](MONITORING.md)。

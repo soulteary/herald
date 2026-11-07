@@ -455,7 +455,7 @@ func GetHMACSecret(keyID string) string {
 	return HMACSecret
 }
 
-// HasHMACKeys returns true if multiple HMAC keys are configured
+// HasHMACKeys returns true if a nonempty HMAC key map is configured
 func HasHMACKeys() bool {
 	return len(hmacKeysMap) > 0
 }
