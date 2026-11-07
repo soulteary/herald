@@ -87,7 +87,7 @@ Herald 从右向左解析转发 IP 链，仅跳过明确配置为可信的代理
 | `API_KEY` | `api_key` 模式密钥；生产至少 32 字节 | （空） | API Key 模式 |
 | `HMAC_SECRET` | 单 HMAC 密钥；生产至少 32 字节 | （空） | HMAC 单密钥模式 |
 | `HERALD_HMAC_KEYS` | HMAC 密钥映射；ID/密钥不得为空，生产密钥至少 32 字节 | （空） | HMAC 多密钥模式 |
-| `HERALD_HMAC_DEFAULT_KEY_ID` | 显式默认密钥 ID；否则多密钥请求必须发送 `X-Key-Id` | （空） | 可选 |
+| `HERALD_HMAC_DEFAULT_KEY_ID` | 配置查找默认项；密钥 map 的 v2/v3 请求仍必须显式发送 `X-Key-Id` | （空） | 可选 |
 | `HMAC_MAX_DRIFT` | HMAC v2/v3 时间戳允许偏差 | `60s` | 否 |
 | `HMAC_V1_ENABLED` | 临时启用旧版 HMAC v1 | `false` | 否 |
 | `HERALD_IDEMPOTENCY_SECRET` | 幂等记录密钥；生产仅配置多 HMAC 密钥时必需 | （空） | 条件必需 |

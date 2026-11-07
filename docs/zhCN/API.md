@@ -19,7 +19,7 @@ http://localhost:8082
 
 ### HMAC v3
 
-发送 `X-Signature-Version: v3`、`X-Signature`、`X-Timestamp`、`X-Nonce`、`X-Service`；多密钥且未配置默认密钥时还必须发送 `X-Key-Id`。
+发送 `X-Signature-Version: v3`、`X-Signature`、`X-Timestamp`、`X-Nonce`、`X-Service`；配置了 `HERALD_HMAC_KEYS` 时必须发送 `X-Key-Id`，包括单项 map。
 
 `X-Service` 和 `X-Key-Id` 不能包含保留文本 `|kid:`。所有请求认证模式（包括旧版 v1
 回退）都会在认证、nonce 使用和业务写入前返回 `401/invalid_auth_headers`。
@@ -56,7 +56,7 @@ Go SDK 默认使用 v3。需协调服务端和调用方升级：旧服务端不�
 已有 Redis 记录、缓存响应、TTL 和未确认发送记录不变；使用相同幂等键及新的时间戳和 nonce 重试，
 对未确认的发送先核对 provider 结果。
 
-`key_id` 行必须使用 `X-Key-Id` 请求头的原始值。如果因已配置或隐式默认密钥而省略该请求头，签名时此行必须为空，不能填入默认密钥 ID。对上述内容计算小写十六进制 HMAC-SHA256。默认时间偏差窗口为 60 秒（`HMAC_MAX_DRIFT`），每个有效 nonce 只能在 Redis 中消费一次。使用多个 `HERALD_HMAC_KEYS` 时，请设置 `HERALD_HMAC_DEFAULT_KEY_ID` 或发送 `X-Key-Id`；Herald 不会使用 Go map 中的“第一个”密钥。旧版 v1 仅在 `HMAC_V1_ENABLED=true` 时启用。
+`key_id` 行必须使用 `X-Key-Id` 请求头的原始值。仅单 `HMAC_SECRET` 模式允许省略请求头；此时签名行为空，不能填入 `default`。对上述内容计算小写十六进制 HMAC-SHA256。默认时间偏差窗口为 60 秒（`HMAC_MAX_DRIFT`），每个有效 nonce 只能在 Redis 中消费一次。密钥 map 的 v2/v3 请求必须显式携带 ID，即使配置了 `HERALD_HMAC_DEFAULT_KEY_ID`；缺失时在消费 nonce 前返回 `401/key_id_required`。旧版 v1 仅在 `HMAC_V1_ENABLED=true` 时启用，本要求不为它增加 nonce 保护。
 
 ### API Key
 
@@ -502,8 +502,8 @@ HMAC/API Key 失败会返回 JSON `reason`：
 签名格式不变。自定义 ID 必须显式配置于 `HERALD_HMAC_KEYS`；迁移时不能直接改名或
 将不确定的发送换身份重试，详见部署升级要求。
 
-幂等身份现在使用已签名服务标识和实际参与 HMAC 验签的密钥 ID。省略 `X-Key-Id` 与显式填写
-默认 ID 使用同一记录。签名不变：省略请求头时，canonical 的 Key ID 行仍必须为空，
+幂等身份现在使用已签名服务标识和实际参与 HMAC 验签的密钥 ID。单密钥模式下省略
+`X-Key-Id` 与显式填写 `default` 使用同一记录。签名不变：省略请求头时，canonical 的 Key ID 行仍必须为空，
 无需新的 HMAC 版本或 SDK API。
 
 已有显式 Key ID 记录的键名、内容、所有权和 TTL 保持不变；重放要求该 ID 仍被授权。旧的空 Key ID 记录未保存原凭据，

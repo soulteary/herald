@@ -22,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `REQUEST_AUTH_MODE=api_key` must leave the SDK HMAC secret empty. HMAC signature
   formats and API-key-only requests are unchanged.
 
+- Require an explicit signed `X-Key-Id` for HMAC v2/v3 requests when
+  `HERALD_HMAC_KEYS` is configured, including singleton maps. An omitted ID
+  previously let the same signed request enter authentication again after a
+  same-secret default-ID change. Set client IDs before upgrading verifiers.
+  Single-`HMAC_SECRET` defaults and existing Redis record formats are unchanged.
+
 ## [1.4.2] - 2026-11-07
 
 ### Dependencies

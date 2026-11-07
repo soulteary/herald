@@ -77,7 +77,7 @@ Forwarded IP chains are parsed from right to left. Herald skips only explicitly 
 | `API_KEY` | API key for `api_key` mode; at least 32 bytes in production | (empty) | API-key mode |
 | `HMAC_SECRET` | Single HMAC secret; at least 32 bytes in production | (empty) | HMAC single-key mode |
 | `HERALD_HMAC_KEYS` | HMAC key map; IDs/secrets must be non-empty and production secrets at least 32 bytes | (empty) | HMAC multi-key mode |
-| `HERALD_HMAC_DEFAULT_KEY_ID` | Explicit default key ID; otherwise multi-key requests must send `X-Key-Id` | (empty) | Optional |
+| `HERALD_HMAC_DEFAULT_KEY_ID` | Default for configuration lookups; key-map v2/v3 requests still require an explicit `X-Key-Id` | (empty) | Optional |
 | `HMAC_MAX_DRIFT` | Accepted HMAC v2/v3 timestamp drift | `60s` | No |
 | `HMAC_V1_ENABLED` | Temporarily enable legacy HMAC v1 | `false` | No |
 | `HERALD_IDEMPOTENCY_SECRET` | Key for opaque idempotency records; required for production multi-key-only auth | (empty) | Conditional |

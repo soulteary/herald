@@ -51,12 +51,13 @@ The HMAC-SHA256 of that canonical string (hex) is sent in `X-Signature`.
 | `X-Timestamp` | yes | unix seconds; must be within ±`HMAC_MAX_DRIFT` (default 60s) |
 | `X-Nonce` | yes | single-use; replays are rejected |
 | `X-Service` | yes | logical caller identity, bound into the signature |
-| `X-Key-Id` | conditionally | required when no effective default is available (multi-key map without a default) |
+| `X-Key-Id` | conditionally | required for every configured `HERALD_HMAC_KEYS` map, including singleton maps |
 
 ### 1.3 Key policy
 
-- **No random default key.** If multiple keys are configured, a caller must send
-  `X-Key-Id`, or you must set `HERALD_HMAC_DEFAULT_KEY_ID` to a known id.
+- **Explicit mapped identities.** With `HERALD_HMAC_KEYS`, every v2/v3 caller
+  must send `X-Key-Id`. A configured default does not replace this signed field.
+  Single-`HMAC_SECRET` mode retains its stable implicit `default` identity.
 - **No downgrade.** A present-but-invalid v2 signature is rejected; Herald never
   silently falls back to API-key auth.
 - **Legacy v1** requires `HMAC_V1_ENABLED=true` on compatible non-creation routes.
@@ -102,9 +103,24 @@ c, _ := herald.NewClient(herald.DefaultOptions().
 
 ## 2. Idempotency & concurrency semantics
 
+Before upgrading a verifier that uses `HERALD_HMAC_KEYS`, configure every caller
+with its existing explicit key ID (`WithKeyID` in the SDK). Existing verifiers
+already accept these requests. Stargate callers set `HERALD_HMAC_KEY_ID`.
+Then replace all verifier instances. Omitted-ID
+map requests are rejected as `401/key_id_required` before handlers and nonce
+writes, including with a single map entry. Previously, an unchanged signed
+request with an omitted ID could pass again after the default ID changed while
+its secret stayed the same.
+
+Keep key IDs, Redis data, nonce prefixes and the idempotency derivation secret
+stable. No record conversion is required. Rollback restores the older omitted-ID
+behavior; avoid same-secret default-ID reassignment while older verifiers remain
+or after rollback. Legacy v1 remains a separate, explicitly enabled scheme
+without nonce replay protection.
+
 - Send `Idempotency-Key` on `POST /v1/otp/challenges`.
 - HMAC keys are namespaced by the signed service and actual verified key ID.
-  An omitted key ID and its explicit default refer to the same namespace.
+  In single-secret mode, an omitted ID and explicit `default` share a namespace.
   API-key/development modes retain literal caller headers, or client IP when
   both headers are absent. An API key is not itself a namespace. `|kid:` remains
   forbidden in service and key IDs, including resolved defaults.
@@ -168,7 +184,7 @@ binding; do not treat it as providing the v2 guarantees.
 | Area | v1 | v2 | Action |
 | --- | --- | --- | --- |
 | Environment | (implicit) | `ENVIRONMENT` | Set `production` in prod; enables fail-closed validation |
-| Request auth | `HMAC_SECRET` only | `REQUEST_AUTH_MODE`, `HERALD_HMAC_KEYS`, `HERALD_HMAC_DEFAULT_KEY_ID`, `HMAC_MAX_DRIFT`, `HMAC_V1_ENABLED` | Default is `hmac_v2`; set a default key id or send `X-Key-Id` |
+| Request auth | `HMAC_SECRET` only | `REQUEST_AUTH_MODE`, `HERALD_HMAC_KEYS`, `HERALD_HMAC_DEFAULT_KEY_ID`, `HMAC_MAX_DRIFT`, `HMAC_V1_ENABLED` | Default is `hmac_v2`; key-map v2/v3 requests require `X-Key-Id` |
 | Client certs | mixed with request auth | `CLIENT_CERT_MODE` | Configure mTLS separately |
 | Provider | `PROVIDER_FAILURE_POLICY` | + `PROVIDER_TIMEOUT`, `PROVIDER_MAX_RESPONSE_BYTES`, `PROVIDER_REDIRECT_POLICY` | Use `strict` in prod; set timeout/bounds |
 | Test mode | `HERALD_TEST_MODE` | + `HERALD_TEST_API_KEY` | Test-only; forbidden in prod |

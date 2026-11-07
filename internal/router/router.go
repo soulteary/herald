@@ -354,10 +354,9 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 		log.Warn().Msg("HMAC v1 is enabled (deprecated); disable HMAC_V1_ENABLED after migration")
 	}
 
-	// Determine the effective default key id. With a single HMAC_SECRET (no
-	// multi-key map) an explicit X-Key-Id is not required, so we supply a
-	// stable implicit default. With a parsed key map, use the effective default
-	// selected by config (empty => X-Key-Id mandatory for a multi-key map).
+	// Single-HMAC_SECRET mode has a stable implicit default. Parsed key maps
+	// retain their configured lookup default, but RequireKeyID below prevents
+	// v2/v3 wire omissions from being resolved through that mutable identity.
 	defaultKeyID := config.GetHMACDefaultKeyID()
 	if defaultKeyID == "" && !config.HasHMACKeys() && config.HMACSecret != "" {
 		defaultKeyID = "default"
@@ -367,6 +366,7 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 	nonceStore := auth.NewNonceStore(redisClient, config.NonceStorePrefix, []byte(config.IdempotencySecret), 0)
 	authConfig := auth.Config{
 		Mode:            authMode,
+		RequireKeyID:    config.HasHMACKeys(),
 		ServicePolicies: policies,
 		KeyProvider:     config.GetHMACSecret,
 		DefaultKeyID:    defaultKeyID,

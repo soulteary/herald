@@ -68,8 +68,9 @@ type Options struct {
 	// SignatureVersion selects the HMAC scheme. Defaults to v3 (replay-resistant and idempotency-bound).
 	// Set to v1 only during a migration window against an old server.
 	SignatureVersion string
-	// KeyID is sent as X-Key-Id and bound into the signature. Empty means the
-	// server's configured default key id is used.
+	// KeyID is sent as X-Key-Id and bound into the signature. Servers using a
+	// configured HMAC key map require it; single HMAC_SECRET deployments allow
+	// an empty value to select their stable implicit default.
 	KeyID string
 	// MaxResponseBytes caps every response body read by the SDK. Zero uses the
 	// default 1 MiB limit.

@@ -158,9 +158,9 @@ SHA256_HEX(RAW_BODY)
 - `X-Timestamp`: Unix timestamp in seconds
 - `X-Nonce`: unique value for this request
 - `X-Service`: caller service identifier
-- `X-Key-Id`: key ID; it may be omitted only when `HERALD_HMAC_DEFAULT_KEY_ID` is configured
+- `X-Key-Id`: required whenever `HERALD_HMAC_KEYS` is configured, including singleton maps; only single-`HMAC_SECRET` mode allows omission
 
-When `X-Key-Id` is omitted, the signer must keep the `KEY_ID` line in the canonical string empty. `HERALD_HMAC_DEFAULT_KEY_ID` selects the verification key on the server; it does not fill the signed canonical field.
+When single-`HMAC_SECRET` mode omits `X-Key-Id`, keep the canonical `KEY_ID` line empty. Key-map requests must sign their explicit ID; `HERALD_HMAC_DEFAULT_KEY_ID` does not replace that field. Configure client IDs before upgrading verifiers, and preserve Redis replay state. Older verifiers can accept an unchanged omitted-ID request again after a same-secret default-ID reassignment; rollback restores that behavior.
 
 **Server configuration**:
 ```bash
