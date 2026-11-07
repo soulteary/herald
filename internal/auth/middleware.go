@@ -37,6 +37,10 @@ type Config struct {
 	// RequireV3 rejects older HMAC schemes on routes whose side effects depend on idempotency.
 	RequireV3 bool
 
+	// RequireKeyID rejects omitted wire key IDs in v2/v3 requests. Key maps
+	// enable this so a changed default cannot reinterpret a signed request.
+	RequireKeyID bool
+
 	// ServicePolicies binds a key to its configured service after signature verification.
 	ServicePolicies serviceauth.ServicePolicies
 
@@ -44,8 +48,8 @@ type Config struct {
 
 	// KeyProvider resolves HMAC secrets by key id (required for ModeHMACV2).
 	KeyProvider KeyProvider
-	// DefaultKeyID is used when X-Key-Id is absent; empty means X-Key-Id is
-	// mandatory.
+	// DefaultKeyID is used when X-Key-Id is absent and RequireKeyID is false;
+	// empty means X-Key-Id is mandatory.
 	DefaultKeyID string
 
 	// APIKey is the expected API key for ModeAPIKey.
@@ -166,6 +170,9 @@ func verifyHMACV2(c fiber.Ctx, cfg Config) error {
 
 	if missingHMACHeaders(signature, timestamp, nonce, service) {
 		return deny(c, "missing_auth_headers")
+	}
+	if cfg.RequireKeyID && keyID == "" {
+		return deny(c, "key_id_required")
 	}
 	// keyID as sent by the client (may be empty). It is bound into the canonical
 	// string exactly as received. lookupKeyID is the id used to resolve the

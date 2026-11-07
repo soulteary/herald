@@ -156,9 +156,9 @@ SHA256_HEX(RAW_BODY)
 - `X-Timestamp`：Unix 秒级时间戳
 - `X-Nonce`：本次请求的唯一值
 - `X-Service`：调用方服务标识
-- `X-Key-Id`：Key ID；仅当配置 `HERALD_HMAC_DEFAULT_KEY_ID` 时可省略
+- `X-Key-Id`：配置 `HERALD_HMAC_KEYS` 后必需，包括单项 map；仅单 `HMAC_SECRET` 模式允许省略
 
-省略 `X-Key-Id` 时，签名方必须将规范串中的 `KEY_ID` 行保持为空。`HERALD_HMAC_DEFAULT_KEY_ID` 只用于服务端选择验签密钥，不会填充被签名的规范字段。
+单 `HMAC_SECRET` 模式省略 `X-Key-Id` 时，签名方将规范串中的 `KEY_ID` 行留空。密钥 map 请求必须显式签入 ID，`HERALD_HMAC_DEFAULT_KEY_ID` 不能替代该字段。先配置客户端 ID，再升级验证实例，并保留 Redis 重放状态。旧验证实例可能在相同密钥内容的默认 ID 重指定后再次接受原来的省略 ID 请求，回滚也会恢复此行为。
 
 **服务端配置**:
 ```bash

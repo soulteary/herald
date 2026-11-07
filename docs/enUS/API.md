@@ -19,7 +19,7 @@ Request authentication and client-certificate policy are independent:
 
 ### HMAC v3
 
-Send `X-Signature-Version: v3`, `X-Signature`, `X-Timestamp`, `X-Nonce`, `X-Service`, and, for multi-key configurations without a configured default, `X-Key-Id`.
+Send `X-Signature-Version: v3`, `X-Signature`, `X-Timestamp`, `X-Nonce`, `X-Service`, and `X-Key-Id` whenever `HERALD_HMAC_KEYS` is configured, including a single-entry map.
 
 `X-Service` and `X-Key-Id` must not contain the reserved text `|kid:`. Such
 values return `401/invalid_auth_headers` before authentication, nonce use, or
@@ -63,7 +63,7 @@ Do not switch idempotency keys or identity namespaces while upgrading. Existing
 Redis records, response replays, TTLs and unresolved sending records are unchanged.
 Retry the same signed key with a fresh timestamp/nonce; reconcile uncertain sends.
 
-The `key_id` line is the literal `X-Key-Id` header value. When the header is omitted because a configured or implicit default selects the secret, sign an empty `key_id` line—not the default key ID. Compute the lowercase hexadecimal HMAC-SHA256 of that value. The default timestamp drift is 60 seconds (`HMAC_MAX_DRIFT`), and each valid nonce is consumed once in Redis. With multiple `HERALD_HMAC_KEYS`, set `HERALD_HMAC_DEFAULT_KEY_ID` or send `X-Key-Id`; Herald never selects the first Go map entry. Legacy v1 is disabled unless `HMAC_V1_ENABLED=true`.
+The `key_id` line is the literal `X-Key-Id` header value. Only single-`HMAC_SECRET` mode allows an omitted header: sign an empty `key_id` line in that case, rather than `default`. Compute the lowercase hexadecimal HMAC-SHA256 of that value. The default timestamp drift is 60 seconds (`HMAC_MAX_DRIFT`), and each valid nonce is consumed once in Redis. A configured `HERALD_HMAC_DEFAULT_KEY_ID` does not permit omitted wire IDs in key-map v2/v3 requests; they return `401/key_id_required` before nonce consumption. Legacy v1 is disabled unless `HMAC_V1_ENABLED=true` and does not gain nonce protection from this requirement.
 
 ### API key
 
@@ -547,7 +547,7 @@ entry; do not rename an existing caller or retry an uncertain send under another
 identity during migration. See the deployment upgrade requirements below.
 
 Idempotency uses the signed service and the actual key ID selected for HMAC
-verification. Omitting `X-Key-Id` and explicitly sending that default ID now use
+verification. In single-secret mode, omitting `X-Key-Id` and sending `default` use
 the same record. This does not change the signature: an omitted wire header still
 has an empty canonical key-ID line. No HMAC version or SDK API change is required.
 

@@ -46,12 +46,13 @@ HERALD-HMAC-V2\n
 | `X-Timestamp` | 是 | unix 秒；须在 ±`HMAC_MAX_DRIFT`（默认 60s）内 |
 | `X-Nonce` | 是 | 一次性；重放将被拒绝 |
 | `X-Service` | 是 | 调用方标识，参与签名绑定 |
-| `X-Key-Id` | 视情况 | 没有可用默认项时必需（多键 map 且未配置默认项） |
+| `X-Key-Id` | 视情况 | 配置 `HERALD_HMAC_KEYS` 后必需，包括单项 map |
 
 ### 1.3 密钥策略
 
-- **无随机默认密钥**：配置多把密钥时，调用方须携带 `X-Key-Id`，或设置
-  `HERALD_HMAC_DEFAULT_KEY_ID` 指向已知 id。
+- **显式映射身份**：配置 `HERALD_HMAC_KEYS` 时，每个 v2/v3 调用方必须携带
+  `X-Key-Id`，配置默认项不能替代这个签名字段。单 `HMAC_SECRET` 模式保留稳定的
+  隐式 `default` 身份。
 - **不降级**：v2 签名存在但无效将被拒绝，绝不静默回退到 API Key。
 - **旧版 v1** 仅在 `HMAC_V1_ENABLED=true` 时用于兼容的非创建路由。
   HMAC 模式的创建请求始终要求 `X-Signature-Version: v3`；其他路由接受 v2/v3。
@@ -89,8 +90,19 @@ c, _ := herald.NewClient(herald.DefaultOptions().
 
 ## 2. 幂等与并发语义
 
+升级使用 `HERALD_HMAC_KEYS` 的验证实例前，先为所有调用方配置原有显式 key ID
+（SDK 的 `WithKeyID`，Stargate 的 `HERALD_HMAC_KEY_ID`）；旧验证实例已支持这些
+请求，再依次替换验证实例。
+密钥 map 请求省略 ID 时，在进入 handler 和写入 nonce 前返回
+`401/key_id_required`，单项 map 也一样。此前，省略 ID 的同一签名请求可能在默认
+ID 改变、密钥内容不变后再次通过认证。
+
+保留 key ID、Redis 数据、nonce 前缀和幂等派生密钥，无需转换记录。回滚会恢复旧的
+省略 ID 行为；存在旧验证实例或回滚后，不要在保留相同密钥内容时重新指定默认 ID。
+旧版 v1 仍是需显式启用、不提供 nonce 重放保护的独立协议。
+
 - 在 `POST /v1/otp/challenges` 上携带 `Idempotency-Key`。
-- HMAC principal 使用已签名的服务标识和实际验签密钥 ID。省略 Key ID 与显式默认 ID
+- HMAC principal 使用已签名的服务标识和实际验签密钥 ID。单密钥模式省略 ID 与显式 `default`
   使用同一命名空间。API Key/开发模式保留原始调用头，两者均缺失时使用客户端 IP；
   API key 本身不构成命名空间。服务及密钥 ID（含解析后的默认 ID）均不得含 `|kid:`。
 - 首个请求**原子占位**；HMAC 创建还原子检查旧空 Key ID 命名空间。发送前相同指纹字段的并发请求返回
@@ -144,7 +156,7 @@ c, _ := herald.NewClient(herald.DefaultOptions().
 | 领域 | v1 | v2 | 操作 |
 | --- | --- | --- | --- |
 | 环境 | （隐式） | `ENVIRONMENT` | 生产设 `production`，启用失败关闭校验 |
-| 请求认证 | 仅 `HMAC_SECRET` | `REQUEST_AUTH_MODE`、`HERALD_HMAC_KEYS`、`HERALD_HMAC_DEFAULT_KEY_ID`、`HMAC_MAX_DRIFT`、`HMAC_V1_ENABLED` | 默认 `hmac_v2`，设默认 key id 或携带 `X-Key-Id` |
+| 请求认证 | 仅 `HMAC_SECRET` | `REQUEST_AUTH_MODE`、`HERALD_HMAC_KEYS`、`HERALD_HMAC_DEFAULT_KEY_ID`、`HMAC_MAX_DRIFT`、`HMAC_V1_ENABLED` | 默认 `hmac_v2`，密钥 map 的 v2/v3 请求须携带 `X-Key-Id` |
 | 客户端证书 | 与请求认证混用 | `CLIENT_CERT_MODE` | 单独配置 mTLS |
 | Provider | `PROVIDER_FAILURE_POLICY` | + `PROVIDER_TIMEOUT`、`PROVIDER_MAX_RESPONSE_BYTES`、`PROVIDER_REDIRECT_POLICY` | 生产用 `strict`，设超时/上限 |
 | 测试模式 | `HERALD_TEST_MODE` | + `HERALD_TEST_API_KEY` | 仅测试；生产禁用 |
