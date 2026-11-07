@@ -232,7 +232,7 @@ func TestCreateChallenge_Success(t *testing.T) {
 		assert.Equal(t, http.MethodPost, r.Method)
 		assert.Equal(t, "/v1/otp/challenges", r.URL.Path)
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
-		assert.Equal(t, "api-key", r.Header.Get("X-API-Key"))
+		assert.Empty(t, r.Header.Get("X-API-Key"), "HMAC requests omit the configured API key")
 
 		bodyBytes, err := io.ReadAll(r.Body)
 		assert.NoError(t, err)

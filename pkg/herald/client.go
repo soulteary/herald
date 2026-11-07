@@ -55,7 +55,7 @@ const (
 // Options for creating a Herald client
 type Options struct {
 	BaseURL            string
-	APIKey             string
+	APIKey             string // Sent only when HMACSecret is empty.
 	HMACSecret         string
 	Service            string
 	Timeout            time.Duration
@@ -103,7 +103,8 @@ func (o *Options) WithAPIKey(key string) *Options {
 	return o
 }
 
-// WithHMACSecret sets the HMAC secret
+// WithHMACSecret selects HMAC authentication. A nonempty secret suppresses the
+// configured API key; an authentication failure never retries with that key.
 func (o *Options) WithHMACSecret(secret string) *Options {
 	o.HMACSecret = secret
 	return o
@@ -783,12 +784,10 @@ func (c *Client) TOTPRevoke(ctx context.Context, subject string) (*TOTPRevokeRes
 // configured scheme (v3 by default). It never downgrades: if a scheme is
 // selected, only that scheme's headers are produced.
 func (c *Client) addAuthHeaders(req *http.Request, body []byte) {
-	// Use API key if available
-	if c.apiKey != "" {
-		req.Header.Set("X-API-Key", c.apiKey)
-	}
-
 	if c.hmacSecret == "" {
+		if c.apiKey != "" {
+			req.Header.Set("X-API-Key", c.apiKey)
+		}
 		return
 	}
 
