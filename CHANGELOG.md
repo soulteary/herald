@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-11-07
+
 ### Fixed
 
 - Allow the TOTP proxy to select a mapped HMAC key and service identity with
@@ -567,7 +569,11 @@ and Redis key prefix of audit records all stay as they were.
 See `docs/enUS/MIGRATION_V2.md` and `docs/zhCN/MIGRATION_V2.md` for the v1→v2
 authentication diff, environment-variable migration, and rollback guidance.
 
-[Unreleased]: https://github.com/soulteary/herald/compare/v1.3.13...HEAD
+[Unreleased]: https://github.com/soulteary/herald/compare/v1.4.3...HEAD
+[1.4.3]: https://github.com/soulteary/herald/compare/v1.4.2...v1.4.3
+[1.4.2]: https://github.com/soulteary/herald/compare/v1.4.1...v1.4.2
+[1.4.1]: https://github.com/soulteary/herald/compare/v1.4.0...v1.4.1
+[1.4.0]: https://github.com/soulteary/herald/compare/v1.3.13...v1.4.0
 [1.3.13]: https://github.com/soulteary/herald/compare/v1.3.12...v1.3.13
 [1.3.12]: https://github.com/soulteary/herald/compare/v1.3.11...v1.3.12
 [1.3.11]: https://github.com/soulteary/herald/compare/v1.3.10...v1.3.11

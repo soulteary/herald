@@ -262,7 +262,7 @@ Only when `ENVIRONMENT=test` and `HERALD_TEST_MODE=true`:
 Pin `ghcr.io/soulteary/herald-dingtalk:1.2.6`,
 `ghcr.io/soulteary/herald-smtp:1.2.6`, and
 `ghcr.io/soulteary/herald-totp:2.0.2` (or verified immutable digests).
-Herald v1.4.2 imports `github.com/soulteary/herald-totp/v2` v2.0.2. SMTP and
+Herald v1.4.3 imports `github.com/soulteary/herald-totp/v2` v2.0.2. SMTP and
 DingTalk retain their existing patch-level interfaces. TOTP keeps its `/v1` HTTP
 routes and credential storage, but its HMAC protocol changes to operation-bound
 v2 with nonce protection. Upgrade the TOTP service and Herald proxy together;
@@ -529,3 +529,29 @@ With `HERALD_TOTP_HMAC_SECRET` configured, set `HERALD_TOTP_HMAC_KEY_ID` to the 
 Earlier Herald versions cannot select an explicit TOTP signing key. An omitted ID works with a single mapped key, but cannot select between different keys during overlap. First deploy this change on every proxy with the existing key ID and secret; verify requests before adding the next backend key. Then configure proxies with the next ID and matching secret, drain old in-flight callers, and retire the old backend key only when no caller needs it. Do not reuse a nonce or clear replay state to validate rotation.
 
 Rolling a proxy back restores omitted-ID/default-service behavior. Before rollback, reconcile the backend to a compatible single-key configuration matching that proxy's secret and expected service identity, or keep the proxy on the explicit-identity version. Preserve TOTP Redis data, encryption keys, nonce/quota state and Herald idempotency/audit state. This is optional proxy configuration support, not an HTTP protocol or credential-record migration.
+
+
+## Patch upgrade from v1.4.2 to v1.4.3
+
+Set explicit key IDs on every HMAC v2/v3 caller before upgrading a verifier
+configured with `HERALD_HMAC_KEYS`, including a single-entry map. Configure
+`Options.KeyID` (`WithKeyID`) in the Go SDK or send the signed `X-Key-Id` header in other clients.
+The verifier now rejects omitted IDs with `401/key_id_required` before consuming
+a nonce. Single-`HMAC_SECRET` configurations retain implicit `default` behavior.
+Legacy v1 remains governed by its existing compatibility option and has no replay
+protection; this change does not make it a rotation-safe alternative.
+
+The SDK sends only HMAC credentials when its HMAC secret is set and does not
+retry with an API key. For an API-key-only server, clear the caller's HMAC secret
+and use its API key. Public Go method signatures, HTTP payloads and HMAC wire
+formats remain unchanged. The TOTP proxy's optional key ID and service settings
+are described above; deploy and verify explicit identities before key overlap.
+
+Keep key IDs stable for retained keys, and preserve Redis namespaces, nonce
+records, the idempotency secret, audit state and TOTP encryption/quota state.
+No record conversion or namespace migration is required. Mixed old verifiers
+still accept omitted mapped IDs; complete the verifier rollout to enforce the
+new requirement. Rolling back restores that behavior and SDK dual-header
+behavior. Do not change default IDs or rename mapped keys with the same secret
+while accepting omitted-ID requests. A proxy rollback also requires the
+compatible single-key/backend service configuration described above.
