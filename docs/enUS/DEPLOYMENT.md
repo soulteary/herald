@@ -259,8 +259,8 @@ Only when `ENVIRONMENT=test` and `HERALD_TEST_MODE=true`:
 
 Pin `ghcr.io/soulteary/herald-dingtalk:1.2.6`,
 `ghcr.io/soulteary/herald-smtp:1.2.6`, and
-`ghcr.io/soulteary/herald-totp:2.0.1` (or verified immutable digests).
-Herald v1.4.1 imports `github.com/soulteary/herald-totp/v2` v2.0.1. SMTP and
+`ghcr.io/soulteary/herald-totp:2.0.2` (or verified immutable digests).
+Herald v1.4.2 imports `github.com/soulteary/herald-totp/v2` v2.0.2. SMTP and
 DingTalk retain their existing patch-level interfaces. TOTP keeps its `/v1` HTTP
 routes and credential storage, but its HMAC protocol changes to operation-bound
 v2 with nonce protection. Upgrade the TOTP service and Herald proxy together;
@@ -499,3 +499,22 @@ Unknown `ENVIRONMENT` and `REQUEST_AUTH_MODE` values are rejected before startup
 Supported authentication aliases are normalized through the same parser used by
 the router. Explicit development and test environments retain their existing
 policy; an unset environment still defaults to development.
+
+
+## Patch upgrade from v1.4.1 to v1.4.2
+
+Deploy herald-totp v2.0.2 before Herald v1.4.2. The TOTP service contains the
+credential-snapshot commit guard; changing the SDK dependency alone does not
+upgrade a running backend. Public SDK signatures, HMAC protocol, HTTP paths,
+request payloads and success payloads remain unchanged.
+
+Keep the existing Redis dataset, namespaces, pending enrollments, counters,
+idempotency secrets, nonce/replay records, audit state and encryption key.
+No additional data conversion is required for these patch versions. Replace all
+TOTP instances to obtain the guard; mixed older instances retain the earlier
+commit behavior. The guard does not cancel already committed operations.
+
+Rolling Herald back to v1.4.1 retains compatible interfaces and does not roll
+back the independent TOTP service. Rolling that backend back to v2.0.1 loses
+the snapshot guard. Preserve state in either direction; do not clear records to
+work around a rejected verification.
