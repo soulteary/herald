@@ -551,7 +551,8 @@ Keep key IDs stable for retained keys, and preserve Redis namespaces, nonce
 records, the idempotency secret, audit state and TOTP encryption/quota state.
 No record conversion or namespace migration is required. Mixed old verifiers
 still accept omitted mapped IDs; complete the verifier rollout to enforce the
-new requirement. Rolling back restores that behavior and SDK dual-header
-behavior. Do not change default IDs or rename mapped keys with the same secret
+new requirement. Rolling back a verifier restores omitted-ID acceptance.
+Separately, rolling a client back to an older SDK can restore sending both
+credentials. Do not change default IDs or rename mapped keys with the same secret
 while accepting omitted-ID requests. A proxy rollback also requires the
 compatible single-key/backend service configuration described above.
