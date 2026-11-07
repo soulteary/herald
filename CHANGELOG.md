@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-11-07
+
+### Dependencies
+
+- Update `herald-totp/v2` to v2.0.2. Its service binds TOTP validation commits
+  to the credential snapshot used for validation. Deploy that service separately;
+  the SDK dependency update does not replace a running backend.
+
+### Compatibility and operations
+
+- Keep public SDK signatures, HTTP request and success payloads unchanged.
+  No Redis schema, namespace or encryption-key conversion is required between
+  these patch versions. Preserve pending enrollments, counters, idempotency,
+  replay and audit state during upgrade and rollback.
+- Replace all TOTP instances to obtain the snapshot guard. Mixed older instances
+  retain the earlier commit behavior; rolling the backend back to v2.0.1 loses
+  the guard. Herald rollback alone does not change the deployed backend.
+
 ## [1.4.1] - 2026-11-07
 
 ### Fixed

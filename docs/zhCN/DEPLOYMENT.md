@@ -121,8 +121,8 @@ Herald 从右向左解析转发 IP 链，仅跳过明确配置为可信的代理
 
 固定使用 `ghcr.io/soulteary/herald-dingtalk:1.2.6`、
 `ghcr.io/soulteary/herald-smtp:1.2.6`、
-`ghcr.io/soulteary/herald-totp:2.0.1`，或经过核验的不可变摘要。
-Herald v1.4.1 导入 `github.com/soulteary/herald-totp/v2` v2.0.1。SMTP 和钉钉
+`ghcr.io/soulteary/herald-totp:2.0.2`，或经过核验的不可变摘要。
+Herald v1.4.2 导入 `github.com/soulteary/herald-totp/v2` v2.0.2。SMTP 和钉钉
 保留补丁版本接口。TOTP 保留 `/v1` HTTP 路由与凭据存储格式，但 HMAC 协议
 升级为绑定操作并带 nonce 防重放的 v2；必须协调升级 TOTP 服务和 Herald
 代理，旧 HMAC 签名不再接受。仅使用 API key 的模式仍可用。
@@ -452,3 +452,19 @@ HMAC 部署先暂停创建流量、排空在途创建请求，再替换全部旧
 升级前移除独立通配项，只保留预期来源，或清空配置关闭 CORS。回滚前同样应修正配置，旧版本
 仍接受混合通配列表。开发/测试环境的通配支持、正常显式列表及请求认证保持不变，无需迁移
 Redis 记录或客户端签名。CORS 是浏览器来源边界，API Key/HMAC 认证仍独立执行。
+
+
+## 从 v1.4.1 升级到 v1.4.2
+
+先部署 herald-totp v2.0.2，再部署 Herald v1.4.2。凭据快照提交校验在 TOTP
+服务内执行，仅更新 SDK 依赖不会升级运行中的后端。公开 SDK 签名、HMAC
+协议、HTTP 路径及请求和成功响应格式不变。
+
+保留现有 Redis 数据、命名空间、待确认注册、计数、幂等密钥、nonce/重放记录、
+审计状态和加密密钥，两个补丁版本之间无需额外数据转换。全部替换 TOTP
+实例后才具备快照校验；混合旧实例仍保留原提交行为。该校验不会撤销已经
+完成的操作。
+
+Herald 回滚至 v1.4.1 时接口保持兼容，不会随之回滚独立的 TOTP 服务。后端
+回滚至 v2.0.1 会失去快照提交校验。两个方向都应保留状态，不要清空记录
+绕过验证拒绝。
