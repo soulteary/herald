@@ -22,6 +22,8 @@
 
 ### gocyclo
 
+- `internal/auth/middleware.go`
+  - Line 144: cyclomatic complexity 18 for function verifyHMACV2
 - `internal/handlers/totp_security_test.go`
   - Line 121: cyclomatic complexity 17 for function TestTOTPSecurityPreservesSuccessfulWireContract
 - `internal/handlers/totp_rate_limit_response_test.go`
@@ -32,8 +34,6 @@
   - Line 205: cyclomatic complexity 16 for function NewRouterWithClientAndHandlersE
 - `internal/config/config.go`
   - Line 237: cyclomatic complexity 16 for function Initialize
-- `internal/auth/middleware.go`
-  - Line 144: cyclomatic complexity 18 for function verifyHMACV2
 
 ---
 
