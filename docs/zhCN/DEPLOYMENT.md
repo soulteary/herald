@@ -121,8 +121,8 @@ Herald 从右向左解析转发 IP 链，仅跳过明确配置为可信的代理
 
 固定使用 `ghcr.io/soulteary/herald-dingtalk:1.2.6`、
 `ghcr.io/soulteary/herald-smtp:1.2.6`、
-`ghcr.io/soulteary/herald-totp:2.0.0`，或经过核验的不可变摘要。
-Herald v1.4.0 导入 `github.com/soulteary/herald-totp/v2` v2.0.0。SMTP 和钉钉
+`ghcr.io/soulteary/herald-totp:2.0.1`，或经过核验的不可变摘要。
+Herald v1.4.1 导入 `github.com/soulteary/herald-totp/v2` v2.0.1。SMTP 和钉钉
 保留补丁版本接口。TOTP 保留 `/v1` HTTP 路由与凭据存储格式，但 HMAC 协议
 升级为绑定操作并带 nonce 防重放的 v2；必须协调升级 TOTP 服务和 Herald
 代理，旧 HMAC 签名不再接受。仅使用 API key 的模式仍可用。
