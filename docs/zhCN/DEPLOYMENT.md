@@ -122,7 +122,7 @@ Herald 从右向左解析转发 IP 链，仅跳过明确配置为可信的代理
 固定使用 `ghcr.io/soulteary/herald-dingtalk:1.2.6`、
 `ghcr.io/soulteary/herald-smtp:1.2.6`、
 `ghcr.io/soulteary/herald-totp:2.0.2`，或经过核验的不可变摘要。
-Herald v1.4.2 导入 `github.com/soulteary/herald-totp/v2` v2.0.2。SMTP 和钉钉
+Herald v1.4.3 导入 `github.com/soulteary/herald-totp/v2` v2.0.2。SMTP 和钉钉
 保留补丁版本接口。TOTP 保留 `/v1` HTTP 路由与凭据存储格式，但 HMAC 协议
 升级为绑定操作并带 nonce 防重放的 v2；必须协调升级 TOTP 服务和 Herald
 代理，旧 HMAC 签名不再接受。仅使用 API key 的模式仍可用。
@@ -479,3 +479,25 @@ Herald 回滚至 v1.4.1 时接口保持兼容，不会随之回滚独立的 TOTP
 旧 Herald 无法显式选择 TOTP 签名密钥。省略 ID 可用于单密钥映射，但无法在不同密钥重叠期间选择目标密钥。先在全部代理部署本次改动，显式配置现有 key ID 与对应密钥并验证调用，再向后端添加新密钥。随后将代理切换为新的 ID 与对应密钥，排空旧在途调用，确认没有调用方依赖旧密钥后才移除它。不要复用 nonce 或清空重放记录来测试轮换。
 
 回滚代理会恢复省略 ID 和默认服务名的行为。回滚前应把后端协调为与旧代理密钥和预期服务身份兼容的单密钥配置，否则继续使用支持显式身份的代理版本。保留 TOTP Redis 数据、加密密钥、nonce/配额状态及 Herald 幂等和审计状态。本次是可选代理配置支持，不迁移 HTTP 协议或凭据记录。
+
+
+## 从 v1.4.2 升级到 v1.4.3
+
+使用 `HERALD_HMAC_KEYS` 的验证端升级前，应先为全部 HMAC v2/v3 调用方配置
+显式 key ID，单项映射也不例外。Go SDK 设置 `Options.KeyID` (`WithKeyID`)，其他客户端发送参与
+签名的 `X-Key-Id`。验证端会在消耗 nonce 前以 `401/key_id_required` 拒绝省略
+ID 的请求。单一 `HMAC_SECRET` 配置仍支持隐式 `default`。旧 v1 仍受原兼容
+开关控制且没有重放保护，不应作为安全轮换的替代方案。
+
+SDK 配置 HMAC secret 后只发送 HMAC 凭据，失败时不以 API key 重试。连接仅
+接受 API key 的服务时，应清空调用方 HMAC secret 并配置 API key。公开 Go
+方法签名、HTTP 数据格式及 HMAC 签名格式不变。TOTP 代理可选的 key ID 和服务
+配置见上节；先部署并验证显式身份，再开始密钥重叠。
+
+保留仍在使用的 key ID、Redis 命名空间、nonce 记录、幂等密钥、审计状态及
+TOTP 加密密钥和配额状态，无需转换记录或迁移命名空间。混合部署中的旧验证端
+仍接受省略的映射 ID，须完成验证端替换才能全面执行新要求。回滚验证端会恢复
+接受省略 ID 的行为；调用方单独回滚到旧 SDK 后，可能恢复同时发送两类凭据。
+仍接受省略 ID 的请求时，不应更改默认 ID
+或以相同 secret 重命名映射密钥。代理回滚还须先按上节协调后端单密钥及服务
+身份配置。
