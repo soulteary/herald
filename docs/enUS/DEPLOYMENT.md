@@ -166,6 +166,8 @@ responses. API Key and HMAC wire formats are unchanged.
 | `HERALD_TOTP_BASE_URL` | herald-totp service base URL (e.g. `http://herald-totp:8085`) | (empty) | When TOTP enabled |
 | `HERALD_TOTP_API_KEY` | API key for Herald to call herald-totp (if herald-totp requires it) | (empty) | No |
 | `HERALD_TOTP_HMAC_SECRET` | HMAC secret for Herald to call herald-totp (if herald-totp uses HMAC) | (empty) | No |
+| `HERALD_TOTP_HMAC_KEY_ID` | Explicit TOTP signing key ID; required when the backend accepts multiple keys | (empty; omit ID) | No |
+| `HERALD_TOTP_HMAC_SERVICE` | TOTP signing service identity | (empty; retain SDK default `stargate`) | No |
 
 #### TLS / mTLS
 
@@ -518,3 +520,12 @@ Rolling Herald back to v1.4.1 retains compatible interfaces and does not roll
 back the independent TOTP service. Rolling that backend back to v2.0.1 loses
 the snapshot guard. Preserve state in either direction; do not clear records to
 work around a rejected verification.
+
+
+### TOTP proxy signing identity and key rotation
+
+With `HERALD_TOTP_HMAC_SECRET` configured, set `HERALD_TOTP_HMAC_KEY_ID` to the backend's mapped key ID and optionally set `HERALD_TOTP_HMAC_SERVICE`. Both identifiers are limited to the SDK's 128-byte maximum and must not contain control characters or surrounding whitespace. Unset values preserve the existing omitted key ID and SDK service default `stargate`. API-key-only configuration is unchanged; HMAC proxy requests do not include the API key.
+
+Earlier Herald versions cannot select an explicit TOTP signing key. An omitted ID works with a single mapped key, but cannot select between different keys during overlap. First deploy this change on every proxy with the existing key ID and secret; verify requests before adding the next backend key. Then configure proxies with the next ID and matching secret, drain old in-flight callers, and retire the old backend key only when no caller needs it. Do not reuse a nonce or clear replay state to validate rotation.
+
+Rolling a proxy back restores omitted-ID/default-service behavior. Before rollback, reconcile the backend to a compatible single-key configuration matching that proxy's secret and expected service identity, or keep the proxy on the explicit-identity version. Preserve TOTP Redis data, encryption keys, nonce/quota state and Herald idempotency/audit state. This is optional proxy configuration support, not an HTTP protocol or credential-record migration.

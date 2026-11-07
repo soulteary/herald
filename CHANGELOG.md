@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Allow the TOTP proxy to select a mapped HMAC key and service identity with
+  `HERALD_TOTP_HMAC_KEY_ID` and `HERALD_TOTP_HMAC_SERVICE`. Unset values retain
+  the SDK defaults. This supports explicit key selection during overlap; it
+  does not change the authentication protocol or upgrade the TOTP backend.
+  Reconcile single-key selection before rolling back to an older proxy.
+
 ### Security hardening
 
 - Omit the configured API key from SDK requests when an HMAC secret is set.
