@@ -142,6 +142,9 @@ scrape_configs:
 ```yaml
 scrape_configs:
   - job_name: 'herald'
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/herald_metrics_key
     kubernetes_sd_configs:
       - role: pod
         namespaces:
