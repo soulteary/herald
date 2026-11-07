@@ -389,7 +389,7 @@ scrape_configs:
 
 ## 安全
 
-- 在生产环境中使用 mTLS 或 HMAC 认证（推荐使用 mTLS 以获得最高安全性）
+- 生产环境使用 HMAC 或 API Key 请求认证，并可叠加 mTLS 传输保护；客户端证书不能替代配置的请求凭据
 - 设置强 API 密钥
 - 在生产环境中使用 TLS/HTTPS
 - 适当配置速率限制

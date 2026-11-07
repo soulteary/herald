@@ -24,7 +24,7 @@ containers on macOS, Windows and other hosts.
 
 ## Core Features
 
-- 🔒 **Secure by Design**: Challenge-based verification with Argon2 hash storage, multiple authentication methods (mTLS, HMAC, API Key)
+- 🔒 **Secure by Design**: Challenge-based verification with Argon2 hash storage, HMAC or API-key request authentication with optional mTLS transport
 - 📊 **Built-in Rate Limiting**: Multi-dimensional rate limiting (per user, per IP, per destination) with configurable thresholds
 - 📝 **Complete Audit Trail**: Full audit logging for all operations with provider tracking
 - 🔌 **Pluggable Providers**: Extensible email, SMS, and DingTalk provider architecture (email via [herald-smtp](https://github.com/soulteary/herald-smtp), DingTalk via [herald-dingtalk](https://github.com/soulteary/herald-dingtalk))

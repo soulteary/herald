@@ -9,7 +9,7 @@ This document explains Herald's security features, security configuration, and b
 1. **Challenge-Based Verification**: Uses challenge-verify model to prevent replay attacks and ensure one-time use of verification codes
 2. **Secure Code Storage**: Verification codes are stored as Argon2 hashes, never in plaintext
 3. **Multi-Dimensional Rate Limiting**: Rate limiting by user_id, destination (email/phone), and IP address to prevent abuse
-4. **Service Authentication**: Supports mTLS, HMAC signature, and API Key authentication for inter-service communication
+4. **Service Authentication**: Uses HMAC or API-key request authentication, with optional mTLS as an additional transport policy
 5. **Idempotency Protection**: Prevents duplicate challenge creation and code sending using idempotency keys
 6. **Challenge Expiration**: Automatic expiration of challenges with configurable TTL
 7. **Attempt Limiting**: Maximum attempt limits per challenge to prevent brute force attacks
@@ -81,7 +81,7 @@ export REDIS_ADDR="redis:6379"
 - Use reverse proxy (such as Nginx or Traefik) to handle SSL/TLS
 - Ensure your reverse proxy forwards client IP (e.g. X-Forwarded-For) if rate limiting by IP is used
 - Use strong HMAC secrets (minimum 32 bytes)
-- Disable insecure authentication methods in production (use mTLS or HMAC, avoid API Key if possible)
+- Disable insecure authentication methods in production (prefer HMAC request authentication and optionally add mTLS transport protection)
 
 ### 4. Rate Limiting Configuration
 

@@ -312,7 +312,7 @@ HTTP 状态代码：
 
 ### TOTP 代理（可选）
 
-当 `HERALD_TOTP_ENABLED=true` 且设置了 `HERALD_TOTP_BASE_URL` 时，Herald 会将 TOTP（Authenticator）请求代理到 [herald-totp](https://github.com/soulteary/herald-totp)。所有 TOTP 路由与 OTP 路由使用相同认证（mTLS、HMAC 或 API Key）。
+当 `HERALD_TOTP_ENABLED=true` 且设置了 `HERALD_TOTP_BASE_URL` 时，Herald 会将 TOTP（Authenticator）请求代理到 [herald-totp](https://github.com/soulteary/herald-totp)。所有 TOTP 路由与 OTP 路由使用相同的 `REQUEST_AUTH_MODE`（HMAC 或 API Key）；mTLS 是额外的传输策略，不替代请求认证。
 
 #### 获取 TOTP 状态
 

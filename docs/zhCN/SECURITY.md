@@ -9,7 +9,7 @@
 1. **基于 Challenge 的验证**: 使用 challenge-verify 模型防止重放攻击，确保验证码一次性使用
 2. **安全代码存储**: 验证码使用 Argon2 哈希存储，从不以明文形式存储
 3. **多维度限流**: 按 user_id、destination（邮箱/手机）和 IP 地址进行限流，防止滥用
-4. **服务认证**: 支持 mTLS、HMAC 签名和 API Key 认证，用于服务间通信
+4. **服务认证**: 使用 HMAC 或 API Key 请求认证，mTLS 可作为额外的传输策略
 5. **幂等性保护**: 使用幂等键防止重复创建 challenge 和重复发送验证码
 6. **Challenge 过期**: Challenge 自动过期，可配置 TTL
 7. **尝试次数限制**: 每个 challenge 的最大尝试次数限制，防止暴力破解
@@ -80,7 +80,7 @@ export REDIS_ADDR="redis:6379"
 - 使用反向代理（如 Nginx 或 Traefik）处理 SSL/TLS
 - 若按 IP 限流，确保反向代理正确转发客户端 IP（如 X-Forwarded-For）
 - 使用强 HMAC 密钥（最少 32 个字符）
-- 在生产环境中禁用不安全的认证方法（使用 mTLS 或 HMAC，尽可能避免 API Key）
+- 在生产环境中禁用不安全的认证方法（优先使用 HMAC 请求认证，并可叠加 mTLS 传输保护）
 
 ### 4. 限流配置
 

@@ -185,8 +185,8 @@ var (
 	//     conflated with request-body integrity.
 	//   HMAC_V1_ENABLED explicitly re-enables the legacy v1 scheme for one
 	//     migration cycle; it is off by default.
-	//   HERALD_HMAC_DEFAULT_KEY_ID must be set explicitly when using a multi-key
-	//     map with unsigned X-Key-Id (no random/arbitrary default).
+	//   HERALD_HMAC_DEFAULT_KEY_ID selects a configuration lookup default. It
+	//     never permits omitted wire key IDs in key-map HMAC v2/v3 requests.
 	//   HMAC_MAX_DRIFT bounds the accepted timestamp skew (default 60s).
 	RequestAuthMode  = env.Get("REQUEST_AUTH_MODE", "hmac_v2")
 	ClientCertMode   = env.Get("CLIENT_CERT_MODE", "off")

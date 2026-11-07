@@ -19,7 +19,7 @@ HTTP 服务使用 Fiber v3；依赖及 Go 工具链以 `go.mod` 为准（Go 1.27
 
 ## 核心特性
 
-- 🔒 **安全设计**：基于挑战的验证，使用 Argon2 哈希存储，多种认证方法（mTLS、HMAC、API Key）
+- 🔒 **安全设计**：基于挑战的验证，使用 Argon2 哈希存储，HMAC 或 API Key 请求认证，以及可选的 mTLS 传输保护
 - 📊 **内置速率限制**：多维速率限制（按用户、按 IP、按目标），可配置阈值
 - 📝 **完整审计跟踪**：所有操作的完整审计日志记录，包含提供者跟踪
 - 🔌 **可插拔提供者**：可扩展的电子邮件、SMS 与 DingTalk 提供者架构（邮件通过 [herald-smtp](https://github.com/soulteary/herald-smtp)，DingTalk 通过 [herald-dingtalk](https://github.com/soulteary/herald-dingtalk)）

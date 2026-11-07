@@ -392,7 +392,7 @@ For detailed monitoring documentation, see [MONITORING.md](MONITORING.md).
 
 ## Security
 
-- Use mTLS or HMAC authentication for production (mTLS is recommended for highest security)
+- Use HMAC or API-key request authentication in production; add mTLS where appropriate. A client certificate does not replace the configured request credentials.
 - Set strong API keys
 - Use TLS/HTTPS in production
 - Configure rate limits appropriately

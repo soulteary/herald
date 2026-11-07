@@ -144,10 +144,11 @@ See [API.md](API.md) (Create Challenge response, Get Test Code) and [DEPLOYMENT.
    # Check X-API-Key header matches configured key
    ```
 
-4. **For mTLS Authentication**
+4. **For the Additional mTLS Transport Policy**
    - Verify client certificate is valid
    - Check certificate chain is trusted
    - Verify TLS connection is established
+   - A successful client certificate check still requires the selected HMAC or API-key credentials.
 
 5. **Check Herald Logs**
    ```bash
