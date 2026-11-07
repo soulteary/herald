@@ -259,8 +259,8 @@ Only when `ENVIRONMENT=test` and `HERALD_TEST_MODE=true`:
 
 Pin `ghcr.io/soulteary/herald-dingtalk:1.2.6`,
 `ghcr.io/soulteary/herald-smtp:1.2.6`, and
-`ghcr.io/soulteary/herald-totp:2.0.0` (or verified immutable digests).
-Herald v1.4.0 imports `github.com/soulteary/herald-totp/v2` v2.0.0. SMTP and
+`ghcr.io/soulteary/herald-totp:2.0.1` (or verified immutable digests).
+Herald v1.4.1 imports `github.com/soulteary/herald-totp/v2` v2.0.1. SMTP and
 DingTalk retain their existing patch-level interfaces. TOTP keeps its `/v1` HTTP
 routes and credential storage, but its HMAC protocol changes to operation-bound
 v2 with nonce protection. Upgrade the TOTP service and Herald proxy together;

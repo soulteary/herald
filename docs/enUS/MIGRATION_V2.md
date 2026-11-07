@@ -293,3 +293,32 @@ The `herald-totp/v2` Go import is internal to Herald; callers of
 `github.com/soulteary/herald/pkg/herald` retain their existing import path and
 public TOTP request/response types. Applications that import herald-totp directly
 must migrate their own import to `/v2` and follow its separate major-version guide.
+
+
+## Patch upgrade from v1.4.0 to v1.4.1
+
+Deploy herald-totp v2.0.1 to enforce confirmation quotas, then Herald v1.4.1 to
+preserve its complete 429 response. Updating the Go dependency alone does not
+upgrade the backend service. The `/v2` TOTP module, HMAC v2 protocol and existing
+HTTP paths remain unchanged between these patch versions.
+
+A complete upstream confirmation 429 now produces fixed
+`{"ok":false,"reason":"rate_limited"}` with HTTP 429. Herald does not forward
+upstream bodies or headers. Truncated or oversized error responses remain
+502/proxy_failed. Callers should retain the pending enrollment for retry and
+respect its expiry; reserve shared subject budget for start, confirmation and
+failed attempts. A subject limit of one cannot complete the flow in its first
+hourly window.
+
+These patch versions use the same OTP challenge and idempotency namespaces. No
+additional schema conversion or namespace migration is required for this patch.
+Preserve existing Redis data, unresolved sending records, idempotency secrets,
+nonce state, audit state and the TOTP encryption key. Do not clear uncertain
+records or choose a new idempotency key merely because a request was rejected.
+Upgrades from earlier major or OTP namespace versions still need their separate
+migration procedures above.
+
+Rolling Herald back to v1.4.0 masks confirmation quota responses as 502 again;
+rolling TOTP back to v2.0.0 removes the confirmation quota. Keep their persistent
+state intact and do not downgrade an independently deployed backend as an
+implicit part of a gateway rollback.

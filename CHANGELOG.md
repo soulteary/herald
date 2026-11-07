@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-11-07
+
 ### Fixed
 
 - Preserve a complete upstream enrollment-confirmation rate-limit response as
@@ -17,8 +19,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Dependencies
 
-- Pin the merged herald-totp/v2 confirmation-quota fix at `8d40647e0f85` using
-  its real Go pseudo-version. Published v2.0.0 remains unchanged.
+- Replace the temporary herald-totp/v2 confirmation-quota pseudo-version with
+  the released v2.0.1 module. Deploy the matching TOTP service separately; an SDK
+  dependency update does not change an independently deployed backend.
+
+### Compatibility and operations
+
+- Keep Herald's public Go API, external HTTP routes and successful enrollment
+  payload unchanged. The confirmation quota response is now observable as 429
+  rather than a masked 502; callers must retain enrollment context for retry.
+- Reserve shared TOTP subject quota for enrollment start and confirmation plus
+  failed attempts. A subject limit of one blocks confirmation after start until
+  the hourly reset; a pending enrollment may expire before then.
+- No Redis schema or encryption-key conversion is required for these patch
+  versions. Preserve Redis data, idempotency and nonce records, audit state and
+  the original TOTP encryption key during upgrade and rollback. Older major
+  versions still require their existing coordinated migration rules.
+- Rolling Herald back to v1.4.0 masks upstream confirmation 429 as 502 again.
+  Rolling TOTP back to v2.0.0 removes its confirmation quota. Do not clear
+  persistent state or independently downgrade providers to work around a 429.
 
 ## [1.4.0] - 2026-11-07
 

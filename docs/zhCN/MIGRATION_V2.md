@@ -227,3 +227,24 @@ Herald 公开 Go 模块路径及外部 HTTP 数据结构保持不变，但本次
 Herald 内部采用 `herald-totp/v2` Go 导入；Herald SDK 的调用方仍使用
 `github.com/soulteary/herald/pkg/herald`，公开 TOTP 请求/响应类型不变。
 直接导入 herald-totp 的应用需自行迁移到 `/v2` 并遵循其主版本迁移说明。
+
+
+## 从 v1.4.0 升级到 v1.4.1
+
+先部署 herald-totp v2.0.1 以执行确认配额，再部署 Herald v1.4.1 以保留完整的
+上游 429。更新 Go 依赖不等于部署后端。两个补丁版本之间的 TOTP `/v2` 模块、
+HMAC v2 协议和已有 HTTP 路径不变。
+
+完整的上游确认 429 现在返回 HTTP 429 与固定的
+`{"ok":false,"reason":"rate_limited"}`，不转发上游正文或响应头；截断或超长
+错误仍返回 502/proxy_failed。客户端应保留 pending 注册上下文供重试，但仍
+遵守其有效期。subject 配额需覆盖开始、确认和错误尝试，上限为一时无法在
+第一个小时窗口内完成注册。
+
+本次补丁继续使用相同的 OTP challenge 和幂等命名空间，无需额外数据转换或
+键空间迁移。保留 Redis、未决 sending 记录、幂等密钥、nonce 与审计状态和
+TOTP 加密密钥，不要因拒绝请求而清除不确定记录或更换幂等键。更早主版本或
+旧 OTP 命名空间仍需遵循原迁移步骤。
+
+Herald 回滚至 v1.4.0 会再次把确认 429 映射为 502；TOTP 回滚至 v2.0.0 会失去
+确认配额。保留持久状态，不要在网关回滚时隐式降级独立部署的后端。
