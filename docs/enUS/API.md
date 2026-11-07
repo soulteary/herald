@@ -341,7 +341,7 @@ HTTP Status Codes:
 
 ### TOTP Proxy (Optional)
 
-When `HERALD_TOTP_ENABLED=true` and `HERALD_TOTP_BASE_URL` is set, Herald proxies TOTP (Authenticator) operations to [herald-totp](https://github.com/soulteary/herald-totp). All TOTP routes require the same authentication as OTP routes (mTLS, HMAC, or API Key).
+When `HERALD_TOTP_ENABLED=true` and `HERALD_TOTP_BASE_URL` is set, Herald proxies TOTP (Authenticator) operations to [herald-totp](https://github.com/soulteary/herald-totp). All TOTP routes use the same `REQUEST_AUTH_MODE` as OTP routes: HMAC or API key. Optional mTLS is an additional transport policy and does not replace request authentication.
 
 #### Get TOTP Status
 
