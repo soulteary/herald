@@ -2,12 +2,14 @@ package handlers
 
 import (
 	"crypto/hmac"
-	"github.com/soulteary/herald-totp/v2/pkg/heraldtotp"
-	"github.com/soulteary/herald/internal/config"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+
+	"github.com/soulteary/herald-totp/v2/pkg/heraldtotp"
+	"github.com/soulteary/herald/internal/config"
 )
 
 func TestTOTPProxyConfiguredSigningIdentity(t *testing.T) {
@@ -23,9 +25,9 @@ func TestTOTPProxyConfiguredSigningIdentity(t *testing.T) {
 			if tc.id == "" {
 				secrets = map[string]string{"only": "totp-hmac-secret"}
 			}
-			calls := 0
+			var calls atomic.Int32
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				calls++
+				calls.Add(1)
 				if r.Header.Get("X-API-Key") != "" || r.Header.Get("Authorization") != "" {
 					t.Error("HMAC request included API credentials")
 				}
@@ -61,8 +63,8 @@ func TestTOTPProxyConfiguredSigningIdentity(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer response.Body.Close()
-			if response.StatusCode != 200 || calls != 1 {
-				t.Fatalf("status=%d calls=%d", response.StatusCode, calls)
+			if response.StatusCode != 200 || calls.Load() != 1 {
+				t.Fatalf("status=%d calls=%d", response.StatusCode, calls.Load())
 			}
 		})
 	}
