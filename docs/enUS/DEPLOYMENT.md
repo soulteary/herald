@@ -381,6 +381,9 @@ scrape_configs:
     static_configs:
       - targets: ['herald:8082']
     metrics_path: '/metrics'
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/herald_metrics_key
 ```
 
 For detailed monitoring documentation, see [MONITORING.md](MONITORING.md).

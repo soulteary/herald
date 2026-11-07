@@ -118,6 +118,8 @@ herald_redis_operation_duration_seconds_count{operation="ratelimit_user"} 10000
 
 ### 基本抓取配置
 
+先配置独立的 `HERALD_METRICS_API_KEY`，并将其值挂载到下方抓取端凭据文件。生产环境拒绝匿名抓取，不得复用业务 API/HMAC 密钥。
+
 将以下内容添加到 `prometheus.yml`：
 
 ```yaml
@@ -126,6 +128,9 @@ scrape_configs:
     static_configs:
       - targets: ['herald:8082']
     metrics_path: '/metrics'
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/herald_metrics_key
     scrape_interval: 15s
     scrape_timeout: 10s
 ```

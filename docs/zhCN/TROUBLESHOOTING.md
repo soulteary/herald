@@ -63,7 +63,7 @@
 
 在本地或集成测试中若不想依赖真实短信/邮件送达：
 
-- 将 **Herald** 的 `ENVIRONMENT=test`、`HERALD_TEST_MODE=true` 和 `HERALD_TEST_API_KEY` 设置好。创建 challenge 的响应会包含 `debug_code`，仅在独立测试监听器上通过测试密钥开放 `GET /v1/test/code/:challenge_id`。成功创建仍需配置发送渠道。
+- 将 **Herald** 的 `ENVIRONMENT=test`、`HERALD_TEST_MODE=true` 和 `HERALD_TEST_API_KEY` 设置好。创建 challenge 的响应会包含 `debug_code`，仅在独立测试监听器上通过测试密钥开放 `GET /v1/test/code/:challenge_id`。非生产环境默认 `PROVIDER_FAILURE_POLICY=soft`，发送失败仍可返回可验证的 challenge，并标记 `delivery_status=failed`。strict 策略要求发送成功；生产环境禁止 soft。
 - 将 **Stargate** 的 `DEBUG=true`。`/_send_verify_code` 的响应会包含验证码，登录页会直接展示（如「验证码（调试）：123456」）。
 
 详见 [API.md](API.md)（创建挑战、获取测试验证码）与 [DEPLOYMENT.md](DEPLOYMENT.md)（测试模式与调试）。**生产环境请勿开启测试模式或 DEBUG。**

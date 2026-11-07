@@ -63,7 +63,7 @@ This guide helps you diagnose and resolve common issues with Herald OTP and veri
 
 For local or integration testing when you do not want to rely on real SMS/email delivery:
 
-1. Set **Herald** `ENVIRONMENT=test`, `HERALD_TEST_MODE=true` and `HERALD_TEST_API_KEY`. Herald will then return the verification code in the create-challenge response (`debug_code`) and expose `GET /v1/test/code/:challenge_id` only on the separate test listener, with test-key authentication. A configured provider is still needed for a successful creation.
+1. Set **Herald** `ENVIRONMENT=test`, `HERALD_TEST_MODE=true` and `HERALD_TEST_API_KEY`. Herald will then return the verification code in the create-challenge response (`debug_code`) and expose `GET /v1/test/code/:challenge_id` only on the separate test listener, with test-key authentication. With the non-production `PROVIDER_FAILURE_POLICY=soft` default, a provider failure can still return a verifiable challenge with `delivery_status=failed`. Strict policy requires successful delivery; production forbids soft policy.
 2. Set **Stargate** `DEBUG=true`. Stargate will include the verification code in the `/_send_verify_code` response and display it on the login page (e.g. "Verification code (debug): 123456").
 
 See [API.md](API.md) (Create Challenge response, Get Test Code) and [DEPLOYMENT.md](DEPLOYMENT.md) (Test mode and debugging). **Never enable test mode or DEBUG in production.**
