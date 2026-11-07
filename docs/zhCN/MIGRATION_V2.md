@@ -69,6 +69,11 @@ nonce 通过 Redis `SET NX EX` 在（`service|key-id|nonce`）的 keyed digest �
 
 ### 1.6 SDK
 
+SDK 的 `HMACSecret` 非空时选择 HMAC，省略 `X-API-Key`，即使同时配置了
+`APIKey`。HMAC 请求被拒绝后不会换用其他凭据重试。服务端使用
+`REQUEST_AUTH_MODE=api_key` 时，SDK 应只配置 API key，并留空 HMAC secret。
+旧客户端若同时发送两类凭据并依赖服务端选择 API key，升级前需调整配置。
+
 Go SDK 默认使用 v3 签名。设置 key id（测试可注入固定时钟/nonce）：
 
 ```go
@@ -76,7 +81,7 @@ c, _ := herald.NewClient(herald.DefaultOptions().
     WithBaseURL(base).
     WithHMACSecret(secret).
     WithKeyID("default"))
-// v2 为默认 SignatureVersion；仅当对接开启 HMAC_V1_ENABLED=true 的旧服务端时
+// v3 为默认 SignatureVersion；仅当对接开启 HMAC_V1_ENABLED=true 的旧服务端时
 // 才使用 WithSignatureVersion(herald.SignatureV1)。
 ```
 
