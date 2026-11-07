@@ -1,11 +1,11 @@
 # Go Report Card
 
-**Grade: A+** (99.5%)
+**Grade: A+** (99.4%)
 
 | Metric | Value |
 | ------ | ----- |
-| Files | 125 |
-| Issues | 5 |
+| Files | 126 |
+| Issues | 6 |
 
 ## Checks
 
@@ -14,7 +14,7 @@
 | gofmt | 100% |
 | go_vet | 100% |
 | ineffassign | 100% |
-| gocyclo | 96% |
+| gocyclo | 95% |
 | license | 100% |
 | misspell | 100% |
 
@@ -22,16 +22,18 @@
 
 ### gocyclo
 
+- `internal/handlers/totp_security_test.go`
+  - Line 121: cyclomatic complexity 17 for function TestTOTPSecurityPreservesSuccessfulWireContract
+- `internal/handlers/totp_rate_limit_response_test.go`
+  - Line 14: cyclomatic complexity 17 for function TestTOTPConfirmPreservesBoundedUpstreamRateLimit
+- `internal/serviceauth/policy.go`
+  - Line 27: cyclomatic complexity 16 for function ParseServicePolicies
 - `internal/router/router.go`
   - Line 205: cyclomatic complexity 16 for function NewRouterWithClientAndHandlersE
 - `internal/config/config.go`
   - Line 237: cyclomatic complexity 16 for function Initialize
 - `internal/auth/middleware.go`
   - Line 144: cyclomatic complexity 18 for function verifyHMACV2
-- `internal/handlers/totp_security_test.go`
-  - Line 121: cyclomatic complexity 17 for function TestTOTPSecurityPreservesSuccessfulWireContract
-- `internal/serviceauth/policy.go`
-  - Line 27: cyclomatic complexity 16 for function ParseServicePolicies
 
 ---
 
