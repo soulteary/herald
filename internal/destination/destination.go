@@ -1,7 +1,7 @@
 // Package destination provides a single canonical normalization and validation
 // point for OTP destinations (email / SMS / DingTalk). Centralizing this
-// prevents trivial variants of the same destination (case, spacing, separators)
-// from bypassing rate limits or idempotency dedup, and rejects malformed input
+// prevents channel-defined variants of the same destination from bypassing
+// rate limits or idempotency dedup, and rejects malformed input
 // before it reaches a provider.
 package destination
 
@@ -56,8 +56,14 @@ func Normalize(channel, dest string) string {
 			}
 		}
 		return b.String()
+	case ChannelDingTalk:
+		// Corporate userids are opaque identifiers. Preserve their bytes after
+		// trimming; delivery, fingerprints and rate limits must use the same
+		// exact identity rather than assume case-insensitive equivalence.
+		return d
 	default:
-		// DingTalk / other: strip surrounding space, lowercase.
+		// Keep the historical fallback for unsupported channels. Validate
+		// rejects these before provider dispatch.
 		return strings.ToLower(d)
 	}
 }
