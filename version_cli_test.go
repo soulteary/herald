@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -43,7 +42,11 @@ func TestVersionCLIActualMain(t *testing.T) {
 	flags := "-s -w -X " + prefix + "Version=" + injectedVersion + " -X " + prefix + "Commit=" + injectedCommit + " -X " + prefix + "BuildDate=" + injectedDate
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	build := exec.CommandContext(ctx, filepath.Join(runtime.GOROOT(), "bin", "go"), "build", "-mod=readonly", "-trimpath", "-ldflags", flags, "-o", binary, "main.go")
+	goBinary, err := exec.LookPath("go")
+	if err != nil {
+		t.Fatalf("locate existing Go executable: %v", err)
+	}
+	build := exec.CommandContext(ctx, goBinary, "build", "-mod=readonly", "-trimpath", "-ldflags", flags, "-o", binary, "main.go")
 	build.Env = buildEnv
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build synthetic version executable: %v\n%s", err, output)
