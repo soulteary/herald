@@ -22,6 +22,8 @@
 
 ### gocyclo
 
+- `internal/auth/middleware.go`
+  - Line 148: cyclomatic complexity 20 for function verifyHMACV2
 - `internal/handlers/totp_security_test.go`
   - Line 121: cyclomatic complexity 17 for function TestTOTPSecurityPreservesSuccessfulWireContract
 - `internal/handlers/totp_rate_limit_response_test.go`
@@ -36,8 +38,6 @@
   - Line 239: cyclomatic complexity 16 for function Initialize
 - `pkg/herald/credential_selection_test.go`
   - Line 14: cyclomatic complexity 20 for function TestSDKSelectsOneCredentialScheme
-- `internal/auth/middleware.go`
-  - Line 148: cyclomatic complexity 20 for function verifyHMACV2
 
 ---
 
