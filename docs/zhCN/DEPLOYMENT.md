@@ -122,7 +122,7 @@ Herald 从右向左解析转发 IP 链，仅跳过明确配置为可信的代理
 固定使用 `ghcr.io/soulteary/herald-dingtalk:1.2.6`、
 `ghcr.io/soulteary/herald-smtp:1.2.6`、
 `ghcr.io/soulteary/herald-totp:2.0.3`，或经过核验的不可变摘要。
-Herald v1.4.4 导入 `github.com/soulteary/herald-totp/v2` v2.0.3。SMTP 和钉钉
+Herald v1.5.0 导入 `github.com/soulteary/herald-totp/v2` v2.0.3。SMTP 和钉钉
 保留补丁版本接口。TOTP 保留 `/v1` HTTP 路由与凭据存储格式，但 HMAC 协议
 升级为绑定操作并带 nonce 防重放的 v2；必须协调升级 TOTP 服务和 Herald
 代理，旧 HMAC 签名不再接受。仅使用 API key 的模式仍可用。
@@ -526,3 +526,20 @@ HMAC secret。
 `go list -m all` 检查实际选中的版本。仅降低 Herald 版本，可能因 Go 最小版本
 选择或其他直接依赖仍保留新的 audit/challenge/TOTP/secure-kit；须核实选中版本。
 更换后端密钥时仍须遵循此前代理密钥轮换与回滚要求。
+
+## 重试时间元数据升级与回滚（v1.5.0）
+
+Herald v1.5.0 为创建验证码的配额与冷却错误提供可选重试时间。SDK 使用方选择
+`github.com/soulteary/herald@v1.5.0` 后，可调用 `CreateChallengeWithMetadata`。
+原有 `CreateChallenge` 签名和公开错误类型不变。新增公开 SDK 方法属于兼容的次版本更新。
+
+更新 SDK 不会更新服务。新版 SDK 可以调用旧服务，缺少时间时保持未知。元数据仅表示
+最早可尝试的时机，不保证之后一定放行。不要自动重试验证码创建或验证、重置配额，
+也不要在缺少元数据时编造等待时间。
+
+本次依赖与配置相对 v1.4.4 不变。升级与回滚保留 Redis 命名空间、待处理 challenge、
+幂等及重放状态、审计缓冲和提供方/TOTP 凭据。不需要结构转换或重新绑定，TOTP 服务仍须独立部署。
+
+服务回滚至 v1.4.4 后不再提供新的可选时间字段，但原有错误状态及状态规则保持不变。
+调用新方法的客户端须先撤回该调用，再降低模块版本。源码回滚应恢复对应源码和应用模块清单，
+重新构建前核对实际选中的模块版本。上文更早的迁移要求仍然适用。

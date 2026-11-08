@@ -2,6 +2,8 @@
 
 [![Go Test Coverage](./.github/coverage.svg)](./.github/go-test-report.md) [![Go Report Card](./.github/goreportcard.svg)](./.github/goreportcard-report.md) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go Version](https://img.shields.io/badge/go-1.27.3+-blue.svg)](https://golang.org)
 
+Herald v1.5.0 adds `CreateChallengeWithMetadata` for optional challenge-creation retry timing. Existing `CreateChallenge` callers are unchanged. Timing does not trigger automatic retries; see the [upgrade and rollback guidance](docs/enUS/DEPLOYMENT.md#retry-metadata-upgrade-and-rollback-v150).
+
 
 
 > **📧 Your Gateway to Secure Verification**

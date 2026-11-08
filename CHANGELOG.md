@@ -7,11 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-08
+
 ### Added
 
 - Include optional retry timing on challenge-creation quota and cooldown errors.
   Add `CreateChallengeWithMetadata` to read that timing without changing the
   existing SDK method, error type, quota policy or request retry behavior.
+
+
+### Compatibility and operations
+
+- Existing `CreateChallenge` callers and the public error type remain compatible.
+  Retry timing is optional, bounded and only accepted from usable HTTP 429
+  metadata. Missing, malformed or conflicting timing remains unknown.
+- Timing indicates the earliest retry opportunity, not guaranteed admission.
+  No automatic retry, quota reset or verification-consumption change is added.
+  Authentication, dependencies, Redis namespaces and credential formats are unchanged.
+- Upgrade the Herald service to receive the new optional timing fields and use
+  SDK v1.5.0 to consume them. The SDK also works with an older service, with timing
+  absent. SDK upgrades do not replace a deployed service.
+- Rollback to v1.4.4 retains Redis and credentials but removes the new server timing
+  and SDK method. Source consumers using the new method must revert those calls
+  before downgrading the module. Preserve pending, idempotency and replay state.
 
 ## [1.4.4] - 2026-11-08
 

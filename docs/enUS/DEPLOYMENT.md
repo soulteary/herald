@@ -262,7 +262,7 @@ Only when `ENVIRONMENT=test` and `HERALD_TEST_MODE=true`:
 Pin `ghcr.io/soulteary/herald-dingtalk:1.2.6`,
 `ghcr.io/soulteary/herald-smtp:1.2.6`, and
 `ghcr.io/soulteary/herald-totp:2.0.3` (or verified immutable digests).
-Herald v1.4.4 imports `github.com/soulteary/herald-totp/v2` v2.0.3. SMTP and
+Herald v1.5.0 imports `github.com/soulteary/herald-totp/v2` v2.0.3. SMTP and
 DingTalk retain their existing patch-level interfaces. TOTP keeps its `/v1` HTTP
 routes and credential storage, but its HMAC protocol changes to operation-bound
 v2 with nonce protection. Upgrade the TOTP service and Herald proxy together;
@@ -586,3 +586,26 @@ Herald may retain newer audit/challenge/TOTP/secure-kit versions through Go
 minimal version selection or other direct dependencies. Verify the selected
 versions. Retain the earlier proxy key-rotation and rollback requirements when
 changing backend keys.
+
+## Retry metadata upgrade and rollback (v1.5.0)
+
+Use Herald v1.5.0 for the optional retry timing added to challenge-creation quota
+and cooldown errors. SDK consumers can select `github.com/soulteary/herald@v1.5.0`
+and call `CreateChallengeWithMetadata`. The existing `CreateChallenge` signature
+and error type remain unchanged. This additive public SDK method is a minor release.
+
+Deploying the SDK does not update the service. A new SDK can call an old service;
+missing timing stays unknown. The metadata is an earliest retry opportunity, not
+a promise that a later request will be admitted. Do not automatically retry OTP
+creation or verification, reset quotas, or invent timing when it is absent.
+
+Dependencies and configuration are unchanged from v1.4.4. Keep Redis namespaces,
+pending challenges, idempotency/replay state, audit buffering and provider/TOTP
+credentials during upgrade or rollback. No schema conversion or re-enrollment is
+required. The TOTP service remains a separate deployment.
+
+Rolling the service back to v1.4.4 removes optional timing fields but retains the
+existing failure statuses and state rules. A client using the new SDK method must
+revert that call before downgrading its module. Source rollback must restore the
+appropriate source and application manifests; inspect effective module versions
+before rebuilding. Older migration requirements above still apply.
