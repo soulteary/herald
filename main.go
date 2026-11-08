@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -53,7 +55,22 @@ func main() {
 	// endpoint and exits 0/1. This lets the container healthcheck use the
 	// shipped binary instead of adding curl to the runtime image.
 	healthcheck := flag.Bool("healthcheck", false, "probe local /livez and exit")
+	versionOnly := flag.Bool("version", false, "print build identity as JSON and exit")
 	flag.Parse()
+	if *versionOnly {
+		// Imported packages and configuration globals have already initialized
+		// and may have read environment variables. This branch skips run(),
+		// including explicit configuration, Redis and provider initialization.
+		if *healthcheck || flag.NArg() != 0 {
+			fmt.Fprintln(os.Stderr, "-version cannot be combined with -healthcheck or positional arguments")
+			os.Exit(2)
+		}
+		if err := writeVersion(os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "unable to write version JSON")
+			os.Exit(1)
+		}
+		return
+	}
 	if *healthcheck {
 		os.Exit(runHealthcheck())
 	}
@@ -64,6 +81,16 @@ func main() {
 		}
 		os.Exit(1)
 	}
+}
+
+// writeVersion deliberately avoids configuration, logging and endpoint helpers.
+// These are the actual linker-injected variables, not environment overrides.
+func writeVersion(output io.Writer) error {
+	return json.NewEncoder(output).Encode(struct {
+		Version   string `json:"version"`
+		Commit    string `json:"commit"`
+		BuildDate string `json:"build_date"`
+	}{version.Version, version.Commit, version.BuildDate})
 }
 
 // runHealthcheck probes the local liveness endpoint and returns a process exit
