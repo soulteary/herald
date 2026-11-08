@@ -69,7 +69,7 @@ func TestWorkIMPilotServeLocalBridge(t *testing.T) {
 	var messages []map[string]string
 	providerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/send" || r.Header.Get("X-API-Key") != "synthetic-adapter-key" {
-			http.Error(w, "invalid test provider call", 401)
+			http.Error(w, "invalid test provider call", http.StatusUnauthorized)
 			return
 		}
 		var req provider.HTTPSendRequest
@@ -108,7 +108,7 @@ func TestWorkIMPilotServeLocalBridge(t *testing.T) {
 			http.Error(w, "fixture failure", 500)
 			return
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		for k, vs := range resp.Header {
 			for _, v := range vs {
 				w.Header().Add(k, v)
