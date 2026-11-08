@@ -261,8 +261,8 @@ Only when `ENVIRONMENT=test` and `HERALD_TEST_MODE=true`:
 
 Pin `ghcr.io/soulteary/herald-dingtalk:1.2.6`,
 `ghcr.io/soulteary/herald-smtp:1.2.6`, and
-`ghcr.io/soulteary/herald-totp:2.0.2` (or verified immutable digests).
-Herald v1.4.3 imports `github.com/soulteary/herald-totp/v2` v2.0.2. SMTP and
+`ghcr.io/soulteary/herald-totp:2.0.3` (or verified immutable digests).
+Herald v1.4.4 imports `github.com/soulteary/herald-totp/v2` v2.0.3. SMTP and
 DingTalk retain their existing patch-level interfaces. TOTP keeps its `/v1` HTTP
 routes and credential storage, but its HMAC protocol changes to operation-bound
 v2 with nonce protection. Upgrade the TOTP service and Herald proxy together;
@@ -561,3 +561,28 @@ Separately, rolling a client back to an older SDK can restore sending both
 credentials. Do not change default IDs or rename mapped keys with the same secret
 while accepting omitted-ID requests. A proxy rollback also requires the
 compatible single-key/backend service configuration described above.
+
+
+## Patch upgrade from v1.4.3 to v1.4.4
+
+Deploy herald-totp v2.0.3 before Herald v1.4.4. The dependency refresh includes
+secure-kit v2.1.4's Unicode masking fix and the matching audit/challenge/TOTP
+modules. ASCII output, public SDK methods, HTTP success payloads, HMAC v2/v3
+wire and explicit mapped-key identity rules are unchanged. Keep client key IDs
+configured before upgrading a key-map verifier; API-key-only clients must keep
+their HMAC secret empty.
+
+Preserve Redis records and namespaces, pending challenge and enrollment state,
+idempotency secrets and unresolved sends, nonce/quota/counter/backup-code state,
+audit buffering and the original TOTP encryption key. No record conversion,
+key migration or re-enrollment is required. Existing activation and snapshot
+commit guards remain in place. An existing Herald v1.4.3 binary or image uses
+its original compiled dependencies. Rollback does not undo stored diagnostic
+values or completed requests, and does not roll back the independent TOTP service.
+
+For a Go application rebuilt from source, restore its pre-upgrade `go.mod` and
+`go.sum` snapshots and inspect `go list -m all` before building. Downgrading only
+Herald may retain newer audit/challenge/TOTP/secure-kit versions through Go
+minimal version selection or other direct dependencies. Verify the selected
+versions. Retain the earlier proxy key-rotation and rollback requirements when
+changing backend keys.

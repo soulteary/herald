@@ -121,8 +121,8 @@ Herald 从右向左解析转发 IP 链，仅跳过明确配置为可信的代理
 
 固定使用 `ghcr.io/soulteary/herald-dingtalk:1.2.6`、
 `ghcr.io/soulteary/herald-smtp:1.2.6`、
-`ghcr.io/soulteary/herald-totp:2.0.2`，或经过核验的不可变摘要。
-Herald v1.4.3 导入 `github.com/soulteary/herald-totp/v2` v2.0.2。SMTP 和钉钉
+`ghcr.io/soulteary/herald-totp:2.0.3`，或经过核验的不可变摘要。
+Herald v1.4.4 导入 `github.com/soulteary/herald-totp/v2` v2.0.3。SMTP 和钉钉
 保留补丁版本接口。TOTP 保留 `/v1` HTTP 路由与凭据存储格式，但 HMAC 协议
 升级为绑定操作并带 nonce 防重放的 v2；必须协调升级 TOTP 服务和 Herald
 代理，旧 HMAC 签名不再接受。仅使用 API key 的模式仍可用。
@@ -506,3 +506,23 @@ TOTP 加密密钥和配额状态，无需转换记录或迁移命名空间。混
 仍接受省略 ID 的请求时，不应更改默认 ID
 或以相同 secret 重命名映射密钥。代理回滚还须先按上节协调后端单密钥及服务
 身份配置。
+
+
+## 从 v1.4.3 升级到 v1.4.4
+
+先部署 herald-totp v2.0.3，再部署 Herald v1.4.4。依赖更新包含 secure-kit
+v2.1.4 的 Unicode 脱敏修复及对应 audit/challenge/TOTP 模块。ASCII 输出、公开
+SDK 方法、HTTP 成功响应、HMAC v2/v3 格式和映射 key ID 显式身份规则不变。
+升级 key map 验证端前仍须先配置调用方 key ID；仅用 API key 的调用方应清空
+HMAC secret。
+
+保留 Redis 记录和命名空间、待激活挑战与注册状态、幂等密钥及未决发送、nonce、
+配额、计数器及恢复码消费状态、审计缓冲和原 TOTP 加密密钥，无需转换记录、
+迁移密钥或重新绑定。已有激活与快照提交校验保持有效。已有 Herald v1.4.3
+二进制或镜像使用其原先编译的依赖。回滚不会撤销已保存的诊断值或已完成请求，
+也不会随之回滚独立 TOTP 服务。
+
+从源码重建 Go 应用时，应恢复升级前的 `go.mod` 和 `go.sum` 快照，并在构建前用
+`go list -m all` 检查实际选中的版本。仅降低 Herald 版本，可能因 Go 最小版本
+选择或其他直接依赖仍保留新的 audit/challenge/TOTP/secure-kit；须核实选中版本。
+更换后端密钥时仍须遵循此前代理密钥轮换与回滚要求。
