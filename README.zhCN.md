@@ -2,6 +2,8 @@
 
 [![Go Test Coverage](./.github/coverage.svg)](./.github/go-test-report.md) [![Go Report Card](./.github/goreportcard.svg)](./.github/goreportcard-report.md) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go Version](https://img.shields.io/badge/go-1.27.3+-blue.svg)](https://golang.org)
 
+Herald v1.5.0 新增 `CreateChallengeWithMetadata`，用于读取可选的创建验证码重试时间。既有 `CreateChallenge` 调用不变，不增加自动重试；参见[升级与回滚说明](docs/zhCN/DEPLOYMENT.md#重试时间元数据升级与回滚v150)。
+
 
 
 > **📧 安全验证的网关**
