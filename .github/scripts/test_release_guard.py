@@ -218,6 +218,50 @@ class GitSourceTest(unittest.TestCase):
                 self.assertEqual(self.head, json.loads(run.stdout)["source_sha"])
                 self.assertIn("source_sha=" + self.head, output.read_text())
 
+    def test_old_tag_uses_pinned_external_tools_without_changing_source(self):
+        # The release predates the helper: only the workflow checkout owns it.
+        self.assertFalse((self.repo / ".github/scripts/release_guard.py").exists())
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            tools = workspace / "workflow-tools"
+            tools.mkdir()
+            script = tools / ".github/scripts/release_guard.py"
+            script.parent.mkdir(parents=True)
+            script.write_bytes(Path(__file__).with_name("release_guard.py").read_bytes())
+            for args in (("init", "-q"), ("add", "."), ("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "-c", "commit.gpgsign=false", "commit", "-qm", "workflow tools")):
+                subprocess.run(["git", *args], cwd=tools, env=self.env, check=True, capture_output=True)
+            sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=tools, env=self.env, text=True).strip()
+            workflow = (Path(__file__).parents[1] / "workflows/release.yml").read_text()
+            block = workflow.split("      - name: Verify workflow tools revision\n", 1)[1].split("        run: |\n", 1)[1].split("\n      - name:", 1)[0]
+            verify = textwrap.dedent(block)
+            for expected, success in ((sha, True), ("0" * 40, False)):
+                result = subprocess.run(["/bin/bash", "-e", "-c", verify], cwd=self.repo, env={**self.env, "GITHUB_WORKSPACE": str(workspace), "WORKFLOW_SHA": expected}, capture_output=True)
+                self.assertEqual(success, result.returncode == 0)
+            for event, input_tag, ref in (("workflow_dispatch", "v1.5.1", "refs/heads/main"), ("push", "", "refs/tags/v1.5.1"), ("push", "", "refs/heads/main")):
+                resolve_block = workflow.split("      - name: Resolve release ref\n", 1)[1].split("        run: |\n", 1)[1].split("\n      - name:", 1)[0]
+                rendered = textwrap.dedent(resolve_block)
+                result = subprocess.run(["/bin/bash", "-e", "-c", rendered], cwd=self.repo, env={**self.env, "GITHUB_WORKSPACE": str(workspace), "GITHUB_EVENT_NAME": event, "INPUT_RELEASE_TAG": input_tag, "GITHUB_REF": ref, "GITHUB_OUTPUT": str(workspace / "outputs")}, text=True, capture_output=True)
+                if ref == "refs/heads/main" and event == "push":
+                    self.assertNotEqual(0, result.returncode)
+                else:
+                    self.assertEqual(0, result.returncode, result.stderr)
+                    self.assertEqual(self.head, json.loads(result.stdout)["source_sha"])
+            # Import the external helper in an actual child process; fixture HTTP
+            # origins are constructor-only and never production CLI options.
+            wrapper = workspace / "check.py"
+            wrapper.write_text("import importlib.util,json,sys\nfrom pathlib import Path\nspec=importlib.util.spec_from_file_location('external_guard',sys.argv[1])\nm=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)\nr=m.resolve('v1.5.1',Path.cwd(),sys.argv[2])\nc=m.ReleaseHTTP('Owner/Project','fixture-actor','fixture-key',sys.argv[3],sys.argv[4])\nprint(json.dumps(c.require_absent(r['tag'])))\n")
+            with services() as (state, client):
+                # Derive the loopback origins from fixture requests, not secrets.
+                api = client.api
+                registry = client.registry
+                for expected, success in ((self.head, True), ("0" * 40, False)):
+                    state["requests"].clear()
+                    result = subprocess.run([sys.executable, "-I", "-B", str(wrapper), str(script), expected, api, registry], cwd=self.repo, env=self.env, text=True, capture_output=True)
+                    self.assertEqual(success, result.returncode == 0, result.stderr)
+                    self.assertEqual(5 if success else 0, len(state["requests"]))
+            self.assertEqual(self.head, self.git("rev-parse", "HEAD"))
+            self.assertFalse((self.repo / ".github/scripts/release_guard.py").exists())
+
     def test_mismatched_tag_expected_revision_dirty_source_and_non_tag_events_fail(self):
         with self.assertRaises(GuardError):
             resolve("v1.5.1", self.repo, "0" * 40)
@@ -235,6 +279,19 @@ class GitSourceTest(unittest.TestCase):
 
 
 class ReleaseShellTest(unittest.TestCase):
+    def test_workflow_checkout_and_build_directory_contract(self):
+        workflow = (Path(__file__).parents[1] / "workflows/release.yml").read_text()
+        release = workflow.split("  report_release:", 1)[0]
+        self.assertIn("working-directory: release-source", release)
+        self.assertIn("ref: ${{ github.workflow_sha }}", release)
+        self.assertIn("format('refs/tags/{0}', inputs.release_tag)", release)
+        self.assertEqual(2, release.count("persist-credentials: false"))
+        self.assertEqual(3, release.count('python3 -I -B "$GITHUB_WORKSPACE/workflow-tools/.github/scripts/release_guard.py"'))
+        for line in ("path: workflow-tools", "path: release-source", "go-version-file: 'release-source/go.mod'", "cache-dependency-path: 'release-source/go.sum'", "context: ./release-source", "file: ./release-source/docker/Dockerfile"):
+            self.assertIn(line, release)
+        self.assertNotIn("python3 -I -B .github/scripts/release_guard.py", release)
+        self.assertLess(release.index("Verify workflow tools revision"), release.index("Resolve release ref"))
+
     def test_rendered_create_step_only_creates_and_preserves_literal_notes(self):
         workflow = Path(__file__).parents[1] / "workflows" / "release.yml"
         tail = workflow.read_text().split("      - name: Create Release\n", 1)[1]
@@ -245,9 +302,9 @@ class ReleaseShellTest(unittest.TestCase):
                 root = Path(directory)
                 executable = root / "bin"
                 executable.mkdir()
-                (root / "dist").mkdir()
+                (root / "release-source" / "dist").mkdir(parents=True)
                 for asset in ("herald-linux-amd64", "herald-linux-arm64", "checksums.txt"):
-                    (root / "dist" / asset).write_bytes(b"synthetic asset\n")
+                    (root / "release-source" / "dist" / asset).write_bytes(b"synthetic asset\n")
                 os.symlink("/bin/cat", executable / "cat")
                 gh = executable / "gh"
                 gh.write_text("#!" + sys.executable + "\nimport json,os,sys\nfrom pathlib import Path\nPath(os.environ['GH_CAPTURE']).write_text(json.dumps(sys.argv[1:]))\n")
@@ -259,14 +316,15 @@ class ReleaseShellTest(unittest.TestCase):
                 for key, value in values.items():
                     rendered = rendered.replace("${{ " + key + " }}", value)
                 self.assertNotIn("${{", rendered)
-                env = {"PATH": str(executable), "RUNNER_TEMP": str(root), "GITHUB_REPOSITORY": "Owner/Project",
+                env = {"PATH": str(executable), "RUNNER_TEMP": str(root), "GITHUB_WORKSPACE": str(root), "GITHUB_REPOSITORY": "Owner/Project",
                        "RELEASE_TAG": tag, "STABLE_RELEASE": str(stable).lower(), "GH_CAPTURE": str(root / "argv.json")}
-                result = subprocess.run(["/bin/bash", "-c", rendered], cwd=root, env=env, text=True, capture_output=True, timeout=10)
+                result = subprocess.run(["/bin/bash", "-c", rendered], cwd=root / "release-source", env=env, text=True, capture_output=True, timeout=10)
                 self.assertEqual(0, result.returncode, result.stderr)
                 self.assertEqual("", result.stderr)
                 args = json.loads((root / "argv.json").read_text())
                 self.assertEqual(["release", "create", tag], args[:3])
                 self.assertIn("--verify-tag", args)
+                self.assertEqual([str(root / "release-source" / "dist" / asset) for asset in ("herald-linux-amd64", "herald-linux-arm64", "checksums.txt")], args[3:6])
                 self.assertNotIn("--clobber", args)
                 self.assertNotIn("delete", args)
                 self.assertEqual(not stable, "--prerelease" in args)

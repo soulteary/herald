@@ -29,19 +29,38 @@ jobs:
       # Required for keyless cosign signing via GitHub OIDC.
       id-token: write
 
+    defaults:
+      run:
+        working-directory: release-source
+
     steps:
-      - name: Checkout code
+      - name: Checkout workflow tools
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: workflow-tools
+          persist-credentials: false
+
+      - name: Checkout release source
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+          path: release-source
+          persist-credentials: false
+
+      - name: Verify workflow tools revision
+        env:
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          test "$(git -C "$GITHUB_WORKSPACE/workflow-tools" rev-parse HEAD)" = "$WORKFLOW_SHA"
 
       - name: Resolve release ref
         id: release
         env:
           INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
-          python3 -I -B .github/scripts/release_guard.py resolve \
+          python3 -I -B "$GITHUB_WORKSPACE/workflow-tools/.github/scripts/release_guard.py" resolve \
             --event "$GITHUB_EVENT_NAME" --input-tag "$INPUT_RELEASE_TAG" \
             --ref "$GITHUB_REF" --output "$GITHUB_OUTPUT"
 
@@ -51,13 +70,14 @@ jobs:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
           SOURCE_SHA: ${{ steps.release.outputs.source_sha }}
         run: |
-          python3 -I -B .github/scripts/release_guard.py guard \
+          python3 -I -B "$GITHUB_WORKSPACE/workflow-tools/.github/scripts/release_guard.py" guard \
             --tag "$RELEASE_TAG" --expected-sha "$SOURCE_SHA"
 
       - name: Set up Go environment
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: 'release-source/go.mod'
+          cache-dependency-path: 'release-source/go.sum'
 
       - name: Download dependencies
         run: go mod download
@@ -142,15 +162,15 @@ jobs:
           METADATA_TAGS: ${{ steps.meta.outputs.tags }}
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
         run: |
-          python3 -I -B .github/scripts/release_guard.py verify-metadata \
+          python3 -I -B "$GITHUB_WORKSPACE/workflow-tools/.github/scripts/release_guard.py" verify-metadata \
             --image "${REGISTRY}/${IMAGE_NAME}" --version "$RELEASE_VERSION"
 
       - name: Build and push Docker image
         id: build
         uses: docker/build-push-action@ca877d9245402d1537745e0e356eab47c3520991 # v6
         with:
-          context: .
-          file: ./docker/Dockerfile
+          context: ./release-source
+          file: ./release-source/docker/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -201,7 +221,8 @@ jobs:
             ### Checksums
             See `checksums.txt` for SHA256 checksums.
           EOF
-          args=("$RELEASE_TAG" dist/herald-linux-amd64 dist/herald-linux-arm64 dist/checksums.txt \
+          args=("$RELEASE_TAG" "$GITHUB_WORKSPACE/release-source/dist/herald-linux-amd64" \
+            "$GITHUB_WORKSPACE/release-source/dist/herald-linux-arm64" "$GITHUB_WORKSPACE/release-source/dist/checksums.txt" \
             --repo "$GITHUB_REPOSITORY" --verify-tag --title "Release $RELEASE_TAG" \
             --notes-file "$RUNNER_TEMP/release-notes.md")
           if [ "$STABLE_RELEASE" != true ]; then args+=(--prerelease); fi
