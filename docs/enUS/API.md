@@ -352,7 +352,7 @@ Query whether the subject has TOTP enrolled.
 **Query:**
 - `subject` (required): User identifier (e.g. user_id)
 
-**Response (Success):** Proxied from herald-totp (e.g. `{"enrolled": true}` or `{"enrolled": false}`).
+**Response (Success):** `{"subject":"u_123","totp_enabled":true}` with `totp_enabled` set to `false` when no enabled credential exists.
 
 **Error Responses:**
 - `400 Bad Request`: Missing `subject` (`invalid_request`, `subject required`)

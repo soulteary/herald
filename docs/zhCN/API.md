@@ -323,7 +323,7 @@ HTTP 状态代码：
 **查询参数：**
 - `subject`（必填）：用户标识（如 user_id）
 
-**响应（成功）：** 由 herald-totp 代理返回（如 `{"enrolled": true}` 或 `{"enrolled": false}`）。
+**响应（成功）：** `{"subject":"u_123","totp_enabled":true}`；没有启用的凭据时 `totp_enabled` 为 `false`。
 
 **错误响应：**
 - `400 Bad Request`：缺少 `subject`（`invalid_request`，`subject required`）
