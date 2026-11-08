@@ -365,18 +365,27 @@ type RevokeChallengeResponse struct {
 // Use context.WithValue(ctx, herald.IdempotencyKeyContextKey, "your-key") so the client sends the header.
 var IdempotencyKeyContextKey = struct{ name string }{name: "idempotency_key"}
 
-// CreateChallenge creates a new challenge and sends verification code
+// CreateChallenge creates a new challenge and sends verification code.
+// Existing callers retain the same response and error types.
 func (c *Client) CreateChallenge(ctx context.Context, req *CreateChallengeRequest) (*CreateChallengeResponse, error) {
+	response, _, err := c.CreateChallengeWithMetadata(ctx, req)
+	return response, err
+}
+
+// CreateChallengeWithMetadata also returns optional server-provided retry timing.
+// It sends exactly one request and never retries challenge creation.
+func (c *Client) CreateChallengeWithMetadata(ctx context.Context, req *CreateChallengeRequest) (*CreateChallengeResponse, CreateChallengeMetadata, error) {
+	metadata := CreateChallengeMetadata{}
 	url := fmt.Sprintf("%s/v1/otp/challenges", c.baseURL)
 
 	body, err := json.Marshal(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return nil, metadata, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(body))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, metadata, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
@@ -393,7 +402,7 @@ func (c *Client) CreateChallenge(ctx context.Context, req *CreateChallengeReques
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return nil, &HeraldError{
+		return nil, metadata, &HeraldError{
 			StatusCode: 0,
 			Reason:     "connection_failed",
 			Message:    fmt.Sprintf("failed to send request: %v", err),
@@ -404,16 +413,17 @@ func (c *Client) CreateChallenge(ctx context.Context, req *CreateChallengeReques
 	}()
 	bodyBytes, readErr := c.readResponseBody(resp)
 	if readErr != nil {
-		return nil, responseReadError(resp.StatusCode, readErr)
+		return nil, metadata, responseReadError(resp.StatusCode, readErr)
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		metadata = challengeRetryMetadata(resp.StatusCode, resp.Header, bodyBytes)
 		var errorResp struct {
 			OK     bool   `json:"ok"`
 			Reason string `json:"reason"`
 		}
 		_ = json.Unmarshal(bodyBytes, &errorResp)
-		return nil, &HeraldError{
+		return nil, metadata, &HeraldError{
 			StatusCode: resp.StatusCode,
 			Reason:     errorResp.Reason,
 			Message:    string(bodyBytes),
@@ -422,10 +432,10 @@ func (c *Client) CreateChallenge(ctx context.Context, req *CreateChallengeReques
 
 	var challengeResp CreateChallengeResponse
 	if err := json.Unmarshal(bodyBytes, &challengeResp); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+		return nil, metadata, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	return &challengeResp, nil
+	return &challengeResp, metadata, nil
 }
 
 // VerifyChallenge verifies a challenge code

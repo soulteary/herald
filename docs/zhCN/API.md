@@ -163,6 +163,16 @@ Herald 在调用发送渠道前保存不自动过期的发送记录。进程退�
 }
 ```
 
+创建验证码的 `429` 响应在阻止请求的窗口截止时间已知时，会附带可选的整数秒
+`next_resend_in` 和一致的 `Retry-After`。未知或已过期的时间会被省略。这只是当前
+拒绝请求的限流项给出的等待提示，稍后的请求仍可能被其他配额拒绝。计数、窗口和
+冷却策略不变；客户端不能自动重试。
+
+Go SDK 新增 `CreateChallengeWithMetadata`，返回原响应、`CreateChallengeMetadata`
+及原错误。时间缺失、格式错误、相互冲突、超出 1–86400 秒或状态不是 429 时，
+`RetryAfterSeconds` 为 nil。原 `CreateChallenge` 签名及 `*HeraldError` 行为不变；
+兼容旧服务时不编造倒计时，SDK 不自动重试创建请求。
+
 可能的错误代码：
 - `invalid_request`：请求体解析失败
 - `user_id_required`：缺少必需字段 `user_id`

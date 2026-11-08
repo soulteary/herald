@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Include optional retry timing on challenge-creation quota and cooldown errors.
+  Add `CreateChallengeWithMetadata` to read that timing without changing the
+  existing SDK method, error type, quota policy or request retry behavior.
+
 ## [1.4.4] - 2026-11-08
 
 ### Dependencies

@@ -756,7 +756,7 @@ func (h *Handlers) validateCreateRequest(c fiber.Ctx, req *CreateChallengeReques
 func (h *Handlers) checkCreationLimits(c fiber.Ctx, spanCtx context.Context, req CreateChallengeRequest, peerIP string, failIdem func()) (bool, error) {
 	// Check rate limits
 	// 1. Per user (peppered digest so raw user id never lands in a Redis key)
-	allowed, _, _, err := h.rateLimitManager.CheckUserRateLimit(
+	allowed, _, resetTime, err := h.rateLimitManager.CheckUserRateLimit(
 		spanCtx, h.digester.Digest(req.UserID), config.RateLimitPerUser, time.Hour,
 	)
 	if err != nil {
@@ -770,14 +770,11 @@ func (h *Handlers) checkCreationLimits(c fiber.Ctx, spanCtx context.Context, req
 	if !allowed {
 		metrics.RecordRateLimitHit("user")
 		failIdem()
-		return false, c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "rate_limit_exceeded",
-		})
+		return challengeRateLimitResponse(c, "rate_limit_exceeded", resetTime)
 	}
 
 	// 2. Per IP (peppered). Uses the trusted peer IP, never the self-reported one.
-	allowed, _, _, err = h.rateLimitManager.CheckIPRateLimit(
+	allowed, _, resetTime, err = h.rateLimitManager.CheckIPRateLimit(
 		spanCtx, h.digester.Digest(peerIP), config.RateLimitPerIP, time.Minute,
 	)
 	if err != nil {
@@ -791,10 +788,7 @@ func (h *Handlers) checkCreationLimits(c fiber.Ctx, spanCtx context.Context, req
 	if !allowed {
 		metrics.RecordRateLimitHit("ip")
 		failIdem()
-		return false, c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "rate_limit_exceeded",
-		})
+		return challengeRateLimitResponse(c, "rate_limit_exceeded", resetTime)
 	}
 
 	return h.checkDestinationLimits(c, spanCtx, req, failIdem)
@@ -802,7 +796,7 @@ func (h *Handlers) checkCreationLimits(c fiber.Ctx, spanCtx context.Context, req
 
 func (h *Handlers) checkDestinationLimits(c fiber.Ctx, spanCtx context.Context, req CreateChallengeRequest, failIdem func()) (bool, error) {
 	// 3. Per destination (peppered digest of the normalized destination)
-	allowed, _, _, err := h.rateLimitManager.CheckDestinationRateLimit(
+	allowed, _, resetTime, err := h.rateLimitManager.CheckDestinationRateLimit(
 		spanCtx, h.digester.Digest(req.Destination), config.RateLimitPerDestination, time.Hour,
 	)
 	if err != nil {
@@ -816,15 +810,12 @@ func (h *Handlers) checkDestinationLimits(c fiber.Ctx, spanCtx context.Context, 
 	if !allowed {
 		metrics.RecordRateLimitHit("destination")
 		failIdem()
-		return false, c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "rate_limit_exceeded",
-		})
+		return challengeRateLimitResponse(c, "rate_limit_exceeded", resetTime)
 	}
 
 	// 4. Resend cooldown (peppered digest of user+destination)
 	cooldownKey := h.digester.DigestParts(req.UserID, req.Destination)
-	allowed, _, err = h.rateLimitManager.CheckResendCooldown(spanCtx, cooldownKey, config.ResendCooldown)
+	allowed, resetTime, err = h.rateLimitManager.CheckResendCooldown(spanCtx, cooldownKey, config.ResendCooldown)
 	if err != nil {
 		h.log.Error().Err(err).Msg("Cooldown check failed")
 		failIdem()
@@ -836,10 +827,7 @@ func (h *Handlers) checkDestinationLimits(c fiber.Ctx, spanCtx context.Context, 
 	if !allowed {
 		metrics.RecordRateLimitHit("resend_cooldown")
 		failIdem()
-		return false, c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "resend_cooldown",
-		})
+		return challengeRateLimitResponse(c, "resend_cooldown", resetTime)
 	}
 
 	return true, nil
