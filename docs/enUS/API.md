@@ -373,7 +373,7 @@ Verify a TOTP code.
 }
 ```
 
-**Response:** Proxied from herald-totp (e.g. `{"ok": true}` on success, or `{"ok": false, "reason": "..."}` on failure). On proxy error, Herald returns `502` with `proxy_failed`.
+**Response:** A successful upstream HTTP 200 returns the TOTP verification result (including `ok`, `subject`, `amr`, and `issued_at`). Upstream non-200 responses, including invalid-code, replay and rate-limit responses, return fixed `502/proxy_failed`. Transport failures and invalid, incomplete or oversized upstream responses also return `502/proxy_failed`; upstream error bodies and headers are not forwarded. The enrollment-confirmation 400/429 handling below is specific to that endpoint.
 
 #### Start TOTP Enrollment
 
