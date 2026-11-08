@@ -1,0 +1,21 @@
+{
+  "source": "Four actual race-enabled isolated native-router runs from f95 source plus integration test, recorded before parser hardening; only exact Go PASS lines retained",
+  "cases": {
+    "per-account": {
+      "actual_log_sha256": "8e97c97081dba3992b42ad1bb63b58dfbacd0340bb299a504b47de51cfb0722b",
+      "actual_Go_PASS_lines": "--- PASS: TestPilotProductionRouterAccountAndReceiverLimitsRemain (0.42s)\n    --- PASS: TestPilotProductionRouterAccountAndReceiverLimitsRemain/user (0.42s)\nPASS\n"
+    },
+    "per-receiver": {
+      "actual_log_sha256": "607970044bbc036f4f5f82ecf89ed125a8bca354239a85f7427cbcd0253896d8",
+      "actual_Go_PASS_lines": "--- PASS: TestPilotProductionRouterAccountAndReceiverLimitsRemain (0.47s)\n    --- PASS: TestPilotProductionRouterAccountAndReceiverLimitsRemain/destination (0.47s)\nPASS\n"
+    },
+    "shared-source-five-per-minute": {
+      "actual_log_sha256": "74a80e35bd153936b82247934db850897ccbfce0a0d134ffc4d28c198e362c58",
+      "actual_Go_PASS_lines": "--- PASS: TestPilotProductionRouterSharedGatewayBucketAndBodyCannotBypass (0.93s)\nPASS\n"
+    },
+    "trusted-proxy-split-and-spoof": {
+      "actual_log_sha256": "63f844b3a77faa707f82b37520061e10544737c0c797673e9d49b0f1d6b04333",
+      "actual_Go_PASS_lines": "--- PASS: TestPilotProductionRouterTrustedProxySplitsClientsAndBoundsChain (0.42s)\nPASS\n"
+    }
+  }
+}

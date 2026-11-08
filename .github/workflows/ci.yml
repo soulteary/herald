@@ -36,6 +36,37 @@ jobs:
       - name: Test release guards against local Git and HTTP fixtures
         run: python3 -B -m unittest discover -s .github/scripts -p 'test_release_guard.py' -v
 
+  pilot-rate-router:
+    name: Synthetic pilot rate-limit router regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - name: Verify exact test-evidence parsing
+        run: python3 -B -m unittest discover -s scripts -p test_pilot_rate_runner.py -v
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: go.mod
+      - name: Download dependencies
+        run: go mod download
+      - name: Run isolated production-router cases
+        run: python3 -I -B scripts/test-pilot-rate-router.py --output-parent .github/test-results/pilot-rate
+      - name: Upload synthetic test evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pilot-rate-router-evidence
+          include-hidden-files: true
+          if-no-files-found: error
+          path: |
+            .github/test-results/pilot-rate/**/result.json
+            .github/test-results/pilot-rate/**/compile.log
+            .github/test-results/pilot-rate/**/test.log
+
   fmt:
     name: Code Formatting Check
     runs-on: ubuntu-latest
