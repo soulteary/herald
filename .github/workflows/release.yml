@@ -7,13 +7,17 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: '手动发布/覆盖的已存在 v* tag（例如 v1.2.3）'
+        description: '发布尚无 Release/版本镜像的已存在 v* tag（不支持覆盖或 +build 元数据）'
         required: true
         type: string
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+
+concurrency:
+  group: release-${{ inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -37,30 +41,18 @@ jobs:
         env:
           INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
-          set -euo pipefail
-          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
-            TAG="${INPUT_RELEASE_TAG}"
-          else
-            TAG="${GITHUB_REF#refs/tags/}"
-          fi
-          SEMVER_RE='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*)|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.((0|[1-9][0-9]*)|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
-          if ! printf '%s\n' "${TAG}" | grep -Eq "${SEMVER_RE}"; then
-            echo "::error::release_tag 必须是完整且合法的 v 前缀 SemVer，实际为 '${TAG}'"
-            exit 1
-          fi
-          VERSION_WITHOUT_BUILD="${TAG%%+*}"
-          if [[ "${VERSION_WITHOUT_BUILD}" == *-* ]]; then
-            STABLE=false
-          else
-            STABLE=true
-          fi
-          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
-            git rev-parse --verify "refs/tags/${TAG}^{commit}" >/dev/null
-            test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/${TAG}^{commit}")"
-          fi
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "manual=${{ github.event_name == 'workflow_dispatch' }}" >> "$GITHUB_OUTPUT"
-          echo "stable=${STABLE}" >> "$GITHUB_OUTPUT"
+          python3 -I -B .github/scripts/release_guard.py resolve \
+            --event "$GITHUB_EVENT_NAME" --input-tag "$INPUT_RELEASE_TAG" \
+            --ref "$GITHUB_REF" --output "$GITHUB_OUTPUT"
+
+      - name: Refuse existing releases and immutable image versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          SOURCE_SHA: ${{ steps.release.outputs.source_sha }}
+        run: |
+          python3 -I -B .github/scripts/release_guard.py guard \
+            --tag "$RELEASE_TAG" --expected-sha "$SOURCE_SHA"
 
       - name: Set up Go environment
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
@@ -76,9 +68,11 @@ jobs:
       - name: Extract version information
         id: version
         run: |
+          test "$(git rev-parse HEAD)" = "${{ steps.release.outputs.source_sha }}"
+          git diff --quiet HEAD --
           TAG="${{ steps.release.outputs.tag }}"
-          VERSION=${TAG#v}
-          COMMIT=$(git rev-parse --short HEAD)
+          VERSION="${{ steps.release.outputs.version }}"
+          COMMIT="${{ steps.release.outputs.source_sha }}"
           BUILD_DATE=$(date -u +%FT%T%z)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=$TAG" >> $GITHUB_OUTPUT
@@ -89,8 +83,8 @@ jobs:
         run: |
           mkdir -p dist
           VERSION=${{ steps.version.outputs.version }}
-          COMMIT=${{ github.sha }}
-          BUILD_DATE=$(date +%FT%T%z)
+          COMMIT=${{ steps.version.outputs.commit }}
+          BUILD_DATE=${{ steps.version.outputs.build_date }}
           LDFLAGS="-s -w -X 'github.com/soulteary/version-kit/v4.Version=${VERSION}' -X 'github.com/soulteary/version-kit/v4.Commit=${COMMIT}' -X 'github.com/soulteary/version-kit/v4.BuildDate=${BUILD_DATE}'"
           
           # Other host environments should use the Linux container images.
@@ -133,6 +127,8 @@ jobs:
         uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          labels: |
+            org.opencontainers.image.revision=${{ steps.release.outputs.source_sha }}
           # 手动触发时 github.ref 为分支，无法从 ref 解析 tag，
           # 因此统一使用 Resolve release ref 步骤得到的 tag/version 生成别名。
           tags: |
@@ -140,6 +136,14 @@ jobs:
             type=semver,pattern={{major}}.{{minor}},value=${{ steps.release.outputs.tag }}
             type=semver,pattern={{major}},value=${{ steps.release.outputs.tag }}
             type=raw,value=latest,enable=${{ steps.release.outputs.stable == 'true' }}
+
+      - name: Verify the guarded full-version image tag
+        env:
+          METADATA_TAGS: ${{ steps.meta.outputs.tags }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          python3 -I -B .github/scripts/release_guard.py verify-metadata \
+            --image "${REGISTRY}/${IMAGE_NAME}" --version "$RELEASE_VERSION"
 
       - name: Build and push Docker image
         id: build
@@ -169,23 +173,15 @@ jobs:
           # Sign by immutable digest, not tag, so the signature binds to exact bytes.
           cosign sign --yes "${REGISTRY}/${IMAGE_NAME}@${DIGEST}"
 
-      - name: Delete existing release for overwrite
-        if: steps.release.outputs.manual == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ steps.release.outputs.tag }}
-        run: |
-          # 手动重发：删除同名 Release（保留 git tag），随后重新创建以覆盖。
-          gh release delete "$TAG" --yes --repo "$GITHUB_REPOSITORY" || true
-
       - name: Create Release
-        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2
-        with:
-          files: |
-            dist/*
-          tag_name: ${{ steps.release.outputs.tag }}
-          name: Release ${{ steps.version.outputs.tag }}
-          body: |
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          STABLE_RELEASE: ${{ steps.release.outputs.stable }}
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/release-notes.md" <<'EOF'
             ## Changes
             
             See [CHANGELOG](https://github.com/${{ github.repository }}/blob/${{ steps.release.outputs.tag }}/CHANGELOG.md) for details.
@@ -204,8 +200,14 @@ jobs:
             
             ### Checksums
             See `checksums.txt` for SHA256 checksums.
-          draft: false
-          prerelease: ${{ steps.release.outputs.stable != 'true' }}
+          EOF
+          args=("$RELEASE_TAG" dist/herald-linux-amd64 dist/herald-linux-arm64 dist/checksums.txt \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --title "Release $RELEASE_TAG" \
+            --notes-file "$RUNNER_TEMP/release-notes.md")
+          if [ "$STABLE_RELEASE" != true ]; then args+=(--prerelease); fi
+          # gh release create fails if another writer created this release;
+          # unlike update-or-create actions it never clobbers existing assets.
+          gh release create "${args[@]}"
 
   report_release:
     name: Dispatch verified release reports
