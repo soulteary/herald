@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.4] - 2026-11-08
+
+### Dependencies
+
+- Update secure-kit/v2 and audit-kit/v2 to v2.1.4, challenge-kit to v1.11.1,
+  and herald-totp/v2 to v2.0.3. Unicode masking preserves complete code points;
+  ASCII output and cryptographic operations remain unchanged.
+
+### Documentation
+
+- Correct TOTP status fields and verification-proxy error handling. Clarify
+  request authentication versus optional mTLS, protected Prometheus examples,
+  and non-production soft-delivery behavior.
+
+### Compatibility and operations
+
+- Keep SDK methods, HTTP success payloads, HMAC/key-ID rules, Redis records and
+  namespaces, quota policy, activation and credential-snapshot guards unchanged.
+  No data conversion, key migration or re-enrollment is required.
+- Preserve Redis, pending/idempotency and replay state, audit buffering and
+  the original TOTP encryption key. Deploy the TOTP service separately; updating
+  its SDK module does not replace a running backend. An existing v1.4.3 binary
+  or image restores its compiled dependency behavior without rolling back TOTP.
+  Go source consumers must restore pre-upgrade manifests and inspect selected
+  module versions; a parent-module downgrade alone may retain newer dependencies.
+
 ## [1.4.3] - 2026-11-07
 
 ### Fixed
@@ -569,7 +595,8 @@ and Redis key prefix of audit records all stay as they were.
 See `docs/enUS/MIGRATION_V2.md` and `docs/zhCN/MIGRATION_V2.md` for the v1→v2
 authentication diff, environment-variable migration, and rollback guidance.
 
-[Unreleased]: https://github.com/soulteary/herald/compare/v1.4.3...HEAD
+[Unreleased]: https://github.com/soulteary/herald/compare/v1.4.4...HEAD
+[1.4.4]: https://github.com/soulteary/herald/compare/v1.4.3...v1.4.4
 [1.4.3]: https://github.com/soulteary/herald/compare/v1.4.2...v1.4.3
 [1.4.2]: https://github.com/soulteary/herald/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/soulteary/herald/compare/v1.4.0...v1.4.1
