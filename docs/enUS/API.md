@@ -185,6 +185,19 @@ All error responses follow this format:
 }
 ```
 
+For challenge-creation `429` responses, a known blocking-window deadline is
+reported as optional `next_resend_in` integer seconds and a matching `Retry-After`
+header. Missing or expired timing is omitted. This is a retry hint for the gate
+that rejected the request; other limits can still reject a later request. Quota
+counters, windows and cooldowns are unchanged. Do not retry automatically.
+
+The Go SDK's `CreateChallengeWithMetadata` method returns the existing response,
+a `CreateChallengeMetadata` value and the existing error. Its optional
+`RetryAfterSeconds` is nil when timing is absent, malformed, conflicting, outside
+1–86400 seconds, or the status is not 429. `CreateChallenge` keeps its original
+signature and `*HeraldError` behavior. Older servers remain supported without
+inventing a countdown; no SDK method retries challenge creation.
+
 Possible error codes:
 - `invalid_request`: Request body parsing failed
 - `user_id_required`: Missing required field `user_id`

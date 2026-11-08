@@ -1351,6 +1351,15 @@ func TestHandlers_CreateChallenge_RateLimit(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		t.Errorf("Expected rate limit, got status=%d, body=%s", resp.StatusCode, string(body))
 	}
+	var limited struct {
+		Next int `json:"next_resend_in"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&limited); err != nil || limited.Next < 1 || limited.Next > 3600 {
+		t.Fatalf("user quota reset missing or invalid: %d, %v", limited.Next, err)
+	}
+	if resp.Header.Get("Retry-After") != fmt.Sprint(limited.Next) {
+		t.Fatal("user quota retry header mismatch")
+	}
 }
 
 func TestHandlers_CreateChallenge_ResendCooldown(t *testing.T) {
@@ -1431,6 +1440,10 @@ func TestHandlers_CreateChallenge_ResendCooldown(t *testing.T) {
 
 	if result2["reason"] != "resend_cooldown" {
 		t.Errorf("Expected reason=resend_cooldown, got %v", result2["reason"])
+	}
+	seconds, ok := result2["next_resend_in"].(float64)
+	if !ok || seconds < 1 || seconds > 60 || resp2.Header.Get("Retry-After") != fmt.Sprint(seconds) {
+		t.Fatalf("cooldown timing missing or inconsistent: %v", result2)
 	}
 }
 
