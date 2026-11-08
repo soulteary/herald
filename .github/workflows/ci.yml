@@ -24,6 +24,18 @@ env:
   GOVULNCHECK_VERSION: v1.7.0
 
 jobs:
+  release-guard:
+    name: Release identity and non-overwrite guard tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - name: Test release guards against local Git and HTTP fixtures
+        run: python3 -B -m unittest discover -s .github/scripts -p 'test_release_guard.py' -v
+
   fmt:
     name: Code Formatting Check
     runs-on: ubuntu-latest
