@@ -2,6 +2,18 @@ package destination
 
 import "testing"
 
+func TestNormalizeDingTalkPreservesOpaqueIdentity(t *testing.T) {
+	for _, channel := range []string{ChannelDingTalk, "DINGTALK"} {
+		got, err := Validate(channel, "  Ding-A_Z9  ")
+		if err != nil || got != "Ding-A_Z9" {
+			t.Fatalf("opaque userid altered: got=%q error=%v", got, err)
+		}
+	}
+	if Normalize(ChannelDingTalk, "Ding-A") == Normalize(ChannelDingTalk, "ding-a") {
+		t.Fatal("distinct opaque recipient bytes collapsed")
+	}
+}
+
 func TestValidate_Email(t *testing.T) {
 	cases := []struct {
 		in      string
