@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Correct the startup warning for missing service credentials. It said
+  authentication "will be disabled", but `hmac_v2` and `api_key` reject every
+  request with 401 until a credential is set. The warning now names the
+  configured `REQUEST_AUTH_MODE` and its effect. Request handling is unchanged.
 - Document that `RATE_LIMIT_PER_IP` counts the caller's address, not the
   `client_ip` body field, and how to forward the end-user address.
 

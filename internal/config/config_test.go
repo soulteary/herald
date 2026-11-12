@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"strings"
 	"sync"
 	"testing"
@@ -287,6 +288,55 @@ func TestInitialize_ProductionRejectsInvalidRedisAddr(t *testing.T) {
 	RedisAddr = ""
 	if err := Initialize(logger.New(logger.Config{Level: logger.ErrorLevel, Format: logger.FormatJSON})); err != nil {
 		t.Fatalf("production with unset REDIS_ADDR rejected: %v", err)
+	}
+}
+
+// TestInitialize_MissingCredentialWarning proves the startup warning states
+// what the selected REQUEST_AUTH_MODE does without credentials: hmac_v2 and
+// api_key reject requests, and only "none" disables authentication.
+func TestInitialize_MissingCredentialWarning(t *testing.T) {
+	const strongKey = "01234567890123456789012345678901"
+	tests := []struct {
+		name, mode, apiKey, hmacSecret string
+		want                           string
+	}{
+		{name: "default mode without credentials", mode: "hmac_v2", want: "REQUEST_AUTH_MODE=hmac_v2 but neither HMAC_SECRET nor HERALD_HMAC_KEYS is set: all authenticated endpoints will reject requests"},
+		{name: "hmac mode with only an API key", mode: "hmac_v2", apiKey: strongKey, want: "all authenticated endpoints will reject requests"},
+		{name: "api key mode without API key", mode: "api_key", hmacSecret: strongKey, want: "REQUEST_AUTH_MODE=api_key but API_KEY is not set: all authenticated endpoints will reject requests"},
+		{name: "none mode", mode: "none", want: "service-to-service authentication is disabled"},
+		{name: "hmac mode with secret", mode: "hmac_v2", hmacSecret: strongKey},
+		{name: "api key mode with key", mode: "api_key", apiKey: strongKey},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			defer withProdEnv(t)()
+			oldMap := hmacKeysMap
+			defer func() { hmacKeysMap = oldMap; hmacKeysMapOnce = sync.Once{} }()
+			hmacKeysMapOnce = sync.Once{}
+			Env = EnvDevelopment
+			RequestAuthMode, APIKey, HMACSecret = test.mode, test.apiKey, test.hmacSecret
+
+			var logs bytes.Buffer
+			if err := Initialize(logger.New(logger.Config{Level: logger.WarnLevel, Format: logger.FormatJSON, Output: &logs})); err != nil {
+				t.Fatalf("Initialize() error = %v", err)
+			}
+			out := logs.String()
+			if strings.Contains(out, "authentication will be disabled") {
+				t.Errorf("startup log still claims authentication will be disabled: %s", out)
+			}
+			if test.want == "" {
+				if strings.Contains(out, "REQUEST_AUTH_MODE=") {
+					t.Errorf("unexpected credential warning: %s", out)
+				}
+				return
+			}
+			if !strings.Contains(out, test.want) {
+				t.Errorf("startup log = %s, want it to contain %q", out, test.want)
+			}
+			if test.mode != "none" && strings.Contains(out, "authentication is disabled") {
+				t.Errorf("mode %s must not be reported as disabled: %s", test.mode, out)
+			}
+		})
 	}
 }
 

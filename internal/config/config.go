@@ -239,7 +239,8 @@ var (
 func Initialize(l *logger.Logger) error {
 	log = l
 
-	if _, err := serviceauth.ParseMode(RequestAuthMode); err != nil {
+	authMode, err := serviceauth.ParseMode(RequestAuthMode)
+	if err != nil {
 		return err
 	}
 	if parseEnvironment(EnvironmentValue) == "" {
@@ -273,8 +274,8 @@ func Initialize(l *logger.Logger) error {
 		}
 	}
 
-	if APIKey == "" && HMACSecret == "" && len(hmacKeysMap) == 0 {
-		log.Warn().Msg("Neither API_KEY nor HMAC_SECRET/HERALD_HMAC_KEYS is set, service-to-service authentication will be disabled")
+	if msg := missingCredentialWarning(authMode); msg != "" {
+		log.Warn().Str("request_auth_mode", string(authMode)).Msg(msg)
 	}
 
 	// Handle TLS_CA_CERT_FILE alias
@@ -310,6 +311,26 @@ func Initialize(l *logger.Logger) error {
 	}
 
 	return nil
+}
+
+// missingCredentialWarning describes what the selected REQUEST_AUTH_MODE does
+// when its credential is not configured. A missing credential never disables
+// authentication: hmac_v2 and api_key reject every request until one is set.
+// Only REQUEST_AUTH_MODE=none accepts unauthenticated requests.
+func missingCredentialWarning(mode serviceauth.Mode) string {
+	switch mode {
+	case serviceauth.ModeHMACV2:
+		if HMACSecret == "" && len(hmacKeysMap) == 0 {
+			return "REQUEST_AUTH_MODE=hmac_v2 but neither HMAC_SECRET nor HERALD_HMAC_KEYS is set: all authenticated endpoints will reject requests with 401 until HMAC credentials are configured"
+		}
+	case serviceauth.ModeAPIKey:
+		if APIKey == "" {
+			return "REQUEST_AUTH_MODE=api_key but API_KEY is not set: all authenticated endpoints will reject requests with 401 until API_KEY is configured"
+		}
+	case serviceauth.ModeNone:
+		return "REQUEST_AUTH_MODE=none: service-to-service authentication is disabled and requests are accepted without credentials; do not use outside development"
+	}
+	return ""
 }
 
 // authConfigured reports whether at least one service-to-service auth mechanism

@@ -85,7 +85,7 @@ Forwarded IP chains are parsed from right to left. Herald skips only explicitly 
 | `HERALD_IDEMPOTENCY_SECRET` | Key for opaque idempotency records; required for production multi-key-only auth | (empty) | Conditional |
 | `HERALD_PII_PEPPER` | Pepper for PII-derived Redis/metric keys; at least 32 bytes in production | (empty) | Recommended |
 
-If none are set, the service logs a warning and allows unauthenticated requests (dev/test only).
+A missing credential does not disable authentication. With `REQUEST_AUTH_MODE=hmac_v2` (the default) and no `HMAC_SECRET`/`HERALD_HMAC_KEYS`, or with `api_key` and no `API_KEY`, Herald logs a startup warning outside production and every authenticated endpoint returns 401 until the credential is configured; production refuses to start. Only `REQUEST_AUTH_MODE=none` (dev/test only) accepts unauthenticated requests.
 
 #### OTP / Challenge
 
