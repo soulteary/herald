@@ -241,7 +241,10 @@ from the main service listener.** Used by integration tests or by Stargate in de
 
 **POST /v1/otp/verifications**
 
-Verify a challenge code.
+Verify a challenge code. This route has no expected user, purpose or channel
+binding; prefer `POST /v2/otp/verifications`. When the server sets
+`HERALD_VERIFY_V1_ENABLED=false` this route is not registered and returns
+`404 Not Found`.
 
 **Request:**
 ```json

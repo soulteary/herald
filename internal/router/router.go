@@ -389,11 +389,18 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 	// OTP routes
 	otp := api.Group("/otp")
 	otp.Post("/challenges", createAuthHandler, authorize("otp:create"), h.CreateChallenge)
-	otp.Post("/verifications", authHandler, authorize("otp:verify"), h.VerifyChallenge)
+	// v1 verification has no expected user/purpose/channel binding. It stays
+	// registered by default for existing callers; deployments whose callers
+	// all use v2 can remove it with HERALD_VERIFY_V1_ENABLED=false.
+	if config.VerifyV1Enabled {
+		otp.Post("/verifications", authHandler, authorize("otp:verify"), h.VerifyChallenge)
+	} else {
+		log.Info().Msg("v1 OTP verification route is disabled (HERALD_VERIFY_V1_ENABLED=false)")
+	}
 	otp.Post("/challenges/:id/revoke", authHandler, authorize("otp:revoke"), h.RevokeChallenge)
 
-	// v2 OTP routes: context-bound verification. v1 is kept for backward
-	// compatibility; new integrations should prefer v2.
+	// v2 OTP routes: context-bound verification. New integrations should
+	// prefer v2.
 	apiV2 := app.Group("/v2")
 	otpV2 := apiV2.Group("/otp")
 	otpV2.Post("/verifications", authHandler, authorize("otp:verify"), h.VerifyChallengeV2)

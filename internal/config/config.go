@@ -141,6 +141,12 @@ var (
 	PIIPepper       = env.Get("HERALD_PII_PEPPER", "")
 	AllowedPurposes = env.GetStringSlice("ALLOWED_PURPOSES", []string{"login"}, ",") // Comma-separated list: "login,reset,bind,stepup"
 
+	// VerifyV1Enabled keeps POST /v1/otp/verifications registered. The v1
+	// route verifies by challenge ID and code only; it has no expected
+	// user/purpose/channel binding. Set HERALD_VERIFY_V1_ENABLED=false once
+	// all callers use the context-bound /v2/otp/verifications route.
+	VerifyV1Enabled = env.GetBool("HERALD_VERIFY_V1_ENABLED", true)
+
 	// Rate limiting config
 	RateLimitPerUser        = env.GetInt("RATE_LIMIT_PER_USER", 10)        // per hour
 	RateLimitPerIP          = env.GetInt("RATE_LIMIT_PER_IP", 5)           // per minute

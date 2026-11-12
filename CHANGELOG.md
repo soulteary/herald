@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `HERALD_VERIFY_V1_ENABLED` (default `true`). Set it to `false` to stop
+  registering `POST /v1/otp/verifications`, which has no expected
+  user/purpose/channel binding, once all callers use the v2 route. The default
+  keeps the v1 route available.
 - Add `REDIS_USERNAME` (Redis ACL user) and `REDIS_TLS_ENABLED`, with optional
   `REDIS_TLS_CA_FILE` and `REDIS_TLS_SERVER_NAME`, for the Redis connection.
   All default to off or empty, so existing deployments connect as before. The

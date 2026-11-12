@@ -175,7 +175,9 @@ without nonce replay protection.
 Use `POST /v2/otp/verifications` with all three expected context fields from
 trusted application state: `expected_user_id`, `expected_purpose` and
 `expected_channel`. The v1 verification route has no caller-supplied context
-binding; do not treat it as providing the v2 guarantees.
+binding; do not treat it as providing the v2 guarantees. After all callers have
+moved to v2, set `HERALD_VERIFY_V1_ENABLED=false` to stop serving the v1
+verification route (default `true`).
 
 ---
 

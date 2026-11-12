@@ -103,6 +103,7 @@ A missing credential does not disable authentication. With `REQUEST_AUTH_MODE=hm
 | `CODE_LENGTH` | Verification code length (digits, minimum `4`; must also fit `HERALD_MAX_BODY_BYTES` after the compact context-bound V2 envelope, currently 136 bytes) | `6` | No |
 | `IDEMPOTENCY_KEY_TTL` | Pre-send claim and completed response TTL; unresolved sends do not expire; `0` = use `CHALLENGE_EXPIRY` | `0` | No |
 | `ALLOWED_PURPOSES` | Allowed purposes, comma-separated (e.g. `login,reset,bind,stepup`) | `login` | No |
+| `HERALD_VERIFY_V1_ENABLED` | Register `POST /v1/otp/verifications`, which has no expected user/purpose/channel binding. Set `false` once all callers use `POST /v2/otp/verifications`; the v1 route then returns 404 | `true` | No |
 
 #### Rate limiting
 

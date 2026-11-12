@@ -382,6 +382,20 @@ or client update is needed. Existing logs and exported spans are not rewritten;
 review access and retention for historical diagnostics if a provider previously
 echoed sensitive data, and rotate any credentials exposed there.
 
+## Disabling v1 verification
+
+`POST /v1/otp/verifications` accepts a challenge ID and code only. It cannot
+check that the challenge belongs to the user, purpose and channel the caller
+expects; `POST /v2/otp/verifications` requires all three. A caller that keeps
+using v1 does not get the v2 binding even when other callers have migrated.
+
+Once every caller uses v2, set `HERALD_VERIFY_V1_ENABLED=false`. Herald then
+does not register the v1 verification route and requests to it receive
+`404/not_found`. Challenge creation, revocation, v2 verification and the TOTP
+routes are unaffected. The default is `true`, so existing deployments keep the
+v1 route until they opt out. The Go SDK method `VerifyChallenge` calls v1; use
+`VerifyChallengeV2` before disabling it.
+
 ## User identifiers in traces
 
 Challenge-creation and verification spans carry `user_id_digest`, the same
