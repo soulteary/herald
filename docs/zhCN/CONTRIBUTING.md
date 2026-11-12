@@ -31,7 +31,7 @@
 
 ### 前置要求
 
-- Go 1.27.3 或更高版本
+- Go 1.27.4 或更高版本
 - 构建与验证使用 Linux，其他宿主环境使用 Linux 容器
 - 服务运行需要 Redis，单元测试通常使用进程内测试服务器
 - Git
@@ -199,7 +199,7 @@ git push origin feature/your-feature-name
 
 **环境信息**
 - OS: [e.g. Linux container on macOS]
-- Go 版本: [e.g. 1.27.3]
+- Go 版本: [e.g. 1.27.4]
 - Redis 版本: [e.g. 7.0]
 - Herald 版本: [e.g. v1.0.0]
 ```
