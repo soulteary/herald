@@ -795,9 +795,13 @@ func (h *Handlers) checkCreationLimits(c fiber.Ctx, spanCtx context.Context, req
 }
 
 func (h *Handlers) checkDestinationLimits(c fiber.Ctx, spanCtx context.Context, req CreateChallengeRequest, failIdem func()) (bool, error) {
-	// 3. Per destination (peppered digest of the normalized destination)
+	// 3. Per destination (peppered digest of the canonical limiter identity).
+	// The limiter identity collapses equivalent spellings of one SMS number
+	// ("+86...", "86...", "0086..."); req.Destination itself is unchanged and
+	// is still what gets stored and sent to the provider.
+	limitDest := destination.LimitKey(req.Channel, req.Destination)
 	allowed, _, resetTime, err := h.rateLimitManager.CheckDestinationRateLimit(
-		spanCtx, h.digester.Digest(req.Destination), config.RateLimitPerDestination, time.Hour,
+		spanCtx, h.digester.Digest(limitDest), config.RateLimitPerDestination, time.Hour,
 	)
 	if err != nil {
 		h.log.Error().Err(err).Msg("Rate limit check failed")
@@ -814,7 +818,7 @@ func (h *Handlers) checkDestinationLimits(c fiber.Ctx, spanCtx context.Context, 
 	}
 
 	// 4. Resend cooldown (peppered digest of user+destination)
-	cooldownKey := h.digester.DigestParts(req.UserID, req.Destination)
+	cooldownKey := h.digester.DigestParts(req.UserID, limitDest)
 	allowed, resetTime, err = h.rateLimitManager.CheckResendCooldown(spanCtx, cooldownKey, config.ResendCooldown)
 	if err != nil {
 		h.log.Error().Err(err).Msg("Cooldown check failed")

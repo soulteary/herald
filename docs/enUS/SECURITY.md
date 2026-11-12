@@ -281,6 +281,28 @@ export MAX_ATTEMPTS=5
 export RESEND_COOLDOWN=60s
 ```
 
+### SMS destination canonicalisation
+
+The per-destination rate limit and the resend cooldown are keyed on a canonical
+form of the validated destination. For SMS, a leading `+` and an international
+`00` dialling prefix are removed, so `+8613800138000`, `8613800138000` and
+`008613800138000` share one quota and one cooldown. Spacing and separators were
+already ignored.
+
+Limits of this canonicalisation:
+
+- No country code is inferred. A national number (`13800138000`) and its
+  international form (`+8613800138000`) remain separate limiter identities.
+  Callers should send one consistent format, preferably E.164.
+- Only limiter keys change. The stored challenge, the audit record, the
+  idempotency fingerprint and the value sent to the provider keep the
+  destination as validated.
+- Trunk prefixes other than `00` (for example `011`) are not recognised.
+
+After an upgrade, a number previously sent with `+` or `00` starts a new
+per-destination counter and cooldown key; the old keys expire with their
+original TTL.
+
 ## Error Handling
 
 ### Production Mode

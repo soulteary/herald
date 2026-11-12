@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Key the per-destination rate limit and resend cooldown on a canonical SMS
+  number. `+8613800138000`, `8613800138000` and `008613800138000` previously
+  had separate quotas; they now share one. Delivery and stored challenges are
+  unchanged, and national numbers are not matched to their international form.
 - Update Go to 1.27.4, which fixes GO-2026-6859 in `net/http`. The build image is
   now `golang:1.27.4-alpine3.24`.
 

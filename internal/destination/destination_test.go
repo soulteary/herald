@@ -110,3 +110,48 @@ func TestValidate_DingTalk(t *testing.T) {
 		t.Errorf("expected error for oversized dingtalk destination")
 	}
 }
+
+// TestLimitKey_SMSPrefixVariantsCollapse proves that the '+' and "00"
+// international prefixes of one number map to a single limiter identity, while
+// distinct numbers and the national form stay separate.
+func TestLimitKey_SMSPrefixVariantsCollapse(t *testing.T) {
+	const want = "8613800138000"
+	for _, v := range []string{"+8613800138000", "8613800138000", "008613800138000", "+86 138-0013-8000", "0086 138 0013 8000"} {
+		normalized, err := Validate(ChannelSMS, v)
+		if err != nil {
+			t.Fatalf("Validate(sms,%q) unexpected error: %v", v, err)
+		}
+		if got := LimitKey(ChannelSMS, normalized); got != want {
+			t.Errorf("LimitKey(sms,%q) = %q, want %q", v, got, want)
+		}
+	}
+
+	distinct := map[string]string{
+		"+8613800138001": "8613800138001", // different subscriber
+		"13800138000":    "13800138000",   // national form: no country code is guessed
+		"+15551234567":   "15551234567",
+	}
+	for in, wantKey := range distinct {
+		got := LimitKey(ChannelSMS, in)
+		if got != wantKey {
+			t.Errorf("LimitKey(sms,%q) = %q, want %q", in, got, wantKey)
+		}
+		if got == want {
+			t.Errorf("LimitKey(sms,%q) collapsed into an unrelated number", in)
+		}
+	}
+}
+
+// TestLimitKey_LeavesDeliveryFormAndOtherChannelsAlone proves LimitKey only
+// affects SMS limiter identities.
+func TestLimitKey_LeavesDeliveryFormAndOtherChannelsAlone(t *testing.T) {
+	if got, _ := Validate(ChannelSMS, "008613800138000"); got != "008613800138000" {
+		t.Errorf("Validate changed the delivery form to %q", got)
+	}
+	if got := LimitKey(ChannelEmail, "User@Example.com"); got != "user@example.com" {
+		t.Errorf("LimitKey(email) = %q", got)
+	}
+	if got := LimitKey(ChannelDingTalk, "+00Ding"); got != "+00Ding" {
+		t.Errorf("LimitKey(dingtalk) = %q", got)
+	}
+}
