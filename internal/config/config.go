@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -597,6 +598,7 @@ func explicitValueProblems() []string {
 			problems = append(problems, "REDIS_ADDR is not a valid host:port address")
 		}
 	}
+	problems = append(problems, booleanValueProblems(os.Getenv)...)
 	if HMACKeysJSON != "" && len(hmacKeysMap) == 0 {
 		problems = append(problems, "HERALD_HMAC_KEYS is set but is not a usable key map (expected a JSON object of non-empty key IDs and secrets, containing HERALD_HMAC_DEFAULT_KEY_ID when that is set)")
 	}
@@ -677,5 +679,35 @@ func productionAuthProblems() []string {
 		}
 	}
 
+	return problems
+}
+
+// booleanEnvNames lists every variable read with env.GetBool. That helper
+// returns the default for any value strconv.ParseBool does not accept, so
+// "yes", "on" or a value with stray whitespace silently selects the default.
+var booleanEnvNames = []string{
+	"AUDIT_ENABLED",
+	"AUDIT_MASK_DESTINATION",
+	"HERALD_RISK_ACK_PASSWORDLESS_REDIS",
+	"HERALD_TEST_MODE",
+	"HERALD_TOTP_ENABLED",
+	"HERALD_VERIFY_V1_ENABLED",
+	"HMAC_V1_ENABLED",
+	"OTLP_ENABLED",
+	"REDIS_TLS_ENABLED",
+}
+
+// booleanValueProblems reports boolean variables whose value would be ignored.
+func booleanValueProblems(getenv func(string) string) []string {
+	var problems []string
+	for _, name := range booleanEnvNames {
+		raw := getenv(name)
+		if raw == "" {
+			continue
+		}
+		if _, err := strconv.ParseBool(raw); err != nil {
+			problems = append(problems, name+" is not a valid boolean (use true or false); the default would be used instead")
+		}
+	}
 	return problems
 }
