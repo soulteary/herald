@@ -46,6 +46,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unchanged, and national numbers are not matched to their international form.
 - Update Go to 1.27.4, which fixes GO-2026-6859 in `net/http`. The build image is
   now `golang:1.27.4-alpine3.24`.
+- SDK: `TOTPRevoke` returns an error with reason `revoke_not_confirmed` when
+  Herald answers 200 without `ok: true`. It previously returned no error.
+- SDK: an undecodable TOTP response is no longer quoted in the error message.
+  Enrollment responses carry the shared secret.
 - Report boolean environment variables whose value `strconv.ParseBool` does not
   accept (for example `AUDIT_MASK_DESTINATION=yes`). They previously fell back to
   the default without notice. This is fatal in production and a warning elsewhere.

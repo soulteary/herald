@@ -715,7 +715,7 @@ func (c *Client) TOTPStatus(ctx context.Context, subject string) (*TOTPStatusRes
 	}
 	var out TOTPStatusResponse
 	if err := json.Unmarshal(body, &out); err != nil {
-		return nil, &HeraldError{StatusCode: resp.StatusCode, Reason: "invalid_response", Message: string(body)}
+		return nil, &HeraldError{StatusCode: resp.StatusCode, Reason: "invalid_response", Message: undecodableResponseMessage(body)}
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, &HeraldError{StatusCode: resp.StatusCode, Reason: "totp_proxy_failed", Message: string(body)}
@@ -777,7 +777,7 @@ func (c *Client) TOTPEnrollStart(ctx context.Context, req *TOTPEnrollStartReques
 	}
 	var out TOTPEnrollStartResponse
 	if err := json.Unmarshal(respBody, &out); err != nil {
-		return nil, &HeraldError{StatusCode: resp.StatusCode, Reason: "invalid_response", Message: string(respBody)}
+		return nil, &HeraldError{StatusCode: resp.StatusCode, Reason: "invalid_response", Message: undecodableResponseMessage(respBody)}
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, &HeraldError{StatusCode: resp.StatusCode, Reason: "totp_proxy_failed", Message: string(respBody)}
@@ -809,7 +809,7 @@ func (c *Client) TOTPEnrollConfirm(ctx context.Context, req *TOTPEnrollConfirmRe
 	}
 	var out TOTPEnrollConfirmResponse
 	if err := json.Unmarshal(respBody, &out); err != nil {
-		return nil, &HeraldError{StatusCode: resp.StatusCode, Reason: "invalid_response", Message: string(respBody)}
+		return nil, &HeraldError{StatusCode: resp.StatusCode, Reason: "invalid_response", Message: undecodableResponseMessage(respBody)}
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, &HeraldError{StatusCode: resp.StatusCode, Reason: "invalid", Message: string(respBody)}
@@ -843,12 +843,24 @@ func (c *Client) TOTPRevoke(ctx context.Context, subject string) (*TOTPRevokeRes
 	}
 	var out TOTPRevokeResponse
 	if err := json.Unmarshal(respBody, &out); err != nil {
-		return nil, &HeraldError{StatusCode: resp.StatusCode, Reason: "invalid_response", Message: string(respBody)}
+		return nil, &HeraldError{StatusCode: resp.StatusCode, Reason: "invalid_response", Message: undecodableResponseMessage(respBody)}
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, &HeraldError{StatusCode: resp.StatusCode, Reason: "proxy_failed", Message: string(respBody)}
 	}
+	// A 200 response that does not confirm the revocation is not a success:
+	// the caller would tell the user the factor was removed when it was not.
+	if !out.OK {
+		return &out, &HeraldError{StatusCode: resp.StatusCode, Reason: "revoke_not_confirmed", Message: "TOTP revoke response did not confirm the revocation"}
+	}
 	return &out, nil
+}
+
+// undecodableResponseMessage describes a TOTP response that is not valid JSON
+// without quoting it. Enrollment responses carry the shared secret and backup
+// codes, and error messages are commonly written to logs.
+func undecodableResponseMessage(body []byte) string {
+	return fmt.Sprintf("response is not valid JSON (%d bytes)", len(body))
 }
 
 // addAuthHeaders adds authentication headers to the request. It signs with the
