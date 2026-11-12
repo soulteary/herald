@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -41,6 +42,10 @@ type Client struct {
 	newNonce func() string
 
 	maxResponseBytes int64
+
+	// clientIPHeader, when set, carries the end-user address of challenge and
+	// verification requests. See Options.ClientIPHeader.
+	clientIPHeader string
 }
 
 // Signature scheme identifiers.
@@ -75,6 +80,16 @@ type Options struct {
 	// MaxResponseBytes caps every response body read by the SDK. Zero uses the
 	// default 1 MiB limit.
 	MaxResponseBytes int64
+	// ClientIPHeader names a request header that carries the ClientIP of
+	// challenge and verification requests, for example "X-Forwarded-For".
+	//
+	// Herald rate-limits by the address it sees for the caller. A gateway that
+	// calls Herald on behalf of many end users therefore shares one per-IP
+	// quota among all of them. To limit per end user, set this to the value of
+	// the server's HERALD_TRUSTED_PROXY_HEADER and list the gateway's address
+	// in HERALD_TRUSTED_PROXIES; Herald ignores the header from any other peer.
+	// Empty (the default) sends no header.
+	ClientIPHeader string
 }
 
 const defaultMaxResponseBytes int64 = 1 << 20
@@ -166,6 +181,44 @@ func (o *Options) WithMaxResponseBytes(limit int64) *Options {
 	return o
 }
 
+// WithClientIPHeader sets the header used to forward the end-user address.
+// See Options.ClientIPHeader.
+func (o *Options) WithClientIPHeader(name string) *Options {
+	o.ClientIPHeader = name
+	return o
+}
+
+// reservedHeaders are set by the SDK itself and must not double as the
+// client-IP header.
+var reservedHeaders = map[string]struct{}{
+	"Content-Type":        {},
+	"Idempotency-Key":     {},
+	"X-Api-Key":           {},
+	"X-Key-Id":            {},
+	"X-Nonce":             {},
+	"X-Service":           {},
+	"X-Signature":         {},
+	"X-Signature-Version": {},
+	"X-Timestamp":         {},
+}
+
+func validateClientIPHeader(name string) error {
+	if name == "" {
+		return nil
+	}
+	for i := 0; i < len(name); i++ {
+		ch := name[i]
+		isAlnum := (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9')
+		if !isAlnum && ch != '-' {
+			return fmt.Errorf("client IP header %q is not a valid header name", name)
+		}
+	}
+	if _, reserved := reservedHeaders[http.CanonicalHeaderKey(name)]; reserved {
+		return fmt.Errorf("client IP header %q is reserved by the SDK", name)
+	}
+	return nil
+}
+
 // Validate validates the options
 func (o *Options) Validate() error {
 	if o.BaseURL == "" {
@@ -186,6 +239,9 @@ func (o *Options) Validate() error {
 	}
 	if o.SignatureVersion != "" && o.SignatureVersion != SignatureV1 && o.SignatureVersion != SignatureV2 && o.SignatureVersion != SignatureV3 {
 		return fmt.Errorf("signature version must be v1, v2, or v3")
+	}
+	if err := validateClientIPHeader(o.ClientIPHeader); err != nil {
+		return err
 	}
 	return nil
 }
@@ -271,6 +327,7 @@ func NewClient(opts *Options) (*Client, error) {
 		now:              time.Now,
 		newNonce:         defaultNonce,
 		maxResponseBytes: maxResponseBytes,
+		clientIPHeader:   opts.ClientIPHeader,
 	}
 	if client.sigVersion == "" {
 		client.sigVersion = SignatureV3
@@ -397,6 +454,7 @@ func (c *Client) CreateChallengeWithMetadata(ctx context.Context, req *CreateCha
 			httpReq.Header.Set("Idempotency-Key", strings.Trim(s, " \t"))
 		}
 	}
+	c.setClientIPHeader(httpReq, req.ClientIP)
 
 	c.addAuthHeaders(httpReq, body)
 
@@ -454,6 +512,7 @@ func (c *Client) VerifyChallenge(ctx context.Context, req *VerifyChallengeReques
 
 	httpReq.Header.Set("Content-Type", "application/json")
 
+	c.setClientIPHeader(httpReq, req.ClientIP)
 	c.addAuthHeaders(httpReq, body)
 
 	resp, err := c.httpClient.Do(httpReq)
@@ -504,6 +563,7 @@ func (c *Client) VerifyChallengeV2(ctx context.Context, req *VerifyChallengeV2Re
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
+	c.setClientIPHeader(httpReq, req.ClientIP)
 	c.addAuthHeaders(httpReq, body)
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
@@ -794,6 +854,20 @@ func (c *Client) TOTPRevoke(ctx context.Context, subject string) (*TOTPRevokeRes
 // addAuthHeaders adds authentication headers to the request. It signs with the
 // configured scheme (v3 by default). It never downgrades: if a scheme is
 // selected, only that scheme's headers are produced.
+// setClientIPHeader forwards the end-user address when the client was built
+// with Options.ClientIPHeader. A value that is not an IP address is dropped so
+// that arbitrary caller input never reaches a request header.
+func (c *Client) setClientIPHeader(req *http.Request, clientIP string) {
+	if c.clientIPHeader == "" {
+		return
+	}
+	ip := net.ParseIP(strings.TrimSpace(clientIP))
+	if ip == nil {
+		return
+	}
+	req.Header.Set(c.clientIPHeader, ip.String())
+}
+
 func (c *Client) addAuthHeaders(req *http.Request, body []byte) {
 	if c.hmacSecret == "" {
 		if c.apiKey != "" {

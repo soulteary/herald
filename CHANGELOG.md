@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add the SDK option `ClientIPHeader` (`WithClientIPHeader`). When set, challenge
+  and verification requests carry their `ClientIP` in that header, so a gateway
+  listed in `HERALD_TRUSTED_PROXIES` can have `RATE_LIMIT_PER_IP` applied per end
+  user. The default sends no header and server behaviour is unchanged.
+
+### Fixed
+
+- Document that `RATE_LIMIT_PER_IP` counts the caller's address, not the
+  `client_ip` body field, and how to forward the end-user address.
+
 ## [1.5.0] - 2026-11-08
 
 ### Added
