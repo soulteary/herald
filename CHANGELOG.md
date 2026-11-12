@@ -25,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Stop exporting raw user IDs on trace spans. The create and verify spans now
+  carry `user_id_digest` (peppered digest) instead of `user_id`. Audit records
+  are unchanged. Trace queries on the `user_id` attribute need updating.
 - Refuse to start in production when `REDIS_ADDR` is set to an invalid address
   or `HERALD_HMAC_KEYS` is set but malformed. Herald previously continued with
   `localhost:6379` or with `HMAC_SECRET` after a warning. Other environments

@@ -373,6 +373,16 @@ or client update is needed. Existing logs and exported spans are not rewritten;
 review access and retention for historical diagnostics if a provider previously
 echoed sensitive data, and rotate any credentials exposed there.
 
+## User identifiers in traces
+
+Challenge-creation and verification spans carry `user_id_digest`, the same
+peppered digest used for rate-limit keys, instead of the raw `user_id`. Tracing
+backends are often shared more widely than the audit store, so the raw
+identifier is kept out of exported spans. Audit records are unchanged and still
+contain the user ID. Trace queries or dashboards that filtered on the `user_id`
+span attribute must switch to `user_id_digest`. Spans exported before the
+upgrade are not rewritten.
+
 ## Related Documentation
 
 - [API Documentation](API.md) - Learn about API security features and authentication

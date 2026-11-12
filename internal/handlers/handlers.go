@@ -252,7 +252,7 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 	span.SetAttributes(
 		attribute.String("channel", req.Channel),
 		attribute.String("purpose", req.Purpose),
-		attribute.String("user_id", req.UserID),
+		h.userIDSpanAttribute(req.UserID),
 		attribute.String("destination", maskDestination(req.Destination)),
 	)
 
@@ -378,6 +378,13 @@ func idempotencyPrincipal(c fiber.Ctx) string {
 	return "ip:" + c.IP()
 }
 
+// userIDSpanAttribute returns the span attribute that identifies a user. Spans
+// are exported to an external collector, so they carry the peppered digest
+// (the same one used for rate-limit keys) instead of the raw identifier.
+func (h *Handlers) userIDSpanAttribute(userID string) attribute.KeyValue {
+	return attribute.String("user_id_digest", h.digester.Digest(userID))
+}
+
 // maskDestination masks sensitive destination information for tracing
 func maskDestination(dest string) string {
 	if len(dest) == 0 {
@@ -462,7 +469,7 @@ func (h *Handlers) VerifyChallenge(c fiber.Ctx) error {
 	ch := result.Challenge
 	verifySpan.SetAttributes(
 		attribute.String("result", "success"),
-		attribute.String("user_id", ch.UserID),
+		h.userIDSpanAttribute(ch.UserID),
 		attribute.String("channel", string(ch.Channel)),
 		attribute.String("purpose", ch.Purpose),
 	)
@@ -548,7 +555,7 @@ func (h *Handlers) VerifyChallengeV2(c fiber.Ctx) error {
 	ch := result.Challenge
 	verifySpan.SetAttributes(
 		attribute.String("result", "success"),
-		attribute.String("user_id", ch.UserID),
+		h.userIDSpanAttribute(ch.UserID),
 		attribute.String("channel", string(ch.Channel)),
 		attribute.String("purpose", ch.Purpose),
 	)
