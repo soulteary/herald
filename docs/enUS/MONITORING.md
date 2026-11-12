@@ -299,7 +299,7 @@ groups:
 
 ## OpenTelemetry Support
 
-When `OTLP_ENABLED=true` and `OTLP_ENDPOINT` is set, Herald enables OpenTelemetry tracing middleware. Trace context is propagated via `traceparent` and `tracestate` headers. Core spans include challenge create, provider send, and verify operations; span tags include `channel`, `purpose`, `provider`, `result`, and `reason`. Configure `OTLP_ENDPOINT` (e.g. `http://localhost:4318` for OTLP HTTP) as described in [DEPLOYMENT.md](DEPLOYMENT.md).
+When `OTLP_ENABLED=true` and `OTLP_ENDPOINT` is set, Herald enables OpenTelemetry tracing middleware. Trace context is propagated via `traceparent` and `tracestate` headers. Core spans include challenge create, provider send, and verify operations; span tags include `channel`, `purpose`, `provider`, `result`, and `reason`. Users are identified on spans by `user_id_digest`, a peppered digest (keyed by `HERALD_PII_PEPPER`); the raw `user_id` is not exported. The digest is stable for a given pepper, so it can still be used to correlate spans for one user. Configure `OTLP_ENDPOINT` (e.g. `http://localhost:4318` for OTLP HTTP) as described in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Best Practices
 

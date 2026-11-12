@@ -252,7 +252,7 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 	span.SetAttributes(
 		attribute.String("channel", req.Channel),
 		attribute.String("purpose", req.Purpose),
-		attribute.String("user_id", req.UserID),
+		h.userIDSpanAttribute(req.UserID),
 		attribute.String("destination", maskDestination(req.Destination)),
 	)
 
@@ -378,6 +378,13 @@ func idempotencyPrincipal(c fiber.Ctx) string {
 	return "ip:" + c.IP()
 }
 
+// userIDSpanAttribute returns the span attribute that identifies a user. Spans
+// are exported to an external collector, so they carry the peppered digest
+// (the same one used for rate-limit keys) instead of the raw identifier.
+func (h *Handlers) userIDSpanAttribute(userID string) attribute.KeyValue {
+	return attribute.String("user_id_digest", h.digester.Digest(userID))
+}
+
 // maskDestination masks sensitive destination information for tracing
 func maskDestination(dest string) string {
 	if len(dest) == 0 {
@@ -462,7 +469,7 @@ func (h *Handlers) VerifyChallenge(c fiber.Ctx) error {
 	ch := result.Challenge
 	verifySpan.SetAttributes(
 		attribute.String("result", "success"),
-		attribute.String("user_id", ch.UserID),
+		h.userIDSpanAttribute(ch.UserID),
 		attribute.String("channel", string(ch.Channel)),
 		attribute.String("purpose", ch.Purpose),
 	)
@@ -548,7 +555,7 @@ func (h *Handlers) VerifyChallengeV2(c fiber.Ctx) error {
 	ch := result.Challenge
 	verifySpan.SetAttributes(
 		attribute.String("result", "success"),
-		attribute.String("user_id", ch.UserID),
+		h.userIDSpanAttribute(ch.UserID),
 		attribute.String("channel", string(ch.Channel)),
 		attribute.String("purpose", ch.Purpose),
 	)
@@ -795,9 +802,13 @@ func (h *Handlers) checkCreationLimits(c fiber.Ctx, spanCtx context.Context, req
 }
 
 func (h *Handlers) checkDestinationLimits(c fiber.Ctx, spanCtx context.Context, req CreateChallengeRequest, failIdem func()) (bool, error) {
-	// 3. Per destination (peppered digest of the normalized destination)
+	// 3. Per destination (peppered digest of the canonical limiter identity).
+	// The limiter identity collapses equivalent spellings of one SMS number
+	// ("+86...", "86...", "0086..."); req.Destination itself is unchanged and
+	// is still what gets stored and sent to the provider.
+	limitDest := destination.LimitKey(req.Channel, req.Destination)
 	allowed, _, resetTime, err := h.rateLimitManager.CheckDestinationRateLimit(
-		spanCtx, h.digester.Digest(req.Destination), config.RateLimitPerDestination, time.Hour,
+		spanCtx, h.digester.Digest(limitDest), config.RateLimitPerDestination, time.Hour,
 	)
 	if err != nil {
 		h.log.Error().Err(err).Msg("Rate limit check failed")
@@ -814,7 +825,7 @@ func (h *Handlers) checkDestinationLimits(c fiber.Ctx, spanCtx context.Context, 
 	}
 
 	// 4. Resend cooldown (peppered digest of user+destination)
-	cooldownKey := h.digester.DigestParts(req.UserID, req.Destination)
+	cooldownKey := h.digester.DigestParts(req.UserID, limitDest)
 	allowed, resetTime, err = h.rateLimitManager.CheckResendCooldown(spanCtx, cooldownKey, config.ResendCooldown)
 	if err != nil {
 		h.log.Error().Err(err).Msg("Cooldown check failed")

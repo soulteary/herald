@@ -216,8 +216,17 @@ export CLIENT_CERT_MODE=require
 - Restrict Redis network access (only allow Herald service access)
 - Use Redis AUTH for authentication
 - Regularly update Redis to fix known vulnerabilities
-- Herald has no native Redis TLS configuration. Use a protected private network
-  or an authenticated encryption tunnel when Redis transport encryption is required
+- Set `REDIS_TLS_ENABLED=true` to encrypt the Redis connection. The server
+  certificate is always verified, against `REDIS_TLS_CA_FILE` when set and the
+  system roots otherwise; there is no option to skip verification. Client
+  certificates for Redis are not supported. TLS is off by default, so without it
+  use a protected private network
+- Set `REDIS_USERNAME` to authenticate as a Redis ACL user with only the
+  permissions Herald needs, instead of the default user
+- Production refuses to start when `REDIS_TLS_CA_FILE` or
+  `REDIS_TLS_SERVER_NAME` is set without `REDIS_TLS_ENABLED=true`, or
+  `REDIS_USERNAME` is set without `REDIS_PASSWORD`, because those settings
+  would otherwise be ignored
 
 ### Audit Logging
 
@@ -280,6 +289,28 @@ export CHALLENGE_EXPIRY=5m
 export MAX_ATTEMPTS=5
 export RESEND_COOLDOWN=60s
 ```
+
+### SMS destination canonicalisation
+
+The per-destination rate limit and the resend cooldown are keyed on a canonical
+form of the validated destination. For SMS, a leading `+` and an international
+`00` dialling prefix are removed, so `+8613800138000`, `8613800138000` and
+`008613800138000` share one quota and one cooldown. Spacing and separators were
+already ignored.
+
+Limits of this canonicalisation:
+
+- No country code is inferred. A national number (`13800138000`) and its
+  international form (`+8613800138000`) remain separate limiter identities.
+  Callers should send one consistent format, preferably E.164.
+- Only limiter keys change. The stored challenge, the audit record, the
+  idempotency fingerprint and the value sent to the provider keep the
+  destination as validated.
+- Trunk prefixes other than `00` (for example `011`) are not recognised.
+
+After an upgrade, a number previously sent with `+` or `00` starts a new
+per-destination counter and cooldown key; the old keys expire with their
+original TTL.
 
 ## Error Handling
 
@@ -350,6 +381,30 @@ idempotency `delivery_unknown` handling are unchanged. No Redis record migration
 or client update is needed. Existing logs and exported spans are not rewritten;
 review access and retention for historical diagnostics if a provider previously
 echoed sensitive data, and rotate any credentials exposed there.
+
+## Disabling v1 verification
+
+`POST /v1/otp/verifications` accepts a challenge ID and code only. It cannot
+check that the challenge belongs to the user, purpose and channel the caller
+expects; `POST /v2/otp/verifications` requires all three. A caller that keeps
+using v1 does not get the v2 binding even when other callers have migrated.
+
+Once every caller uses v2, set `HERALD_VERIFY_V1_ENABLED=false`. Herald then
+does not register the v1 verification route and requests to it receive
+`404/not_found`. Challenge creation, revocation, v2 verification and the TOTP
+routes are unaffected. The default is `true`, so existing deployments keep the
+v1 route until they opt out. The Go SDK method `VerifyChallenge` calls v1; use
+`VerifyChallengeV2` before disabling it.
+
+## User identifiers in traces
+
+Challenge-creation and verification spans carry `user_id_digest`, the same
+peppered digest used for rate-limit keys, instead of the raw `user_id`. Tracing
+backends are often shared more widely than the audit store, so the raw
+identifier is kept out of exported spans. Audit records are unchanged and still
+contain the user ID. Trace queries or dashboards that filtered on the `user_id`
+span attribute must switch to `user_id_digest`. Spans exported before the
+upgrade are not rewritten.
 
 ## Related Documentation
 

@@ -68,6 +68,23 @@ func Normalize(channel, dest string) string {
 	}
 }
 
+// LimitKey returns the canonical identity of a destination for rate-limit and
+// resend-cooldown keys. It must not be used for delivery or storage.
+//
+// For SMS a leading '+' and an international "00" dialling prefix are removed,
+// so "+8613800138000", "8613800138000" and "008613800138000" share one quota
+// instead of three. No country code is guessed: a national number
+// ("13800138000") and its international form remain distinct identities.
+// Other channels return the normalized destination unchanged.
+func LimitKey(channel, dest string) string {
+	n := Normalize(channel, dest)
+	if strings.ToLower(channel) != ChannelSMS {
+		return n
+	}
+	n = strings.TrimPrefix(n, "+")
+	return strings.TrimPrefix(n, "00")
+}
+
 // Validate normalizes and validates a destination for the given channel,
 // returning the normalized value on success or ErrInvalidDestination.
 func Validate(channel, dest string) (string, error) {

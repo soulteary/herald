@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -105,6 +106,14 @@ var (
 	RedisAddr     = env.Get("REDIS_ADDR", "localhost:6379")
 	RedisPassword = env.Get("REDIS_PASSWORD", "")
 	RedisDB       = env.GetInt("REDIS_DB", 0)
+	// RedisUsername selects a Redis ACL user; empty uses the default user.
+	RedisUsername = env.Get("REDIS_USERNAME", "")
+	// Redis TLS is off by default. When enabled the server certificate is
+	// verified against REDIS_TLS_CA_FILE (or the system roots when empty) and
+	// REDIS_TLS_SERVER_NAME (or the REDIS_ADDR host when empty).
+	RedisTLSEnabled    = env.GetBool("REDIS_TLS_ENABLED", false)
+	RedisTLSCAFile     = env.Get("REDIS_TLS_CA_FILE", "")
+	RedisTLSServerName = env.Get("REDIS_TLS_SERVER_NAME", "")
 
 	// Logging
 	LogLevel = env.Get("LOG_LEVEL", "info")
@@ -132,6 +141,12 @@ var (
 	// when unset (see Initialize).
 	PIIPepper       = env.Get("HERALD_PII_PEPPER", "")
 	AllowedPurposes = env.GetStringSlice("ALLOWED_PURPOSES", []string{"login"}, ",") // Comma-separated list: "login,reset,bind,stepup"
+
+	// VerifyV1Enabled keeps POST /v1/otp/verifications registered. The v1
+	// route verifies by challenge ID and code only; it has no expected
+	// user/purpose/channel binding. Set HERALD_VERIFY_V1_ENABLED=false once
+	// all callers use the context-bound /v2/otp/verifications route.
+	VerifyV1Enabled = env.GetBool("HERALD_VERIFY_V1_ENABLED", true)
 
 	// Rate limiting config
 	RateLimitPerUser        = env.GetInt("RATE_LIMIT_PER_USER", 10)        // per hour
@@ -239,7 +254,8 @@ var (
 func Initialize(l *logger.Logger) error {
 	log = l
 
-	if _, err := serviceauth.ParseMode(RequestAuthMode); err != nil {
+	authMode, err := serviceauth.ParseMode(RequestAuthMode)
+	if err != nil {
 		return err
 	}
 	if parseEnvironment(EnvironmentValue) == "" {
@@ -249,12 +265,12 @@ func Initialize(l *logger.Logger) error {
 	// Validate required configs
 	if RedisAddr == "" {
 		log.Warn().Msg("REDIS_ADDR is not set, using default: localhost:6379")
-	} else {
-		// Validate Redis address format using cli-kit validator
-		if _, _, err := validator.ValidateHostPort(RedisAddr); err != nil {
-			log.Warn().Str("addr", RedisAddr).Err(err).Msg("Invalid REDIS_ADDR format, using default: localhost:6379")
-			RedisAddr = "localhost:6379"
-		}
+	} else if _, _, err := validator.ValidateHostPort(RedisAddr); err != nil && Env != EnvProduction {
+		// Outside production an invalid address falls back to the local
+		// default. Production keeps the configured value so Validate() rejects
+		// it instead of connecting to an unintended Redis.
+		log.Warn().Str("addr", RedisAddr).Err(err).Msg("Invalid REDIS_ADDR format, using default: localhost:6379")
+		RedisAddr = "localhost:6379"
 	}
 
 	// Parse HMAC keys if provided
@@ -263,14 +279,18 @@ func Initialize(l *logger.Logger) error {
 			if strings.TrimSpace(ServicePoliciesJSON) != "" {
 				return err
 			}
-			log.Warn().Err(err).Msg("Failed to parse HERALD_HMAC_KEYS, falling back to HMAC_SECRET")
+			// Outside production a malformed key map falls back to
+			// HMAC_SECRET. Production is rejected by Validate().
+			if Env != EnvProduction {
+				log.Warn().Err(err).Msg("Failed to parse HERALD_HMAC_KEYS, falling back to HMAC_SECRET")
+			}
 		} else {
 			log.Info().Int("count", len(hmacKeysMap)).Msg("HMAC keys loaded")
 		}
 	}
 
-	if APIKey == "" && HMACSecret == "" && len(hmacKeysMap) == 0 {
-		log.Warn().Msg("Neither API_KEY nor HMAC_SECRET/HERALD_HMAC_KEYS is set, service-to-service authentication will be disabled")
+	if msg := missingCredentialWarning(authMode); msg != "" {
+		log.Warn().Str("request_auth_mode", string(authMode)).Msg(msg)
 	}
 
 	// Handle TLS_CA_CERT_FILE alias
@@ -293,6 +313,7 @@ func Initialize(l *logger.Logger) error {
 		Str("port", Port).
 		Str("redis", maskSensitive(RedisAddr)).
 		Int("redis_db", RedisDB).
+		Bool("redis_tls", RedisTLSEnabled).
 		Str("log_level", LogLevel).
 		Dur("challenge_expiry", ChallengeExpiry).
 		Int("max_attempts", MaxAttempts).
@@ -306,6 +327,26 @@ func Initialize(l *logger.Logger) error {
 	}
 
 	return nil
+}
+
+// missingCredentialWarning describes what the selected REQUEST_AUTH_MODE does
+// when its credential is not configured. A missing credential never disables
+// authentication: hmac_v2 and api_key reject every request until one is set.
+// Only REQUEST_AUTH_MODE=none accepts unauthenticated requests.
+func missingCredentialWarning(mode serviceauth.Mode) string {
+	switch mode {
+	case serviceauth.ModeHMACV2:
+		if HMACSecret == "" && len(hmacKeysMap) == 0 {
+			return "REQUEST_AUTH_MODE=hmac_v2 but neither HMAC_SECRET nor HERALD_HMAC_KEYS is set: all authenticated endpoints will reject requests with 401 until HMAC credentials are configured"
+		}
+	case serviceauth.ModeAPIKey:
+		if APIKey == "" {
+			return "REQUEST_AUTH_MODE=api_key but API_KEY is not set: all authenticated endpoints will reject requests with 401 until API_KEY is configured"
+		}
+	case serviceauth.ModeNone:
+		return "REQUEST_AUTH_MODE=none: service-to-service authentication is disabled and requests are accepted without credentials; do not use outside development"
+	}
+	return ""
 }
 
 // authConfigured reports whether at least one service-to-service auth mechanism
@@ -325,6 +366,8 @@ func Validate() error {
 	var problems []string
 
 	problems = append(problems, listenerAndProviderProblems()...)
+	problems = append(problems, explicitValueProblems()...)
+	problems = append(problems, redisTransportProblems()...)
 
 	if Env != EnvProduction {
 		// Non-production: surface issues as warnings and continue, but never
@@ -543,6 +586,25 @@ func listenerAndProviderProblems() []string {
 	return problems
 }
 
+// explicitValueProblems reports values that were set explicitly but cannot be
+// used. Initialize() substitutes a fallback for them outside production; in
+// production a substitute would hide the mistake (a different Redis, or a
+// single shared secret instead of the intended key map), so startup fails.
+// Unset variables are not reported here.
+func explicitValueProblems() []string {
+	var problems []string
+	if RedisAddr != "" {
+		if _, _, err := validator.ValidateHostPort(RedisAddr); err != nil {
+			problems = append(problems, "REDIS_ADDR is not a valid host:port address")
+		}
+	}
+	problems = append(problems, booleanValueProblems(os.Getenv)...)
+	if HMACKeysJSON != "" && len(hmacKeysMap) == 0 {
+		problems = append(problems, "HERALD_HMAC_KEYS is set but is not a usable key map (expected a JSON object of non-empty key IDs and secrets, containing HERALD_HMAC_DEFAULT_KEY_ID when that is set)")
+	}
+	return problems
+}
+
 func productionPolicyProblems() []string {
 	var problems []string
 	// Production-only fail-closed checks.
@@ -617,5 +679,35 @@ func productionAuthProblems() []string {
 		}
 	}
 
+	return problems
+}
+
+// booleanEnvNames lists every variable read with env.GetBool. That helper
+// returns the default for any value strconv.ParseBool does not accept, so
+// "yes", "on" or a value with stray whitespace silently selects the default.
+var booleanEnvNames = []string{
+	"AUDIT_ENABLED",
+	"AUDIT_MASK_DESTINATION",
+	"HERALD_RISK_ACK_PASSWORDLESS_REDIS",
+	"HERALD_TEST_MODE",
+	"HERALD_TOTP_ENABLED",
+	"HERALD_VERIFY_V1_ENABLED",
+	"HMAC_V1_ENABLED",
+	"OTLP_ENABLED",
+	"REDIS_TLS_ENABLED",
+}
+
+// booleanValueProblems reports boolean variables whose value would be ignored.
+func booleanValueProblems(getenv func(string) string) []string {
+	var problems []string
+	for _, name := range booleanEnvNames {
+		raw := getenv(name)
+		if raw == "" {
+			continue
+		}
+		if _, err := strconv.ParseBool(raw); err != nil {
+			problems = append(problems, name+" is not a valid boolean (use true or false); the default would be used instead")
+		}
+	}
 	return problems
 }

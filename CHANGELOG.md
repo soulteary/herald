@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `HERALD_VERIFY_V1_ENABLED` (default `true`). Set it to `false` to stop
+  registering `POST /v1/otp/verifications`, which has no expected
+  user/purpose/channel binding, once all callers use the v2 route. The default
+  keeps the v1 route available.
+- Add `REDIS_USERNAME` (Redis ACL user) and `REDIS_TLS_ENABLED`, with optional
+  `REDIS_TLS_CA_FILE` and `REDIS_TLS_SERVER_NAME`, for the Redis connection.
+  All default to off or empty, so existing deployments connect as before. The
+  server certificate is always verified when TLS is enabled.
 - Add the SDK option `ClientIPHeader` (`WithClientIPHeader`). When set, challenge
   and verification requests carry their `ClientIP` in that header, so a gateway
   listed in `HERALD_TRUSTED_PROXIES` can have `RATE_LIMIT_PER_IP` applied per end
@@ -16,13 +24,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Correct the startup warning for missing service credentials. It said
+  authentication "will be disabled", but `hmac_v2` and `api_key` reject every
+  request with 401 until a credential is set. The warning now names the
+  configured `REQUEST_AUTH_MODE` and its effect. Request handling is unchanged.
 - Document that `RATE_LIMIT_PER_IP` counts the caller's address, not the
   `client_ip` body field, and how to forward the end-user address.
 
 ### Security
 
+- Stop exporting raw user IDs on trace spans. The create and verify spans now
+  carry `user_id_digest` (peppered digest) instead of `user_id`. Audit records
+  are unchanged. Trace queries on the `user_id` attribute need updating.
+- Refuse to start in production when `REDIS_ADDR` is set to an invalid address
+  or `HERALD_HMAC_KEYS` is set but malformed. Herald previously continued with
+  `localhost:6379` or with `HMAC_SECRET` after a warning. Other environments
+  keep the fallback, and unset variables behave as before.
+- Key the per-destination rate limit and resend cooldown on a canonical SMS
+  number. `+8613800138000`, `8613800138000` and `008613800138000` previously
+  had separate quotas; they now share one. Delivery and stored challenges are
+  unchanged, and national numbers are not matched to their international form.
 - Update Go to 1.27.4, which fixes GO-2026-6859 in `net/http`. The build image is
   now `golang:1.27.4-alpine3.24`.
+- SDK: `TOTPRevoke` returns an error with reason `revoke_not_confirmed` when
+  Herald answers 200 without `ok: true`. It previously returned no error.
+- SDK: an undecodable TOTP response is no longer quoted in the error message.
+  Enrollment responses carry the shared secret.
+- Report boolean environment variables whose value `strconv.ParseBool` does not
+  accept (for example `AUDIT_MASK_DESTINATION=yes`). They previously fell back to
+  the default without notice. This is fatal in production and a warning elsewhere.
 
 ## [1.5.0] - 2026-11-08
 

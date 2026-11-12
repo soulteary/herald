@@ -51,9 +51,13 @@ The following match the implementation in `internal/config/config.go`.
 |----------|-------------|---------|----------|
 | `ENVIRONMENT` | Runtime policy: `development`/`dev`, `test`/`testing`, `production`/`prod`; unknown values fail startup | `development` | Set `production` in production |
 | `PORT` | Server listen port (with or without leading colon, e.g. `8082` or `:8082`) | `:8082` | No |
-| `REDIS_ADDR` | Redis address | `localhost:6379` | No |
+| `REDIS_ADDR` | Redis address (`host:port`); an invalid value fails startup in production and falls back to the default with a warning elsewhere | `localhost:6379` | No |
 | `REDIS_PASSWORD` | Redis password | (empty) | Production, unless explicitly risk-acknowledged |
 | `REDIS_DB` | Redis database index | `0` | No |
+| `REDIS_USERNAME` | Redis ACL username; empty uses the default user. Requires `REDIS_PASSWORD` | (empty) | No |
+| `REDIS_TLS_ENABLED` | Connect to Redis over TLS (1.2 or later); the server certificate is always verified | `false` | No |
+| `REDIS_TLS_CA_FILE` | PEM CA bundle used to verify the Redis certificate; empty uses the system roots. Needs `REDIS_TLS_ENABLED=true` | (empty) | No |
+| `REDIS_TLS_SERVER_NAME` | Name expected in the Redis certificate; empty uses the `REDIS_ADDR` host. Needs `REDIS_TLS_ENABLED=true` | (empty) | No |
 | `LOG_LEVEL` | Log level | `info` | No |
 | `SERVICE_NAME` | Service identifier (HMAC, logging, health) | `herald` | No |
 | `HERALD_READ_TIMEOUT` | Request read timeout | `15s` | No |
@@ -78,14 +82,14 @@ Forwarded IP chains are parsed from right to left. Herald skips only explicitly 
 | `REQUEST_AUTH_MODE` | Request auth: `hmac_v2`, `api_key`, or `none` (dev only) | `hmac_v2` | Yes in production |
 | `API_KEY` | API key for `api_key` mode; at least 32 bytes in production | (empty) | API-key mode |
 | `HMAC_SECRET` | Single HMAC secret; at least 32 bytes in production | (empty) | HMAC single-key mode |
-| `HERALD_HMAC_KEYS` | HMAC key map; IDs/secrets must be non-empty and production secrets at least 32 bytes | (empty) | HMAC multi-key mode |
+| `HERALD_HMAC_KEYS` | HMAC key map; IDs/secrets must be non-empty and production secrets at least 32 bytes. A set but malformed map fails startup in production; elsewhere it is ignored with a warning and `HMAC_SECRET` is used | (empty) | HMAC multi-key mode |
 | `HERALD_HMAC_DEFAULT_KEY_ID` | Default for configuration lookups; key-map v2/v3 requests still require an explicit `X-Key-Id` | (empty) | Optional |
 | `HMAC_MAX_DRIFT` | Accepted HMAC v2/v3 timestamp drift | `60s` | No |
 | `HMAC_V1_ENABLED` | Temporarily enable legacy HMAC v1 | `false` | No |
 | `HERALD_IDEMPOTENCY_SECRET` | Key for opaque idempotency records; required for production multi-key-only auth | (empty) | Conditional |
 | `HERALD_PII_PEPPER` | Pepper for PII-derived Redis/metric keys; at least 32 bytes in production | (empty) | Recommended |
 
-If none are set, the service logs a warning and allows unauthenticated requests (dev/test only).
+A missing credential does not disable authentication. With `REQUEST_AUTH_MODE=hmac_v2` (the default) and no `HMAC_SECRET`/`HERALD_HMAC_KEYS`, or with `api_key` and no `API_KEY`, Herald logs a startup warning outside production and every authenticated endpoint returns 401 until the credential is configured; production refuses to start. Only `REQUEST_AUTH_MODE=none` (dev/test only) accepts unauthenticated requests.
 
 #### OTP / Challenge
 
@@ -99,6 +103,7 @@ If none are set, the service logs a warning and allows unauthenticated requests 
 | `CODE_LENGTH` | Verification code length (digits, minimum `4`; must also fit `HERALD_MAX_BODY_BYTES` after the compact context-bound V2 envelope, currently 136 bytes) | `6` | No |
 | `IDEMPOTENCY_KEY_TTL` | Pre-send claim and completed response TTL; unresolved sends do not expire; `0` = use `CHALLENGE_EXPIRY` | `0` | No |
 | `ALLOWED_PURPOSES` | Allowed purposes, comma-separated (e.g. `login,reset,bind,stepup`) | `login` | No |
+| `HERALD_VERIFY_V1_ENABLED` | Register `POST /v1/otp/verifications`, which has no expected user/purpose/channel binding. Set `false` once all callers use `POST /v2/otp/verifications`; the v1 route then returns 404 | `true` | No |
 
 #### Rate limiting
 
