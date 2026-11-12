@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Document that `RATE_LIMIT_PER_IP` counts the caller's address, not the
   `client_ip` body field, and how to forward the end-user address.
 
+### Security
+
+- Update Go to 1.27.4, which fixes GO-2026-6859 in `net/http`. The build image is
+  now `golang:1.27.4-alpine3.24`.
+
 ## [1.5.0] - 2026-11-08
 
 ### Added
