@@ -90,7 +90,22 @@ Herald implements multi-dimensional rate limiting to prevent abuse:
 **Rate Limit Dimensions**:
 - **Per User ID**: Limits challenges per user_id per time window
 - **Per Destination**: Limits challenges per email/phone number per time window
-- **Per IP Address**: Limits challenges per client IP per time window
+- **Per IP Address**: Limits challenges per caller address per time window
+
+The per-IP limit is keyed on the address Herald sees for the caller, not on the
+`client_ip` field in the request body, which is recorded for audit only. When a
+gateway such as Stargate calls Herald directly, every end user arrives from the
+gateway's address and shares one `RATE_LIMIT_PER_IP` quota. To limit per end
+user:
+
+1. Set `HERALD_TRUSTED_PROXY_HEADER` (for example `X-Forwarded-For`) and list
+   the gateway's address or CIDR in `HERALD_TRUSTED_PROXIES`.
+2. Have the gateway send the end-user address in that header. The Go SDK does
+   this when the client is built with `WithClientIPHeader`.
+
+Herald reads the header only from peers in `HERALD_TRUSTED_PROXIES`. Without
+this configuration, size `RATE_LIMIT_PER_IP` for the gateway's total request
+rate.
 
 **Configuration Example**:
 ```bash
