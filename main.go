@@ -166,6 +166,22 @@ func run() error {
 
 // runWithContext permits an embedding caller or test to request shutdown while
 // retaining the process signal handling used by the executable.
+// redisClientConfig builds the Redis client configuration from the
+// environment. The ACL username and TLS are optional and off by default.
+func redisClientConfig() (rediskit.Config, error) {
+	cfg := rediskit.DefaultConfig().
+		WithAddr(config.RedisAddr).
+		WithUsername(config.RedisUsername).
+		WithPassword(config.RedisPassword).
+		WithDB(config.RedisDB)
+
+	tlsConfig, err := config.RedisTLSConfig()
+	if err != nil {
+		return cfg, fmt.Errorf("configure Redis TLS: %w", err)
+	}
+	return cfg.WithTLSConfig(tlsConfig), nil
+}
+
 func runWithContext(parent context.Context) error {
 	// Display startup banner
 	showBanner()
@@ -193,10 +209,10 @@ func runWithContext(parent context.Context) error {
 	}
 
 	// Initialize Redis client for router
-	cfg := rediskit.DefaultConfig().
-		WithAddr(config.RedisAddr).
-		WithPassword(config.RedisPassword).
-		WithDB(config.RedisDB)
+	cfg, err := redisClientConfig()
+	if err != nil {
+		return err
+	}
 
 	redisClient, err := rediskit.NewClient(cfg)
 	if err != nil {

@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `REDIS_USERNAME` (Redis ACL user) and `REDIS_TLS_ENABLED`, with optional
+  `REDIS_TLS_CA_FILE` and `REDIS_TLS_SERVER_NAME`, for the Redis connection.
+  All default to off or empty, so existing deployments connect as before. The
+  server certificate is always verified when TLS is enabled.
 - Add the SDK option `ClientIPHeader` (`WithClientIPHeader`). When set, challenge
   and verification requests carry their `ClientIP` in that header, so a gateway
   listed in `HERALD_TRUSTED_PROXIES` can have `RATE_LIMIT_PER_IP` applied per end

@@ -105,6 +105,14 @@ var (
 	RedisAddr     = env.Get("REDIS_ADDR", "localhost:6379")
 	RedisPassword = env.Get("REDIS_PASSWORD", "")
 	RedisDB       = env.GetInt("REDIS_DB", 0)
+	// RedisUsername selects a Redis ACL user; empty uses the default user.
+	RedisUsername = env.Get("REDIS_USERNAME", "")
+	// Redis TLS is off by default. When enabled the server certificate is
+	// verified against REDIS_TLS_CA_FILE (or the system roots when empty) and
+	// REDIS_TLS_SERVER_NAME (or the REDIS_ADDR host when empty).
+	RedisTLSEnabled    = env.GetBool("REDIS_TLS_ENABLED", false)
+	RedisTLSCAFile     = env.Get("REDIS_TLS_CA_FILE", "")
+	RedisTLSServerName = env.Get("REDIS_TLS_SERVER_NAME", "")
 
 	// Logging
 	LogLevel = env.Get("LOG_LEVEL", "info")
@@ -298,6 +306,7 @@ func Initialize(l *logger.Logger) error {
 		Str("port", Port).
 		Str("redis", maskSensitive(RedisAddr)).
 		Int("redis_db", RedisDB).
+		Bool("redis_tls", RedisTLSEnabled).
 		Str("log_level", LogLevel).
 		Dur("challenge_expiry", ChallengeExpiry).
 		Int("max_attempts", MaxAttempts).
@@ -351,6 +360,7 @@ func Validate() error {
 
 	problems = append(problems, listenerAndProviderProblems()...)
 	problems = append(problems, explicitValueProblems()...)
+	problems = append(problems, redisTransportProblems()...)
 
 	if Env != EnvProduction {
 		// Non-production: surface issues as warnings and continue, but never

@@ -216,8 +216,17 @@ export CLIENT_CERT_MODE=require
 - Restrict Redis network access (only allow Herald service access)
 - Use Redis AUTH for authentication
 - Regularly update Redis to fix known vulnerabilities
-- Herald has no native Redis TLS configuration. Use a protected private network
-  or an authenticated encryption tunnel when Redis transport encryption is required
+- Set `REDIS_TLS_ENABLED=true` to encrypt the Redis connection. The server
+  certificate is always verified, against `REDIS_TLS_CA_FILE` when set and the
+  system roots otherwise; there is no option to skip verification. Client
+  certificates for Redis are not supported. TLS is off by default, so without it
+  use a protected private network
+- Set `REDIS_USERNAME` to authenticate as a Redis ACL user with only the
+  permissions Herald needs, instead of the default user
+- Production refuses to start when `REDIS_TLS_CA_FILE` or
+  `REDIS_TLS_SERVER_NAME` is set without `REDIS_TLS_ENABLED=true`, or
+  `REDIS_USERNAME` is set without `REDIS_PASSWORD`, because those settings
+  would otherwise be ignored
 
 ### Audit Logging
 

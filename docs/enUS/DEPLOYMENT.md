@@ -54,6 +54,10 @@ The following match the implementation in `internal/config/config.go`.
 | `REDIS_ADDR` | Redis address (`host:port`); an invalid value fails startup in production and falls back to the default with a warning elsewhere | `localhost:6379` | No |
 | `REDIS_PASSWORD` | Redis password | (empty) | Production, unless explicitly risk-acknowledged |
 | `REDIS_DB` | Redis database index | `0` | No |
+| `REDIS_USERNAME` | Redis ACL username; empty uses the default user. Requires `REDIS_PASSWORD` | (empty) | No |
+| `REDIS_TLS_ENABLED` | Connect to Redis over TLS (1.2 or later); the server certificate is always verified | `false` | No |
+| `REDIS_TLS_CA_FILE` | PEM CA bundle used to verify the Redis certificate; empty uses the system roots. Needs `REDIS_TLS_ENABLED=true` | (empty) | No |
+| `REDIS_TLS_SERVER_NAME` | Name expected in the Redis certificate; empty uses the `REDIS_ADDR` host. Needs `REDIS_TLS_ENABLED=true` | (empty) | No |
 | `LOG_LEVEL` | Log level | `info` | No |
 | `SERVICE_NAME` | Service identifier (HMAC, logging, health) | `herald` | No |
 | `HERALD_READ_TIMEOUT` | Request read timeout | `15s` | No |
