@@ -85,7 +85,7 @@ func TestSpansCarryUserDigestNotRawUserID(t *testing.T) {
 	for _, span := range recorder.Ended() {
 		for _, attr := range span.Attributes() {
 			require.NotEqual(t, "user_id", string(attr.Key), "span %s exports a raw user_id attribute", span.Name())
-			require.NotContains(t, attr.Value.Emit(), userID, "span %s attribute %s leaks the user id", span.Name(), attr.Key)
+			require.NotContains(t, attr.Value.String(), userID, "span %s attribute %s leaks the user id", span.Name(), attr.Key)
 			if attr.Key == "user_id_digest" {
 				require.Equal(t, wantDigest, attr.Value.AsString(), "span %s", span.Name())
 				digests[span.Name()]++
