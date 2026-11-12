@@ -258,8 +258,8 @@ document its configuration. Herald no longer has an `internal/provider` package.
 ### Example Provider
 
 See the maintained implementations in provider-kit:
-- [SMTP](https://github.com/soulteary/provider-kit/blob/v1.7.4/smtp.go)
-- [HTTP adapter](https://github.com/soulteary/provider-kit/blob/v1.7.4/http.go)
+- [SMTP](https://github.com/soulteary/provider-kit/blob/v1.7.5/smtp.go)
+- [HTTP adapter](https://github.com/soulteary/provider-kit/blob/v1.7.5/http.go)
 
 ## Getting Started
 

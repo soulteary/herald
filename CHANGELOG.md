@@ -54,6 +54,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   accept (for example `AUDIT_MASK_DESTINATION=yes`). They previously fell back to
   the default without notice. This is fatal in production and a warning elsewhere.
 
+### Changed
+
+- Update Fiber to v3.7.0, `middleware-kit/v3` to v3.0.5, `audit-kit/v2` to v2.1.5
+  (audit log files are created with mode 0600) and `provider-kit` to v1.7.5 (an
+  SMTP QUIT failure after the message was accepted is no longer a failed send),
+  and refresh indirect dependencies.
+
 ## [1.5.0] - 2026-11-08
 
 ### Added
