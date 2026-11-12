@@ -256,8 +256,8 @@ Herald 已没有 `internal/provider` 包。
 ### Provider 示例
 
 参考 provider-kit 的现行实现：
-- [SMTP](https://github.com/soulteary/provider-kit/blob/v1.7.4/smtp.go)
-- [HTTP 适配器](https://github.com/soulteary/provider-kit/blob/v1.7.4/http.go)
+- [SMTP](https://github.com/soulteary/provider-kit/blob/v1.7.5/smtp.go)
+- [HTTP 适配器](https://github.com/soulteary/provider-kit/blob/v1.7.5/http.go)
 
 ## 开始贡献
 
