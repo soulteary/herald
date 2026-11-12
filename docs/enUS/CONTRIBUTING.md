@@ -31,7 +31,7 @@ When participating in this project, please respect all contributors, accept cons
 
 ### Prerequisites
 
-- Go 1.27.3 or higher
+- Go 1.27.4 or higher
 - Linux for builds and validation; use Linux containers on other hosts
 - Redis for running the service (unit tests normally use an in-process test server)
 - Git
@@ -200,7 +200,7 @@ Clearly and concisely describe what actually happened.
 
 **Environment Information**
 - OS: [e.g. Linux container on macOS]
-- Go Version: [e.g. 1.27.3]
+- Go Version: [e.g. 1.27.4]
 - Redis Version: [e.g. 7.0]
 - Herald Version: [e.g. v1.0.0]
 ```

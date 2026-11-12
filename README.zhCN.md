@@ -1,6 +1,6 @@
 # Herald - OTP 和验证码服务
 
-[![Go Test Coverage](./.github/coverage.svg)](./.github/go-test-report.md) [![Go Report Card](./.github/goreportcard.svg)](./.github/goreportcard-report.md) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go Version](https://img.shields.io/badge/go-1.27.3+-blue.svg)](https://golang.org)
+[![Go Test Coverage](./.github/coverage.svg)](./.github/go-test-report.md) [![Go Report Card](./.github/goreportcard.svg)](./.github/goreportcard-report.md) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go Version](https://img.shields.io/badge/go-1.27.4+-blue.svg)](https://golang.org)
 
 Herald v1.5.0 新增 `CreateChallengeWithMetadata`，用于读取可选的创建验证码重试时间。既有 `CreateChallenge` 调用不变，不增加自动重试；参见[升级与回滚说明](docs/zhCN/DEPLOYMENT.md#重试时间元数据升级与回滚v150)。
 
@@ -16,7 +16,7 @@ Herald v1.5.0 新增 `CreateChallengeWithMetadata`，用于读取可选的创建
 
 Herald 是一个生产就绪的独立 OTP 和验证码服务，可通过电子邮件和 SMS 发送验证码。它具有内置的速率限制、安全控制和审计日志记录功能。Herald 设计为可独立工作，也可以根据需要与其他服务集成。
 
-HTTP 服务使用 Fiber v3；依赖及 Go 工具链以 `go.mod` 为准（Go 1.27.3 或以上）。
+HTTP 服务使用 Fiber v3；依赖及 Go 工具链以 `go.mod` 为准（Go 1.27.4 或以上）。
 构建与验证使用 Linux，macOS、Windows 等宿主环境建议运行 Linux 容器。
 
 ## 核心特性

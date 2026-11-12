@@ -3,7 +3,7 @@
 # Keep the builder aligned with the shared Stargate container baseline.
 # Compile on the build host; GOOS/GOARCH below select the target binary.
 # CGO is disabled, so the Go toolchain need not run under target emulation.
-FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine3.24 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27.4-alpine3.24 AS builder
 
 # Only the packages actually needed to build a CGO_ENABLED=0 static binary.
 # git is used by the Go toolchain for VCS stamping; ca-certificates lets module
