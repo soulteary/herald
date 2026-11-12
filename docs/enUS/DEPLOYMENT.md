@@ -51,7 +51,7 @@ The following match the implementation in `internal/config/config.go`.
 |----------|-------------|---------|----------|
 | `ENVIRONMENT` | Runtime policy: `development`/`dev`, `test`/`testing`, `production`/`prod`; unknown values fail startup | `development` | Set `production` in production |
 | `PORT` | Server listen port (with or without leading colon, e.g. `8082` or `:8082`) | `:8082` | No |
-| `REDIS_ADDR` | Redis address | `localhost:6379` | No |
+| `REDIS_ADDR` | Redis address (`host:port`); an invalid value fails startup in production and falls back to the default with a warning elsewhere | `localhost:6379` | No |
 | `REDIS_PASSWORD` | Redis password | (empty) | Production, unless explicitly risk-acknowledged |
 | `REDIS_DB` | Redis database index | `0` | No |
 | `LOG_LEVEL` | Log level | `info` | No |
@@ -78,7 +78,7 @@ Forwarded IP chains are parsed from right to left. Herald skips only explicitly 
 | `REQUEST_AUTH_MODE` | Request auth: `hmac_v2`, `api_key`, or `none` (dev only) | `hmac_v2` | Yes in production |
 | `API_KEY` | API key for `api_key` mode; at least 32 bytes in production | (empty) | API-key mode |
 | `HMAC_SECRET` | Single HMAC secret; at least 32 bytes in production | (empty) | HMAC single-key mode |
-| `HERALD_HMAC_KEYS` | HMAC key map; IDs/secrets must be non-empty and production secrets at least 32 bytes | (empty) | HMAC multi-key mode |
+| `HERALD_HMAC_KEYS` | HMAC key map; IDs/secrets must be non-empty and production secrets at least 32 bytes. A set but malformed map fails startup in production; elsewhere it is ignored with a warning and `HMAC_SECRET` is used | (empty) | HMAC multi-key mode |
 | `HERALD_HMAC_DEFAULT_KEY_ID` | Default for configuration lookups; key-map v2/v3 requests still require an explicit `X-Key-Id` | (empty) | Optional |
 | `HMAC_MAX_DRIFT` | Accepted HMAC v2/v3 timestamp drift | `60s` | No |
 | `HMAC_V1_ENABLED` | Temporarily enable legacy HMAC v1 | `false` | No |

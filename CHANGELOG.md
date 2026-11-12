@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Refuse to start in production when `REDIS_ADDR` is set to an invalid address
+  or `HERALD_HMAC_KEYS` is set but malformed. Herald previously continued with
+  `localhost:6379` or with `HMAC_SECRET` after a warning. Other environments
+  keep the fallback, and unset variables behave as before.
 - Key the per-destination rate limit and resend cooldown on a canonical SMS
   number. `+8613800138000`, `8613800138000` and `008613800138000` previously
   had separate quotas; they now share one. Delivery and stored challenges are

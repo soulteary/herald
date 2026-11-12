@@ -249,12 +249,12 @@ func Initialize(l *logger.Logger) error {
 	// Validate required configs
 	if RedisAddr == "" {
 		log.Warn().Msg("REDIS_ADDR is not set, using default: localhost:6379")
-	} else {
-		// Validate Redis address format using cli-kit validator
-		if _, _, err := validator.ValidateHostPort(RedisAddr); err != nil {
-			log.Warn().Str("addr", RedisAddr).Err(err).Msg("Invalid REDIS_ADDR format, using default: localhost:6379")
-			RedisAddr = "localhost:6379"
-		}
+	} else if _, _, err := validator.ValidateHostPort(RedisAddr); err != nil && Env != EnvProduction {
+		// Outside production an invalid address falls back to the local
+		// default. Production keeps the configured value so Validate() rejects
+		// it instead of connecting to an unintended Redis.
+		log.Warn().Str("addr", RedisAddr).Err(err).Msg("Invalid REDIS_ADDR format, using default: localhost:6379")
+		RedisAddr = "localhost:6379"
 	}
 
 	// Parse HMAC keys if provided
@@ -263,7 +263,11 @@ func Initialize(l *logger.Logger) error {
 			if strings.TrimSpace(ServicePoliciesJSON) != "" {
 				return err
 			}
-			log.Warn().Err(err).Msg("Failed to parse HERALD_HMAC_KEYS, falling back to HMAC_SECRET")
+			// Outside production a malformed key map falls back to
+			// HMAC_SECRET. Production is rejected by Validate().
+			if Env != EnvProduction {
+				log.Warn().Err(err).Msg("Failed to parse HERALD_HMAC_KEYS, falling back to HMAC_SECRET")
+			}
 		} else {
 			log.Info().Int("count", len(hmacKeysMap)).Msg("HMAC keys loaded")
 		}
@@ -325,6 +329,7 @@ func Validate() error {
 	var problems []string
 
 	problems = append(problems, listenerAndProviderProblems()...)
+	problems = append(problems, explicitValueProblems()...)
 
 	if Env != EnvProduction {
 		// Non-production: surface issues as warnings and continue, but never
@@ -540,6 +545,24 @@ func listenerAndProviderProblems() []string {
 	problems = append(problems, providerTransportProblems()...)
 	problems = append(problems, totpSigningIdentityProblems()...)
 
+	return problems
+}
+
+// explicitValueProblems reports values that were set explicitly but cannot be
+// used. Initialize() substitutes a fallback for them outside production; in
+// production a substitute would hide the mistake (a different Redis, or a
+// single shared secret instead of the intended key map), so startup fails.
+// Unset variables are not reported here.
+func explicitValueProblems() []string {
+	var problems []string
+	if RedisAddr != "" {
+		if _, _, err := validator.ValidateHostPort(RedisAddr); err != nil {
+			problems = append(problems, "REDIS_ADDR is not a valid host:port address")
+		}
+	}
+	if HMACKeysJSON != "" && len(hmacKeysMap) == 0 {
+		problems = append(problems, "HERALD_HMAC_KEYS is set but is not a usable key map (expected a JSON object of non-empty key IDs and secrets, containing HERALD_HMAC_DEFAULT_KEY_ID when that is set)")
+	}
 	return problems
 }
 

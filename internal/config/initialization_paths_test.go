@@ -60,6 +60,7 @@ func TestInitializeInvalidKeyMapUsesConfiguredSingleSecret(t *testing.T) {
 		HMACKeysJSON, hmacKeysMap, hmacDefaultKeyID = oldJSON, oldMap, oldDefault
 		hmacKeysMapOnce = sync.Once{}
 	}()
+	Env = EnvDevelopment
 	HMACKeysJSON = "broken"
 	hmacKeysMap = nil
 	hmacKeysMapOnce = sync.Once{}
@@ -73,6 +74,46 @@ func TestInitializeInvalidKeyMapUsesConfiguredSingleSecret(t *testing.T) {
 	if GetHMACSecret("unknown") != "" {
 		t.Fatal("invalid key map must not allow arbitrary single-secret aliases")
 	}
+}
+
+// TestInitializeProductionRejectsMalformedKeyMap proves production does not
+// fall back to HMAC_SECRET when HERALD_HMAC_KEYS is set but unusable, while an
+// unset key map stays valid.
+func TestInitializeProductionRejectsMalformedKeyMap(t *testing.T) {
+	const validKey = "01234567890123456789012345678901"
+	for name, test := range map[string]struct{ keys, defaultID string }{
+		"invalid JSON":       {keys: "broken"},
+		"empty object":       {keys: "{}"},
+		"empty secret":       {keys: `{"key":""}`},
+		"unknown default ID": {keys: `{"key":"` + validKey + `"}`, defaultID: "missing"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			defer withProdEnv(t)()
+			oldJSON, oldMap, oldDefault, oldDefaultID := HMACKeysJSON, hmacKeysMap, hmacDefaultKeyID, HMACDefaultKeyID
+			defer func() {
+				HMACKeysJSON, hmacKeysMap, hmacDefaultKeyID, HMACDefaultKeyID = oldJSON, oldMap, oldDefault, oldDefaultID
+				hmacKeysMapOnce = sync.Once{}
+			}()
+			HMACKeysJSON, HMACDefaultKeyID = test.keys, test.defaultID
+			hmacKeysMap = nil
+			hmacKeysMapOnce = sync.Once{}
+			HMACSecret = strings.Repeat("h", 32)
+			err := Initialize(logger.New(logger.Config{Level: logger.ErrorLevel}))
+			if err == nil || !strings.Contains(err.Error(), "HERALD_HMAC_KEYS") {
+				t.Fatalf("production accepted a malformed key map: %v", err)
+			}
+		})
+	}
+
+	t.Run("unset", func(t *testing.T) {
+		defer withProdEnv(t)()
+		oldMap := hmacKeysMap
+		defer func() { hmacKeysMap = oldMap; hmacKeysMapOnce = sync.Once{} }()
+		hmacKeysMapOnce = sync.Once{}
+		if err := Initialize(logger.New(logger.Config{Level: logger.ErrorLevel})); err != nil {
+			t.Fatalf("production without HERALD_HMAC_KEYS rejected: %v", err)
+		}
+	})
 }
 
 func TestValidateClientCertificateModes(t *testing.T) {

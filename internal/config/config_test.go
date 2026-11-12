@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -263,6 +264,29 @@ func TestInitialize_InvalidRedisAddr(t *testing.T) {
 	}
 	if RedisAddr != "localhost:6379" {
 		t.Errorf("Initialize() with invalid REDIS_ADDR should reset to localhost:6379, got %q", RedisAddr)
+	}
+}
+
+// TestInitialize_ProductionRejectsInvalidRedisAddr proves production keeps the
+// configured address and refuses to start instead of using localhost.
+func TestInitialize_ProductionRejectsInvalidRedisAddr(t *testing.T) {
+	defer withProdEnv(t)()
+	origAddr := RedisAddr
+	defer func() { RedisAddr = origAddr }()
+
+	RedisAddr = "not-valid-host-port"
+	err := Initialize(logger.New(logger.Config{Level: logger.ErrorLevel, Format: logger.FormatJSON}))
+	if err == nil || !strings.Contains(err.Error(), "REDIS_ADDR") {
+		t.Fatalf("production accepted an invalid REDIS_ADDR: %v", err)
+	}
+	if RedisAddr != "not-valid-host-port" {
+		t.Errorf("production replaced the invalid REDIS_ADDR with %q", RedisAddr)
+	}
+
+	// An unset address still uses the client default and is not an error.
+	RedisAddr = ""
+	if err := Initialize(logger.New(logger.Config{Level: logger.ErrorLevel, Format: logger.FormatJSON})); err != nil {
+		t.Fatalf("production with unset REDIS_ADDR rejected: %v", err)
 	}
 }
 
