@@ -599,6 +599,7 @@ func explicitValueProblems() []string {
 		}
 	}
 	problems = append(problems, booleanValueProblems(os.Getenv)...)
+	problems = append(problems, numericValueProblems(os.Getenv)...)
 	if HMACKeysJSON != "" && len(hmacKeysMap) == 0 {
 		problems = append(problems, "HERALD_HMAC_KEYS is set but is not a usable key map (expected a JSON object of non-empty key IDs and secrets, containing HERALD_HMAC_DEFAULT_KEY_ID when that is set)")
 	}
@@ -695,6 +696,64 @@ var booleanEnvNames = []string{
 	"HMAC_V1_ENABLED",
 	"OTLP_ENABLED",
 	"REDIS_TLS_ENABLED",
+}
+
+// integerEnvNames and durationEnvNames list every variable read with
+// env.GetInt and env.GetDuration. Those helpers also return the default for a
+// value they cannot parse, so HMAC_MAX_DRIFT=60 (no unit) or
+// RATE_LIMIT_PER_IP=5/m would silently select the default.
+var integerEnvNames = []string{
+	"AUDIT_SPOOL_MAX_BYTES",
+	"AUDIT_WRITER_QUEUE_SIZE",
+	"AUDIT_WRITER_WORKERS",
+	"CODE_LENGTH",
+	"HERALD_MAX_BODY_BYTES",
+	"HERALD_MAX_CONCURRENT_HASH_OPERATIONS",
+	"MAX_ATTEMPTS",
+	"PROVIDER_MAX_RESPONSE_BYTES",
+	"RATE_LIMIT_PER_DESTINATION",
+	"RATE_LIMIT_PER_IP",
+	"RATE_LIMIT_PER_USER",
+	"REDIS_DB",
+	"SMTP_PORT",
+}
+
+var durationEnvNames = []string{
+	"AUDIT_TTL",
+	"CHALLENGE_EXPIRY",
+	"HERALD_IDLE_TIMEOUT",
+	"HERALD_READ_TIMEOUT",
+	"HERALD_WRITE_TIMEOUT",
+	"HMAC_MAX_DRIFT",
+	"IDEMPOTENCY_KEY_TTL",
+	"LOCKOUT_DURATION",
+	"PROVIDER_TIMEOUT",
+	"RESEND_COOLDOWN",
+}
+
+// numericValueProblems reports integer and duration variables whose value
+// would be ignored.
+func numericValueProblems(getenv func(string) string) []string {
+	var problems []string
+	for _, name := range integerEnvNames {
+		raw := getenv(name)
+		if raw == "" {
+			continue
+		}
+		if _, err := strconv.Atoi(raw); err != nil {
+			problems = append(problems, name+" is not a valid integer; the default would be used instead")
+		}
+	}
+	for _, name := range durationEnvNames {
+		raw := getenv(name)
+		if raw == "" {
+			continue
+		}
+		if _, err := time.ParseDuration(raw); err != nil {
+			problems = append(problems, name+" is not a valid duration (use a unit, for example 60s or 5m); the default would be used instead")
+		}
+	}
+	return problems
 }
 
 // booleanValueProblems reports boolean variables whose value would be ignored.

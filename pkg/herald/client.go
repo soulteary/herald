@@ -496,7 +496,9 @@ func (c *Client) CreateChallengeWithMetadata(ctx context.Context, req *CreateCha
 	return &challengeResp, metadata, nil
 }
 
-// VerifyChallenge verifies a challenge code
+// VerifyChallenge verifies a challenge code through the v1 route, which does
+// not bind the expected user, purpose or channel. A server started with
+// HERALD_VERIFY_V1_ENABLED=false answers 404; use VerifyChallengeV2.
 func (c *Client) VerifyChallenge(ctx context.Context, req *VerifyChallengeRequest) (*VerifyChallengeResponse, error) {
 	url := fmt.Sprintf("%s/v1/otp/verifications", c.baseURL)
 
