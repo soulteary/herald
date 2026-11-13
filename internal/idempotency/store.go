@@ -19,10 +19,13 @@ type State string
 
 const (
 	// StatePending is an expiring pre-send claim; a concurrent duplicate must
-	// not proceed. MarkSending makes the claim non-expiring before delivery.
+	// not proceed. MarkSending replaces its short TTL with the unresolved TTL
+	// before delivery.
 	StatePending State = "pending"
-	// StateSending is persisted before delivery without a TTL. A crash or an
-	// uncertain provider result must never turn this key into a fresh send.
+	// StateSending is persisted before delivery. A crash or an uncertain
+	// provider result must never turn this key into a fresh send while the
+	// record exists. It expires after the unresolved TTL so an interrupted
+	// request does not leave a permanent key.
 	StateSending State = "sending"
 	// StateSucceeded means the original request completed and the stored
 	// response should be replayed.
@@ -72,7 +75,13 @@ type Store struct {
 	prefix string
 	secret []byte
 	ttl    time.Duration
+	// unresolvedTTL bounds records left in StateSending.
+	unresolvedTTL time.Duration
 }
+
+// DefaultUnresolvedTTL is how long a record stays in StateSending when no
+// other value is configured.
+const DefaultUnresolvedTTL = 24 * time.Hour
 
 // NewStore creates a Store. secret must be non-empty (used to derive keys and
 // prevent cross-principal collisions / key guessing).
@@ -83,7 +92,16 @@ func NewStore(client *redis.Client, prefix string, secret []byte, ttl time.Durat
 	if ttl <= 0 {
 		ttl = 5 * time.Minute
 	}
-	return &Store{client: client, prefix: prefix, secret: secret, ttl: ttl}
+	return &Store{client: client, prefix: prefix, secret: secret, ttl: ttl, unresolvedTTL: DefaultUnresolvedTTL}
+}
+
+// WithUnresolvedTTL sets how long a record may stay in StateSending. It must
+// exceed the pending TTL; non-positive values keep the current setting.
+func (s *Store) WithUnresolvedTTL(ttl time.Duration) *Store {
+	if ttl > 0 {
+		s.unresolvedTTL = ttl
+	}
+	return s
 }
 
 // redisKey derives the opaque Redis key from principal + client key. Even if
@@ -185,8 +203,9 @@ func classifyExistingRecord(raw []byte, fingerprint string) (json.RawMessage, st
 	}
 }
 
-// MarkSending atomically removes the pending lease before the external side
-// effect. Only its owner can complete it; Fail and TTL expiry cannot reopen it.
+// MarkSending atomically replaces the pending lease before the external side
+// effect. Only its owner can complete it; Fail cannot reopen it, and the key
+// stays claimed until the unresolved TTL elapses.
 // ChallengeID lets operators reconcile an interrupted send without storing codes.
 func (s *Store) MarkSending(ctx context.Context, principal, clientKey, fingerprint, owner, challengeID string) error {
 	key := s.redisKey(principal, clientKey)
@@ -201,7 +220,7 @@ func (s *Store) MarkSending(ctx context.Context, principal, clientKey, fingerpri
 			return err
 		}
 		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
-			pipe.Set(ctx, key, payload, 0)
+			pipe.Set(ctx, key, payload, s.unresolvedTTL)
 			return nil
 		})
 		return err
@@ -239,7 +258,7 @@ func (s *Store) Fail(ctx context.Context, principal, clientKey, fingerprint, own
 }
 
 // Refresh verifies that the caller still owns a pending record and renews its
-// TTL before sending, or preserves an unexpired sending record. Handlers call
+// TTL before sending, or renews the unresolved TTL of a sending record. Handlers call
 // this immediately before activation so an expired, stale
 // request cannot mutate challenge state owned by a replacement request.
 func (s *Store) Refresh(ctx context.Context, principal, clientKey, fingerprint, owner string) error {
@@ -247,7 +266,7 @@ func (s *Store) Refresh(ctx context.Context, principal, clientKey, fingerprint, 
 	return s.mutateOwned(ctx, key, fingerprint, owner, func(tx *redis.Tx, current Record) error {
 		_, err := tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
 			if current.State == StateSending {
-				pipe.Persist(ctx, key)
+				pipe.Expire(ctx, key, s.unresolvedTTL)
 			} else {
 				pipe.Expire(ctx, key, s.ttl)
 			}

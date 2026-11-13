@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -135,5 +136,43 @@ func TestValidateStrictSettingsRequiresLeaseBeyondProviderTimeout(t *testing.T) 
 	IdempotencyKeyTTL = 11 * time.Second
 	if err := validateStrictSettings(); err != nil {
 		t.Fatalf("lease longer than provider timeout should pass: %v", err)
+	}
+}
+
+func TestIdempotencyUnresolvedTTLBounds(t *testing.T) {
+	origUnresolved, origKeyTTL, origExpiry, origTimeout := IdempotencyUnresolvedTTL, IdempotencyKeyTTL, ChallengeExpiry, ProviderTimeout
+	t.Cleanup(func() {
+		IdempotencyUnresolvedTTL, IdempotencyKeyTTL, ChallengeExpiry, ProviderTimeout = origUnresolved, origKeyTTL, origExpiry, origTimeout
+	})
+	ProviderTimeout = 10 * time.Second
+	ChallengeExpiry = 5 * time.Minute
+
+	for _, tc := range []struct {
+		name               string
+		unresolved, keyTTL time.Duration
+		want               string
+	}{
+		{"zero", 0, time.Minute, "IDEMPOTENCY_UNRESOLVED_TTL must be positive"},
+		{"negative", -time.Hour, time.Minute, "IDEMPOTENCY_UNRESOLVED_TTL must be positive"},
+		{"equal to key TTL", time.Minute, time.Minute, "IDEMPOTENCY_UNRESOLVED_TTL must be greater than"},
+		{"below key TTL", 30 * time.Second, time.Minute, "IDEMPOTENCY_UNRESOLVED_TTL must be greater than"},
+		{"equal to challenge expiry when key TTL is 0", 5 * time.Minute, 0, "IDEMPOTENCY_UNRESOLVED_TTL must be greater than"},
+		{"above key TTL", time.Minute + time.Second, time.Minute, ""},
+		{"above challenge expiry when key TTL is 0", 6 * time.Minute, 0, ""},
+		{"default", 24 * time.Hour, 0, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			IdempotencyUnresolvedTTL, IdempotencyKeyTTL = tc.unresolved, tc.keyTTL
+			problems := strings.Join(strictDeliveryProblems(), "; ")
+			if tc.want == "" {
+				if strings.Contains(problems, "IDEMPOTENCY_UNRESOLVED_TTL") {
+					t.Fatalf("unexpected problem: %s", problems)
+				}
+				return
+			}
+			if !strings.Contains(problems, tc.want) {
+				t.Fatalf("problems=%q, want %q", problems, tc.want)
+			}
+		})
 	}
 }

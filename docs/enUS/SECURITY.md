@@ -8,12 +8,12 @@ This document explains Herald's security features, security configuration, and b
 
 1. **Challenge-Based Verification**: Uses challenge-verify model to prevent replay attacks and ensure one-time use of verification codes
 2. **Secure Code Storage**: Verification codes are stored as Argon2 hashes, never in plaintext
-3. **Multi-Dimensional Rate Limiting**: Rate limiting by user_id, destination (email/phone), and IP address to prevent abuse
+3. **Multi-Dimensional Rate Limiting**: Rate limiting by user_id, destination (email/phone), and IP address to prevent abuse. The limits are consumed together or not at all, so a request that is rejected (by a limit, a cooldown or a user lock) does not use up another user's or destination's quota
 4. **Service Authentication**: Uses HMAC or API-key request authentication, with optional mTLS as an additional transport policy
 5. **Idempotency Protection**: Prevents duplicate challenge creation and code sending using idempotency keys
 6. **Challenge Expiration**: Automatic expiration of challenges with configurable TTL
 7. **Attempt Limiting**: Maximum attempt limits per challenge to prevent brute force attacks
-8. **Resend Cooldown**: Prevents rapid resend of verification codes
+8. **Resend Cooldown**: Prevents rapid resend of verification codes, per user and destination and per destination alone, so changing `user_id` does not bypass it
 9. **Audit Logging**: Complete audit trail for all operations including sends, verifications, and failures
 10. **Provider Security**: Secure communication with email and SMS providers
 

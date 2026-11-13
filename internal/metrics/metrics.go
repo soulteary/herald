@@ -30,6 +30,7 @@ var (
 	challengeStateTotal    *prometheus.CounterVec // label: state
 	auditDroppedTotal      prometheus.Counter
 	auditWriteFailureTotal prometheus.Counter
+	auditPostActionFailure *prometheus.CounterVec // label: operation
 )
 
 func init() {
@@ -58,6 +59,8 @@ func Init() {
 	auditDroppedTotal = Registry.Counter("audit_dropped_total").
 		Help("Audit records rejected before durable acceptance").Build()
 	auditWriteFailureTotal = Registry.Counter("audit_write_failure_total").Help("Audit delivery or cleanup failures; undelivered records retained for retry").Build()
+	auditPostActionFailure = Registry.Counter("audit_post_action_failure_total").
+		Help("Audit records lost after the action had completed; the request still succeeded").Labels("operation").BuildVec()
 }
 
 // RecordIdempotency records an idempotency outcome. result is one of:
@@ -109,6 +112,15 @@ func RecordAuditDropped() {
 func RecordAuditWriteFailure() {
 	if auditWriteFailureTotal != nil {
 		auditWriteFailureTotal.Inc()
+	}
+}
+
+// RecordAuditPostActionFailure records an audit record that could not be
+// accepted after its action had already completed, so the request was
+// answered normally without it (operation: create|verify|revoke).
+func RecordAuditPostActionFailure(operation string) {
+	if auditPostActionFailure != nil {
+		auditPostActionFailure.WithLabelValues(operation).Inc()
 	}
 }
 

@@ -109,8 +109,8 @@ the Herald process exited between those steps. A missing replacement challenge
 fails activation without discarding the current one.
 
 An activation error still fails the creation request. If an idempotency key was
-used, the sending record remains non-expiring: retrying the same key returns
-`delivery_unknown`, rather than sending another code. A lost activation reply
+used, the sending record remains until `IDEMPOTENCY_UNRESOLVED_TTL` elapses:
+retrying the same key returns `delivery_unknown`, rather than sending another code. A lost activation reply
 can mean the replacement is already active and the previous code was invalidated;
 reconcile delivery before retrying with another key.
 
@@ -123,25 +123,29 @@ volume requirements during upgrades.
 
 
 **Headers:**
-- `Idempotency-Key` (optional): Reuse this key with the same request when retrying. Completed requests replay their response within `IDEMPOTENCY_KEY_TTL`; pre-send concurrent requests return `409/idempotency_in_flight`. Once sending starts, an incomplete request returns `409/delivery_unknown` rather than sending again, even after the TTL. A different request with the same key returns `409/idempotency_conflict`.
+- `Idempotency-Key` (optional): Reuse this key with the same request when retrying. Completed requests replay their response within `IDEMPOTENCY_KEY_TTL`; pre-send concurrent requests return `409/idempotency_in_flight`. Once sending starts, an incomplete request returns `409/delivery_unknown` rather than sending again, for `IDEMPOTENCY_UNRESOLVED_TTL` (default `24h`); after that the record expires and the key can start a new request. A different request with the same key returns `409/idempotency_conflict`.
 
 Fingerprints preserve field boundaries even when JSON strings contain embedded
 NUL characters (`\u0000`). Ordinary request fingerprints and Redis key names
 remain compatible with earlier versions. Requests containing NUL characters
 use a versioned, length-framed fingerprint. If their key already has a legacy
 record, retries return `409/idempotency_conflict` without changing or deleting
-that record. Normal retention still applies to expiring records; non-expiring
-sending records require delivery reconciliation. Do not clear them or switch
+that record. Normal retention still applies to completed records; unresolved
+sending records require delivery reconciliation while they exist. Do not clear them or switch
 keys to retry an uncertain send without checking the provider outcome.
 
-Before calling the provider, Herald persists a non-expiring send record. If the
+Before calling the provider, Herald persists a send record that expires after
+`IDEMPOTENCY_UNRESOLVED_TTL` (default `24h`). If the
 process exits, the provider reports an uncertain result, or a later Redis write
 fails, that record prevents retries from sending another code. A failed final
 success write returns `503/backend_unavailable`. Retry with the same key: a
 committed result replays, while an unresolved send returns `delivery_unknown`.
 Do not automatically switch to a new key on that response; reconcile delivery
 with the provider first. A crash immediately before the provider call may also
-leave an unresolved record even though nothing was sent.
+leave an unresolved record even though nothing was sent. Once the unresolved
+TTL has elapsed the record is gone, and a request with the same key is treated
+as new and can send a code. Records written without a TTL by versions before
+this setting existed are not modified and do not expire.
 
 This protection requires an `Idempotency-Key` and retention of the Redis record.
 It does not make the provider and Redis a distributed transaction. A completed
@@ -188,8 +192,8 @@ All error responses follow this format:
 For challenge-creation `429` responses, a known blocking-window deadline is
 reported as optional `next_resend_in` integer seconds and a matching `Retry-After`
 header. Missing or expired timing is omitted. This is a retry hint for the gate
-that rejected the request; other limits can still reject a later request. Quota
-counters, windows and cooldowns are unchanged. Do not retry automatically.
+that rejected the request; other limits can still reject a later request. A
+rejected request consumes no quota and starts no cooldown. Do not retry automatically.
 
 The Go SDK's `CreateChallengeWithMetadata` method returns the existing response,
 a `CreateChallengeMetadata` value and the existing error. Its optional
@@ -453,7 +457,17 @@ Herald implements multi-dimensional rate limiting:
 - **Per User**: 10 requests per hour (configurable)
 - **Per IP**: 5 requests per minute (configurable)
 - **Per Destination**: 10 requests per hour (configurable)
-- **Resend Cooldown**: 60 seconds between resends
+- **Resend Cooldown**: 60 seconds between resends, applied both to the same
+  user and destination and to the destination alone, so a different `user_id`
+  cannot shorten the wait for one destination
+
+Order of checks for challenge creation: the user lock is checked first and does
+not change any counter. The three limits and both cooldowns are then applied as
+one atomic step. If any of them rejects the request, none of the counters is
+incremented and no cooldown starts; the response reports the gate that rejected
+it (`rate_limit_exceeded` for a limit, `resend_cooldown` for a cooldown; user,
+IP and destination limits take precedence in that order). A request that passes
+this step keeps its quota spent even if the provider then fails.
 
 ## Error Codes
 
@@ -523,9 +537,27 @@ buffer. A full or unwritable buffer returns `503` with
 `{"ok":false,"reason":"audit_unavailable"}`. Backend delivery outages alone do
 not reject requests while buffer capacity remains. Verification and revoke
 attempts are recorded before the operation; result events follow it. These are
-not a distributed transaction: an error recording the result can follow a
-completed side effect. A 503 therefore does not imply the code is still usable
-or the message was not sent. Follow the idempotency retry rules above.
+not a distributed transaction.
+
+A record that must be accepted before the action (challenge created,
+verification attempt, revoke requested) still refuses the request with
+`audit_unavailable` when it cannot be stored, and the action does not happen.
+A result record written after the action can no longer be undone does not
+change the response: when the provider has accepted the message, a
+verification has consumed the code, or a revoke has completed, the request
+returns its normal success response and the idempotency record is completed
+even if that record cannot be stored. In soft provider-failure mode the same
+applies to the `delivery_status=failed` response. The lost record is counted in
+`herald_audit_post_action_failure_total{operation}` and logged once at error
+level with its event type, challenge ID, result and reason, and the user only
+as a digest.
+
+Two result records keep the earlier behaviour: a failed verification, and a
+provider failure under the strict policy. Both already return an error; if
+their audit record cannot be stored the reason is `audit_unavailable` instead.
+The verification attempt has still been counted and the provider has still
+been called, so such a 503 does not imply that nothing happened. Follow the
+idempotency retry rules above.
 
 ### Activation index upgrade
 
