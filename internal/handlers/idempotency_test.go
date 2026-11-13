@@ -53,6 +53,20 @@ func newIdemHandlers(t *testing.T, rc *redis.Client) *Handlers {
 	return h
 }
 
+// registerEmailTestProvider gives the handlers an email provider. Creation
+// under the strict provider policy refuses a channel without one before any
+// other step, so tests of those later steps need a provider in place even
+// when they never reach delivery.
+func registerEmailTestProvider(t *testing.T, h *Handlers) *countingProvider {
+	t.Helper()
+	p := &countingProvider{channel: provider.ChannelEmail}
+	h.providerRegistry = provider.NewRegistry()
+	if err := h.providerRegistry.Register(p); err != nil {
+		t.Fatalf("register email test provider: %v", err)
+	}
+	return p
+}
+
 func newIdemApp(t *testing.T) (*fiber.App, *countingProvider) {
 	t.Helper()
 	rc := testRedisClient(t)

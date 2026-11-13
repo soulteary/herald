@@ -212,6 +212,7 @@ Possible error codes:
 - `resend_cooldown`: Resend cooldown period not expired
 - `user_locked`: User is temporarily locked: `LOCKOUT_CHALLENGE_THRESHOLD` challenges were exhausted within `LOCKOUT_DURATION`. An exhausted challenge alone answers `locked`
 - `send_failed`: Failed to send verification code via provider
+- `channel_not_configured`: No provider is configured for the requested channel and `PROVIDER_FAILURE_POLICY=strict`. The request is refused before the idempotency claim, the limits and the cooldowns, so nothing is spent; retrying does not help until the operator configures a provider
 - `internal_error`: Internal server error
 
 HTTP Status Codes:
@@ -219,6 +220,7 @@ HTTP Status Codes:
 - `401 Unauthorized`: Authentication failed
 - `403 Forbidden`: User locked
 - `429 Too Many Requests`: Rate limit exceeded
+- `503 Service Unavailable`: Channel not configured (`channel_not_configured`), or a backend is unavailable
 - `500 Internal Server Error`: Internal server error
 
 ### Get Test Code (Test Mode Only)
@@ -509,6 +511,7 @@ HMAC/API-key failures use a JSON `reason` value:
 - `locked`: Challenge locked due to too many attempts
 - `verification_failed`: General verification failure
 - `send_failed`: Failed to send verification code via provider (only during challenge creation)
+- `channel_not_configured` (503): No provider is configured for the requested channel (strict provider policy, challenge creation only)
 
 ### Rate Limiting Errors
 - `rate_limit_exceeded`: Rate limit exceeded

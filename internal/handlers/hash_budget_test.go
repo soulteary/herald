@@ -43,6 +43,7 @@ func TestCreateHashWorkHasBoundedAdmission(t *testing.T) {
 	rc := testRedisClient(t)
 	t.Cleanup(func() { _ = rc.Close() })
 	h := newIdemHandlers(t, rc)
+	registerEmailTestProvider(t, h)
 	release := make(chan struct{})
 	var once sync.Once
 	defer once.Do(func() { close(release) })

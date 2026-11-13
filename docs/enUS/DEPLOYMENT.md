@@ -152,6 +152,12 @@ The implementation calls an external SMS HTTP API; Aliyun/etc. credentials are h
 | `SMS_API_BASE_URL` | SMS HTTP API base URL | (empty) | When using SMS |
 | `SMS_API_KEY` | SMS API auth key if required by gateway | (empty) | As needed |
 
+Both `SMS_PROVIDER` and `SMS_API_BASE_URL` are needed: the provider is registered only when `SMS_PROVIDER` is set, and startup fails if it is set without a usable base URL. A base URL without `SMS_PROVIDER` leaves the channel unconfigured and logs a warning.
+
+#### Channels without a provider
+
+At startup Herald logs one line listing the channels that have a provider and those that do not (`channels_with_provider`, `channels_without_provider`), and a warning when no channel has one. With `PROVIDER_FAILURE_POLICY=strict`, a create request for a channel without a provider returns `503/channel_not_configured` before any quota, cooldown or idempotency key is used. With `soft` the challenge is created and the response carries `delivery_status=failed`, as before.
+
 #### DingTalk channel (herald-dingtalk plugin)
 
 | Variable | Description | Default | Required |
