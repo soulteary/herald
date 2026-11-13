@@ -422,6 +422,12 @@ func (h *Handlers) VerifyChallenge(c fiber.Ctx) error {
 			"reason": "challenge_id_required",
 		})
 	}
+	if !validChallengeID(req.ChallengeID) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "invalid_challenge_id",
+		})
+	}
 
 	if req.Code == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -597,6 +603,12 @@ func (h *Handlers) RevokeChallenge(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "challenge_id_required",
+		})
+	}
+	if !validChallengeID(challengeID) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "invalid_challenge_id",
 		})
 	}
 
@@ -1145,6 +1157,12 @@ func validateBoundVerification(c fiber.Ctx, req VerifyChallengeV2Request) (bool,
 		return false, c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"ok":     false,
 			"reason": "challenge_id_required",
+		})
+	}
+	if !validChallengeID(req.ChallengeID) {
+		return false, c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"ok":     false,
+			"reason": "invalid_challenge_id",
 		})
 	}
 	if req.Code == "" {
