@@ -64,6 +64,10 @@ export ENVIRONMENT=production REQUEST_AUTH_MODE=api_key PROVIDER_FAILURE_POLICY=
 | `REDIS_ADDR` | Redis 地址 | `localhost:6379` | 否 |
 | `REDIS_PASSWORD` | Redis 密码 | （空） | 生产必需，除非显式风险确认 |
 | `REDIS_DB` | Redis 数据库索引 | `0` | 否 |
+| `REDIS_USERNAME` | Redis ACL 用户名；留空使用默认用户。须同时设置 `REDIS_PASSWORD` | （空） | 否 |
+| `REDIS_TLS_ENABLED` | 通过 TLS（1.2 及以上）连接 Redis；始终校验服务端证书 | `false` | 否 |
+| `REDIS_TLS_CA_FILE` | 用于校验 Redis 证书的 PEM CA 文件；留空使用系统根证书。须设置 `REDIS_TLS_ENABLED=true` | （空） | 否 |
+| `REDIS_TLS_SERVER_NAME` | Redis 证书中应包含的名称；留空使用 `REDIS_ADDR` 的主机名。须设置 `REDIS_TLS_ENABLED=true` | （空） | 否 |
 | `LOG_LEVEL` | 日志级别 | `info` | 否 |
 | `SERVICE_NAME` | 服务标识（用于 HMAC/日志/健康检查） | `herald` | 否 |
 | `HERALD_READ_TIMEOUT` | 请求读取超时 | `15s` | 否 |
@@ -104,10 +108,11 @@ Herald 从右向左解析转发 IP 链，仅跳过明确配置为可信的代理
 | `CHALLENGE_EXPIRY` | Challenge 过期时间（如 `5m`、`300s`） | `5m` | 否 |
 | `MAX_ATTEMPTS` | 单 challenge 最大验证失败次数，超过后锁定 | `5` | 否 |
 | `LOCKOUT_DURATION` | 锁定持续时间（如 `10m`） | `10m` | 否 |
-| `RESEND_COOLDOWN` | 同一 challenge 重发冷却时间 | `60s` | 否 |
+| `RESEND_COOLDOWN` | 同一用户与 destination 两次创建 challenge 的最小间隔，必须为正值 | `60s` | 否 |
 | `CODE_LENGTH` | 验证码位数（最小 `4`；还须在扣除紧凑的上下文绑定 V2 请求封装后不超过 `HERALD_MAX_BODY_BYTES`，当前封装为 136 字节） | `6` | 否 |
 | `IDEMPOTENCY_KEY_TTL` | 发送前占位和成功响应的 TTL；不确定发送记录不过期；`0` 表示使用 `CHALLENGE_EXPIRY` | `0` | 否 |
 | `ALLOWED_PURPOSES` | 允许的 purpose，逗号分隔，如 `login,reset,bind,stepup` | `login` | 否 |
+| `HERALD_VERIFY_V1_ENABLED` | 是否注册 `POST /v1/otp/verifications`（该路由不校验预期的用户、purpose 和渠道）。所有调用方改用 `POST /v2/otp/verifications` 后可设为 `false`，此后 v1 路由返回 404 | `true` | 否 |
 
 #### 限流
 
@@ -121,8 +126,8 @@ Herald 从右向左解析转发 IP 链，仅跳过明确配置为可信的代理
 
 固定使用 `ghcr.io/soulteary/herald-dingtalk:1.2.6`、
 `ghcr.io/soulteary/herald-smtp:1.2.6`、
-`ghcr.io/soulteary/herald-totp:2.0.3`，或经过核验的不可变摘要。
-Herald v1.5.0 导入 `github.com/soulteary/herald-totp/v2` v2.0.3。SMTP 和钉钉
+`ghcr.io/soulteary/herald-totp:2.0.4`，或经过核验的不可变摘要。
+Herald v1.6.0 导入 `github.com/soulteary/herald-totp/v2` v2.0.4。SMTP 和钉钉
 保留补丁版本接口。TOTP 保留 `/v1` HTTP 路由与凭据存储格式，但 HMAC 协议
 升级为绑定操作并带 nonce 防重放的 v2；必须协调升级 TOTP 服务和 Herald
 代理，旧 HMAC 签名不再接受。仅使用 API key 的模式仍可用。
@@ -543,3 +548,54 @@ Herald v1.5.0 为创建验证码的配额与冷却错误提供可选重试时间
 服务回滚至 v1.4.4 后不再提供新的可选时间字段，但原有错误状态及状态规则保持不变。
 调用新方法的客户端须先撤回该调用，再降低模块版本。源码回滚应恢复对应源码和应用模块清单，
 重新构建前核对实际选中的模块版本。上文更早的迁移要求仍然适用。
+
+## 从 v1.5.2 升级到 v1.6.0
+
+Herald v1.6.0 新增可选配置和一个 SDK 选项。既有 SDK 方法、HTTP 成功响应、认证模式、
+Redis 记录与凭据格式不变，无需转换数据、迁移密钥或重新绑定。因新增配置项和公开
+SDK API，本次为次版本更新。
+
+部署前请检查配置。以下取值此前会被接受或被默认值静默替代，现在会阻止启动：
+
+- `RESEND_COOLDOWN=0`，所有环境均拒绝，须使用正的时长。
+- 生产环境中，已设置但无效的 `REDIS_ADDR`，以及已设置但格式错误的
+  `HERALD_HMAC_KEYS`。
+- 生产环境中，`strconv.ParseBool` 不接受的布尔值（如 `yes`、`on`），以及无法解析的
+  整数或时长（如未带单位的 `HMAC_MAX_DRIFT=60`）。其他环境记录警告并继续使用默认值。
+
+其他需要关注的行为变化：
+
+- 写作 `+86...`、`86...` 和 `0086...` 的同一短信号码现在共用 destination 配额和
+  重发冷却。以 `+` 或 `00` 书写的号码在旧键下的计数不会迁移，升级后从新的配额开始；
+  滚动升级期间，新旧实例对这类号码分别计数。
+- 追踪 span 以 `user_id_digest` 取代 `user_id`。按 `user_id` 过滤的追踪查询和看板
+  需要调整，审计记录不变。
+- Fiber v3.7.0 不再把请求 trailer 当作请求头读取，认证和幂等请求头须放在头部。
+  在最后一个分块之前结束的分块请求体返回 400 `request_error`。
+- 缺少服务凭据时的启动警告文案已更改，匹配旧文案的日志告警需要更新。
+
+新增配置均需显式启用。`REDIS_USERNAME`、`REDIS_TLS_ENABLED`、`REDIS_TLS_CA_FILE`
+和 `REDIS_TLS_SERVER_NAME` 默认关闭或为空，应在 Redis 服务端支持 TLS 或已创建 ACL
+用户后再启用。生产环境中，设置了 CA 文件或服务器名称但未设置
+`REDIS_TLS_ENABLED=true`，或设置了用户名但未设置 `REDIS_PASSWORD`，都会阻止启动。
+`HERALD_VERIFY_V1_ENABLED` 默认为 `true`，仅在所有调用方改用
+`POST /v2/otp/verifications` 后再设为 `false`。Go SDK 的 `VerifyChallenge` 调用 v1，
+应先改用 `VerifyChallengeV2`。
+
+选择 `github.com/soulteary/herald@v1.6.0` 的 SDK 使用方需要 Go 1.27.4 或以上。
+`WithClientIPHeader` 仅在设置后才转发终端用户地址；Herald 只在配置了
+`HERALD_TRUSTED_PROXY_HEADER` 且对端位于 `HERALD_TRUSTED_PROXIES` 时读取该请求头。
+当 Herald 返回 200 但不含 `ok: true` 时，`TOTPRevoke` 现在返回原因为
+`revoke_not_confirmed` 的错误，应按撤销失败处理。更新 SDK 不会更新服务，新版 SDK
+可以调用旧服务。
+
+Herald 导入 `github.com/soulteary/herald-totp/v2` v2.0.4，该客户端模块仅更新依赖。
+TOTP 服务仍须独立部署，协议与 v2.0.3 相同。
+
+服务回滚至 v1.5.2 时保留 Redis 数据、待处理 challenge、幂等及重放状态、审计缓冲和
+提供方/TOTP 凭据。v1.5.2 会忽略 Redis TLS 与 ACL 用户名配置，回滚前须恢复其可连接的
+Redis 端点。回滚后会重新注册 v1 验证路由，span 重新输出 `user_id`；以 `+` 或 `00`
+书写的号码在规范化键下记录的短信配额不会被 v1.5.2 读取。使用 `WithClientIPHeader`
+的客户端须先移除该调用，再降低模块版本。从源码重建 Go 应用时，应恢复升级前的
+`go.mod` 和 `go.sum`，并在构建前用 `go list -m all` 核对实际选中的版本。上文更早的
+迁移要求仍然适用。

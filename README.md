@@ -2,7 +2,7 @@
 
 [![Go Test Coverage](./.github/coverage.svg)](./.github/go-test-report.md) [![Go Report Card](./.github/goreportcard.svg)](./.github/goreportcard-report.md) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go Version](https://img.shields.io/badge/go-1.27.4+-blue.svg)](https://golang.org)
 
-Herald v1.5.0 adds `CreateChallengeWithMetadata` for optional challenge-creation retry timing. Existing `CreateChallenge` callers are unchanged. Timing does not trigger automatic retries; see the [upgrade and rollback guidance](docs/enUS/DEPLOYMENT.md#retry-metadata-upgrade-and-rollback-v150).
+Herald v1.6.0 adds optional Redis TLS and ACL username settings, `HERALD_VERIFY_V1_ENABLED` to disable the v1 verification route, and the SDK option `WithClientIPHeader`. Defaults are unchanged, but startup now rejects some invalid configuration values that previously fell back to a default; see the [upgrade and rollback guidance](docs/enUS/DEPLOYMENT.md#upgrade-from-v152-to-v160).
 
 
 

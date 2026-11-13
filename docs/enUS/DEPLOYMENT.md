@@ -275,8 +275,8 @@ Only when `ENVIRONMENT=test` and `HERALD_TEST_MODE=true`:
 
 Pin `ghcr.io/soulteary/herald-dingtalk:1.2.6`,
 `ghcr.io/soulteary/herald-smtp:1.2.6`, and
-`ghcr.io/soulteary/herald-totp:2.0.3` (or verified immutable digests).
-Herald v1.5.0 imports `github.com/soulteary/herald-totp/v2` v2.0.3. SMTP and
+`ghcr.io/soulteary/herald-totp:2.0.4` (or verified immutable digests).
+Herald v1.6.0 imports `github.com/soulteary/herald-totp/v2` v2.0.4. SMTP and
 DingTalk retain their existing patch-level interfaces. TOTP keeps its `/v1` HTTP
 routes and credential storage, but its HMAC protocol changes to operation-bound
 v2 with nonce protection. Upgrade the TOTP service and Herald proxy together;
@@ -623,3 +623,69 @@ existing failure statuses and state rules. A client using the new SDK method mus
 revert that call before downgrading its module. Source rollback must restore the
 appropriate source and application manifests; inspect effective module versions
 before rebuilding. Older migration requirements above still apply.
+
+## Upgrade from v1.5.2 to v1.6.0
+
+Herald v1.6.0 adds optional configuration and one SDK option. Existing SDK
+methods, HTTP success payloads, authentication modes, Redis records and
+credential formats are unchanged. No data conversion, key migration or
+re-enrollment is required. This is a minor release because it adds
+configuration and public SDK API.
+
+Check the configuration before deploying. These values were previously accepted
+or silently replaced by a default and now stop startup:
+
+- `RESEND_COOLDOWN=0`, in every environment. Use a positive duration.
+- In production, a `REDIS_ADDR` that is set but invalid, and a
+  `HERALD_HMAC_KEYS` that is set but malformed.
+- In production, boolean variables that `strconv.ParseBool` does not accept
+  (for example `yes` or `on`), and integer or duration variables that cannot be
+  parsed (for example `HMAC_MAX_DRIFT=60` without a unit). Other environments
+  log a warning and keep the default.
+
+Other behaviour changes to plan for:
+
+- SMS numbers written as `+86...`, `86...` and `0086...` now share one
+  per-destination quota and resend cooldown. Counters recorded under the old key
+  for a number written with `+` or `00` are not carried over, so such a number
+  starts with a fresh quota. During a rolling upgrade, old and new instances
+  count it separately.
+- Trace spans carry `user_id_digest` instead of `user_id`. Update trace queries
+  and dashboards that filter on `user_id`. Audit records are unchanged.
+- Fiber v3.7.0 no longer exposes request trailers as headers. Send
+  authentication and idempotency headers in the header section. A chunked body
+  that ends before its last chunk is answered with 400 `request_error`.
+- The startup warning for missing service credentials has new wording. Update
+  log alerts that match the old text.
+
+The new settings are opt-in. `REDIS_USERNAME`, `REDIS_TLS_ENABLED`,
+`REDIS_TLS_CA_FILE` and `REDIS_TLS_SERVER_NAME` default to off or empty. Enable
+them only after the Redis server accepts TLS or the ACL user. In production,
+setting the CA file or server name without `REDIS_TLS_ENABLED=true`, or the
+username without `REDIS_PASSWORD`, stops startup. `HERALD_VERIFY_V1_ENABLED`
+defaults to `true`; set it to `false` only after every caller uses
+`POST /v2/otp/verifications`. The Go SDK method `VerifyChallenge` calls v1; use
+`VerifyChallengeV2` first.
+
+SDK consumers selecting `github.com/soulteary/herald@v1.6.0` need Go 1.27.4 or
+later. `WithClientIPHeader` forwards the end-user address only when it is set,
+and Herald reads the header only from peers listed in `HERALD_TRUSTED_PROXIES`
+with `HERALD_TRUSTED_PROXY_HEADER` configured. `TOTPRevoke` now returns an
+error with reason `revoke_not_confirmed` when Herald answers 200 without
+`ok: true`; handle it as a failed revocation. Deploying the SDK does not update
+the service, and the new SDK works with an older service.
+
+Herald imports `github.com/soulteary/herald-totp/v2` v2.0.4, a dependency-only
+update of the client module. The TOTP service remains a separate deployment and
+its protocol is unchanged from v2.0.3.
+
+Rolling the service back to v1.5.2 retains Redis data, pending challenges,
+idempotency and replay state, audit buffering and provider/TOTP credentials.
+v1.5.2 ignores the Redis TLS and ACL username settings, so restore a Redis
+endpoint it can reach before rolling back. It also registers the v1
+verification route again and exports `user_id` on spans. SMS quotas recorded
+under the canonical key are not read by v1.5.2 for numbers written with `+` or
+`00`. A client using `WithClientIPHeader` must remove that call before
+downgrading its module. For a Go application rebuilt from source, restore the
+pre-upgrade `go.mod` and `go.sum` and inspect `go list -m all` before building.
+Older migration requirements above still apply.

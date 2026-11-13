@@ -2,7 +2,7 @@
 
 [![Go Test Coverage](./.github/coverage.svg)](./.github/go-test-report.md) [![Go Report Card](./.github/goreportcard.svg)](./.github/goreportcard-report.md) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go Version](https://img.shields.io/badge/go-1.27.4+-blue.svg)](https://golang.org)
 
-Herald v1.5.0 新增 `CreateChallengeWithMetadata`，用于读取可选的创建验证码重试时间。既有 `CreateChallenge` 调用不变，不增加自动重试；参见[升级与回滚说明](docs/zhCN/DEPLOYMENT.md#重试时间元数据升级与回滚v150)。
+Herald v1.6.0 新增可选的 Redis TLS 与 ACL 用户名配置、用于关闭 v1 验证路由的 `HERALD_VERIFY_V1_ENABLED`，以及 SDK 选项 `WithClientIPHeader`。默认行为不变，但启动时会拒绝部分此前回退到默认值的无效配置；参见[升级与回滚说明](docs/zhCN/DEPLOYMENT.md#从-v152-升级到-v160)。
 
 
 
