@@ -806,7 +806,7 @@ func (h *Handlers) checkCreationLimits(c fiber.Ctx, spanCtx context.Context, req
 	if denied == ratelimit.DeniedByCooldown {
 		return challengeRateLimitResponse(c, "resend_cooldown", resetTime)
 	}
-	return challengeRateLimitResponse(c, "rate_limit_exceeded", resetTime)
+	return challengeLimitResponse(c, "rate_limit_exceeded", denied, resetTime)
 }
 
 func (h *Handlers) deliverChallenge(c fiber.Ctx, spanCtx context.Context, req CreateChallengeRequest, ch *challengekit.Challenge, msg *provider.Message, providerName, peerIP string) (bool, bool, error) {

@@ -195,6 +195,21 @@ header. Missing or expired timing is omitted. This is a retry hint for the gate
 that rejected the request; other limits can still reject a later request. A
 rejected request consumes no quota and starts no cooldown. Do not retry automatically.
 
+A `429/rate_limit_exceeded` response also carries `limit`, naming the quota
+that refused the request: `user` (`RATE_LIMIT_PER_USER`), `ip`
+(`RATE_LIMIT_PER_IP`) or `destination` (`RATE_LIMIT_PER_DESTINATION`). A
+`429/resend_cooldown` response has no `limit` field. Servers up to v1.6.0 do
+not send the field, so treat it as optional.
+
+```json
+{
+  "ok": false,
+  "reason": "rate_limit_exceeded",
+  "limit": "ip",
+  "next_resend_in": 42
+}
+```
+
 The Go SDK's `CreateChallengeWithMetadata` method returns the existing response,
 a `CreateChallengeMetadata` value and the existing error. Its optional
 `RetryAfterSeconds` is nil when timing is absent, malformed, conflicting, outside
