@@ -15,18 +15,18 @@ require (
 	github.com/soulteary/audit-kit/v2 v2.1.6
 	github.com/soulteary/challenge-kit v1.11.2
 	github.com/soulteary/cli-kit v1.9.4
-	github.com/soulteary/health-kit/v4 v4.0.6
+	github.com/soulteary/health-kit/v4 v4.0.7
 	github.com/soulteary/herald-totp/v2 v2.0.3
 	github.com/soulteary/http-kit/v2 v2.1.1
-	github.com/soulteary/i18n-kit/v4 v4.0.5
-	github.com/soulteary/logger-kit/v3 v3.0.5
-	github.com/soulteary/metrics-kit/v3 v3.0.5
-	github.com/soulteary/middleware-kit/v3 v3.0.5
+	github.com/soulteary/i18n-kit/v4 v4.0.6
+	github.com/soulteary/logger-kit/v3 v3.0.6
+	github.com/soulteary/metrics-kit/v3 v3.0.6
+	github.com/soulteary/middleware-kit/v3 v3.0.6
 	github.com/soulteary/provider-kit v1.7.5
 	github.com/soulteary/redis-kit v1.8.2
 	github.com/soulteary/secure-kit/v2 v2.1.5
 	github.com/soulteary/tracing-kit/v2 v2.0.4
-	github.com/soulteary/version-kit/v4 v4.0.4
+	github.com/soulteary/version-kit/v4 v4.0.5
 	github.com/stretchr/testify v1.12.1
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/sdk v1.47.0
