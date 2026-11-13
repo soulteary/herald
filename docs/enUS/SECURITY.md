@@ -273,7 +273,7 @@ Herald implements multiple layers of rate limiting:
 1. **Per-User Rate Limiting**: Prevents a single user from creating too many challenges
 2. **Per-Destination Rate Limiting**: Prevents abuse of a specific email/phone number
 3. **Per-IP Rate Limiting**: Prevents abuse from a single IP address
-4. **Resend Cooldown**: Prevents rapid resend of codes to the same challenge
+4. **Resend Cooldown**: Prevents rapid resend of codes to the same destination
 5. **Attempt Limiting**: Limits verification attempts per challenge
 
 ### Configuration

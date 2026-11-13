@@ -331,7 +331,7 @@ fsync 和原子 rename。
 对于生产部署，**强烈建议**为 Herald 使用专用的 Redis 实例或单独的数据库索引，以避免与其他服务的键空间冲突。
 
 **键前缀：**
-- `otp:ch:*` - 挑战数据（TTL：挑战过期时间）
+- `otp2:ch:*` - 挑战数据（TTL：挑战过期时间）
 - `ratelimit:*` - 速率限制计数器（TTL：速率限制窗口）
 - `otp:idem2:*` - 幂等记录（发送前占位和已完成响应：`IDEMPOTENCY_KEY_TTL`；不确定发送：`IDEMPOTENCY_UNRESOLVED_TTL`）
 - `otp:lock:v2:<digest>` - 用户锁定记录（TTL：锁定持续时间）。`<digest>` 是由用户 ID 结合 `HERALD_PII_PEPPER` 派生的摘要
@@ -492,7 +492,7 @@ Redis 记录或客户端签名。CORS 是浏览器来源边界，API Key/HMAC �
 ### 服务权限与指标凭据
 
 `HERALD_SERVICE_POLICIES` 为可选配置，用于把每个已配置的 HMAC Key ID 绑定到一个服务及其
-允许的操作。它要求使用 HMAC v2/v3 认证，并停用旧版 v1 兼容。策略格式以及共享用户命名空间
+允许的操作。它要求使用 HMAC v2/v3 认证，且旧版 v1 兼容处于关闭状态（`HMAC_V1_ENABLED=false`），否则启动失败。策略格式以及共享用户命名空间
 的限制见[服务操作策略](SECURITY.md#限制服务操作)。
 
 生产环境抓取指标现在要求配置 `HERALD_METRICS_API_KEY`（至少 32 字节）；未配置时

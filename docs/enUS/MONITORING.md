@@ -323,7 +323,8 @@ but undelivered records remain in the local buffer for retry. Monitor pending
 `AUDIT_SPOOL_MAX_BYTES` and reject new audit events.
 
 `herald_audit_dropped_total` now counts events rejected before durable local
-acceptance. Such failures return `503/audit_unavailable`; it no longer counts
+acceptance. Such failures return `503/audit_unavailable`, except the
+post-action failures described below; it no longer counts
 recoverable backend delivery failures. Verify that retries drain the buffer
 after storage recovery. Never delete pending files to silence an alert.
 

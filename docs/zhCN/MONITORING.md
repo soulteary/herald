@@ -320,8 +320,8 @@ groups:
 请同时监控 `AUDIT_SPOOL_DIR` 中的 `*.json` 文件和剩余磁盘空间，持续积压会达到
 `AUDIT_SPOOL_MAX_BYTES` 并拒绝新的审计事件。
 
-`herald_audit_dropped_total` 现在统计持久化接收前被拒绝的事件，对应接口返回
-`503/audit_unavailable`，不再统计可恢复的后端投递失败。存储恢复后应确认缓冲逐步清空，
+`herald_audit_dropped_total` 现在统计持久化接收前被拒绝的事件；除下文所述操作完成后的
+失败外，对应接口返回 `503/audit_unavailable`。该指标不再统计可恢复的后端投递失败。存储恢复后应确认缓冲逐步清空，
 不要通过删除待投递文件来消除告警。
 
 应对 `herald_audit_post_action_failure_total{operation}`（`create`、`verify`、`revoke`）配置

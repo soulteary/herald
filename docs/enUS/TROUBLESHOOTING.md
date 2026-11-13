@@ -80,7 +80,7 @@ See [API.md](API.md) (Create Challenge response, Get Test Code) and [DEPLOYMENT.
 1. **Check Challenge Status**
    ```bash
    # Check Redis for challenge data
-   redis-cli GET "otp:ch:{challenge_id}"
+   redis-cli GET "otp2:ch:{challenge_id}"
    ```
 
 2. **Verify Challenge Expiry**

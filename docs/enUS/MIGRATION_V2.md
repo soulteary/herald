@@ -70,8 +70,8 @@ The HMAC-SHA256 of that canonical string (hex) is sent in `X-Signature`.
 Nonces are consumed exactly once via Redis `SET NX EX` under a keyed digest
 (`service|key-id|nonce`). The signature is verified **before** the nonce is
 consumed so a forged request cannot burn a legitimate nonce. On nonce-store
-backend failure Herald **fails closed** in production (`503`), and allows the
-request only in non-production.
+backend failure Herald **fails closed** (`503`) in every environment; versions
+up to v1.6.0 allowed the request outside production.
 
 ### 1.5 Auth vs client-cert modes are split
 

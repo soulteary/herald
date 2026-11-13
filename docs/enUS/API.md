@@ -615,7 +615,7 @@ unauthenticated development namespaces are unchanged.
 
 Preserve unresolved sending records and the idempotency derivation secret.
 Reconcile legacy conflicts using delivery/audit evidence; do not switch client
-keys or clear non-expiring records to force a resend. Completed legacy records
+keys or clear unresolved records to force a resend. Completed legacy records
 keep their ordinary expiry. See [upgrade requirements](DEPLOYMENT.md#hmac-identity-upgrade).
 
 ### Pending challenge state
