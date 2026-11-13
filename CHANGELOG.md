@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-13
+
 ### Added
 
 - Add `HERALD_VERIFY_V1_ENABLED` (default `true`). Set it to `false` to stop
@@ -81,8 +83,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `challenge-kit` to v1.11.2, `redis-kit` to v1.8.2, `cli-kit` to v1.9.4,
   `health-kit/v4` to v4.0.7, `http-kit/v2` to v2.1.1 and the other kits to
   their current releases, and refresh indirect dependencies.
+- Update `herald-totp/v2` to v2.0.4, a dependency-only release of the TOTP
+  client module. The TOTP proxy protocol and SDK methods are unchanged.
 - The module requires Go 1.27.4. SDK consumers on an older toolchain need to
   update it.
+
+### Compatibility and operations
+
+- Existing SDK methods and signatures, HTTP success payloads, authentication
+  modes, Redis records and credential formats are unchanged. The new settings
+  and the SDK option `WithClientIPHeader` are opt-in; their defaults keep the
+  v1.5.2 behaviour. No data conversion, key migration or re-enrollment is
+  required.
+- Check the configuration before upgrading. `RESEND_COOLDOWN=0` now fails
+  startup in every environment. In production, an invalid `REDIS_ADDR`, a
+  malformed `HERALD_HMAC_KEYS`, and boolean, integer or duration variables that
+  cannot be parsed also fail startup instead of falling back to a default.
+- SDK consumers need Go 1.27.4 or later. `TOTPRevoke` can now return
+  `revoke_not_confirmed` where it previously returned no error. Upgrading the
+  SDK does not replace a deployed service, and the SDK continues to work with
+  an older service.
+- Rollback to v1.5.2 retains Redis data and credentials. Remove the Redis TLS
+  and ACL username settings first if the Redis server requires them, because
+  v1.5.2 ignores them. Source consumers must remove `WithClientIPHeader` calls
+  before downgrading the module. See the
+  [upgrade and rollback guidance](docs/enUS/DEPLOYMENT.md#upgrade-from-v152-to-v160).
 
 ## [1.5.2] - 2026-11-09
 
@@ -717,7 +742,11 @@ and Redis key prefix of audit records all stay as they were.
 See `docs/enUS/MIGRATION_V2.md` and `docs/zhCN/MIGRATION_V2.md` for the v1→v2
 authentication diff, environment-variable migration, and rollback guidance.
 
-[Unreleased]: https://github.com/soulteary/herald/compare/v1.4.4...HEAD
+[Unreleased]: https://github.com/soulteary/herald/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/soulteary/herald/compare/v1.5.2...v1.6.0
+[1.5.2]: https://github.com/soulteary/herald/compare/v1.5.1...v1.5.2
+[1.5.1]: https://github.com/soulteary/herald/compare/v1.5.0...v1.5.1
+[1.5.0]: https://github.com/soulteary/herald/compare/v1.4.4...v1.5.0
 [1.4.4]: https://github.com/soulteary/herald/compare/v1.4.3...v1.4.4
 [1.4.3]: https://github.com/soulteary/herald/compare/v1.4.2...v1.4.3
 [1.4.2]: https://github.com/soulteary/herald/compare/v1.4.1...v1.4.2
