@@ -26,7 +26,7 @@ OTLP_ENDPOINT=http://localhost:4318
 
 ### `otp.challenge.create`
 - 创建验证码 challenge 的 span
-- 属性：`channel`、`purpose`、`user_id`、`destination`（脱敏）
+- 属性：`channel`、`purpose`、`user_id_digest`、`destination_digest`（均为加盐摘要，不导出原始值）
 
 ### `otp.provider.send`
 - 发送验证码到 provider 的 span
@@ -34,7 +34,7 @@ OTLP_ENDPOINT=http://localhost:4318
 
 ### `otp.verify`
 - 验证验证码的 span
-- 属性：`challenge_id`、`result`、`reason`、`user_id`、`channel`、`purpose`
+- 属性：`challenge_id`、`result`、`reason`、`user_id_digest`、`channel`、`purpose`
 
 ## 使用示例
 

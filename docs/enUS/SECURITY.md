@@ -406,6 +406,13 @@ contain the user ID. Trace queries or dashboards that filtered on the `user_id`
 span attribute must switch to `user_id_digest`. Spans exported before the
 upgrade are not rewritten.
 
+The creation span identifies the destination the same way, as
+`destination_digest`: the peppered digest that keys the per-destination rate
+limit. It replaces the `destination` attribute, which held a partially masked
+value (the first characters of an email address and its whole domain). The
+request span no longer has an `http.remote_addr` attribute; the client address
+remains in audit records. Queries on either removed attribute need updating.
+
 ## Related Documentation
 
 - [API Documentation](API.md) - Learn about API security features and authentication

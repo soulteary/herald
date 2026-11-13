@@ -1985,28 +1985,6 @@ func TestHandlers_VerifyChallenge_RemainingAttempts(t *testing.T) {
 	}
 }
 
-func TestMaskDestination(t *testing.T) {
-	// maskDestination is used for tracing; test email and phone masking
-	t.Run("email", func(t *testing.T) {
-		out := maskDestination("user@example.com")
-		if out == "" || out == "user@example.com" {
-			t.Errorf("maskDestination(email) should mask, got %q", out)
-		}
-	})
-	t.Run("phone", func(t *testing.T) {
-		out := maskDestination("+8613800138000")
-		if out == "" {
-			t.Errorf("maskDestination(phone) should not be empty, got %q", out)
-		}
-	})
-	t.Run("empty", func(t *testing.T) {
-		out := maskDestination("")
-		if out != "" {
-			t.Errorf("maskDestination(empty) = %q, want empty", out)
-		}
-	})
-}
-
 func checkVerificationExpiredChallenge(t *testing.T, redisClient *redis.Client, app *fiber.App) {
 	t.Helper()
 	challengeMgr := testChallengeManager(t, redisClient)

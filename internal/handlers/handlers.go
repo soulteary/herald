@@ -13,7 +13,6 @@ import (
 	audit "github.com/soulteary/audit-kit/v2"
 	logger "github.com/soulteary/logger-kit/v3"
 	rediskitcache "github.com/soulteary/redis-kit/cache"
-	secure "github.com/soulteary/secure-kit/v2"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
@@ -255,12 +254,14 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 		attribute.String("channel", req.Channel),
 		attribute.String("purpose", req.Purpose),
 		h.userIDSpanAttribute(req.UserID),
-		attribute.String("destination", maskDestination(req.Destination)),
 	)
 
 	if valid, err := h.validateCreateRequest(c, &req); !valid {
 		return err
 	}
+	// The destination is exported as the same peppered digest that keys its
+	// rate limit, never as a partially masked address.
+	span.SetAttributes(attribute.String("destination_digest", h.digester.Digest(destination.LimitKey(req.Channel, req.Destination))))
 
 	// Client IP trust split (Phase 6):
 	//   - peerIP is the transport-level source address (or the leftmost trusted
@@ -385,19 +386,6 @@ func idempotencyPrincipal(c fiber.Ctx) string {
 // (the same one used for rate-limit keys) instead of the raw identifier.
 func (h *Handlers) userIDSpanAttribute(userID string) attribute.KeyValue {
 	return attribute.String("user_id_digest", h.digester.Digest(userID))
-}
-
-// maskDestination masks sensitive destination information for tracing
-func maskDestination(dest string) string {
-	if len(dest) == 0 {
-		return ""
-	}
-	// Mask email: show first 2 chars and domain
-	if strings.Contains(dest, "@") {
-		return secure.MaskEmailPartial(dest)
-	}
-	// Mask phone: use secure-kit MaskString for generic masking
-	return secure.MaskString(dest, 3)
 }
 
 // VerifyChallengeRequest represents the request to verify a challenge
