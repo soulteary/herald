@@ -348,6 +348,7 @@ See [security](SECURITY.md#provider-failure-diagnostics) for compatibility detai
 
 - `herald_idempotency_total{result}` emits `replay`, `conflict`, `in_flight`, `delivery_unknown`, `ownership_lost`, or `backend_error`. Both fingerprint conflicts and legacy namespace conflicts use `conflict`; distinguish them by the API reason, without adding identity labels.
 - `herald_nonce_replay_total` counts rejected replayed nonces.
+- `herald_auth_failure_total{reason}` counts HMAC requests answered `401/invalid_signature`. `reason` is `invalid_key_id` (the key ID is not configured) or `invalid_signature` (the key is known and the signature is wrong). The HTTP response is the same for both.
 - `herald_provider_timeout_total{channel}` counts provider timeouts.
 - `herald_verification_contention_total{result}` records `contended` or `acquired` where emitted by the verification path.
 - `herald_challenge_state_total{state}` records emitted transitions such as `activated`, `superseded`, and `revoked`.

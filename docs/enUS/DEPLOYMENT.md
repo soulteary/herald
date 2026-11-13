@@ -479,7 +479,8 @@ resume implicit-key callers on old code. See [API](API.md#hmac-identity-and-lega
 
 Only the implicit `default` identity is authorized by `HMAC_SECRET`. Previously,
 any explicit ID selected that secret and created a separate nonce/idempotency
-namespace. Unknown IDs now fail with `401/invalid_key_id`.
+namespace. Unknown IDs now fail with `401/invalid_signature`, like a wrong
+signature (releases up to v1.6.0 answered `401/invalid_key_id`).
 
 Before resuming creation, inventory historical explicit IDs and reconcile their
 unresolved sends using provider and audit evidence. Redis idempotency keys are

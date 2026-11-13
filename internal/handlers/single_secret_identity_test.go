@@ -41,7 +41,7 @@ func TestSingleSecretCannotCreateArbitraryIdempotencyNamespaces(t *testing.T) {
 	t.Logf("first=%d retry=%d sends=%d", first.status, retry.status, p.calls)
 	require.EqualValues(t, 1, p.calls, "an unconfigured alias must not bypass a retained sending record")
 	require.Equal(t, 401, retry.status)
-	require.Contains(t, string(retry.body), "invalid_key_id")
+	require.Contains(t, string(retry.body), "invalid_signature")
 	for _, keyID := range []string{"", "default"} {
 		validRetry := defaultKeyRequest(t, app, keyID, "valid-retry-"+keyID)
 		require.Equal(t, 409, validRetry.status)

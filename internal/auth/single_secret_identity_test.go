@@ -37,7 +37,7 @@ func TestSingleSecretKeyIDCannotSplitNonceIdentity(t *testing.T) {
 			}
 			status, reason := runMiddlewareRequest(t, cfg, headers("unconfigured-key"))
 			require.Equal(t, http.StatusUnauthorized, status)
-			require.Equal(t, "invalid_key_id", reason)
+			require.Equal(t, "invalid_signature", reason)
 			require.Empty(t, mr.Keys(), "reject an unknown key ID before consuming a nonce")
 			status, _ = runMiddlewareRequest(t, cfg, headers(""))
 			require.Equal(t, http.StatusNoContent, status)

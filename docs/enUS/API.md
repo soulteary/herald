@@ -487,9 +487,9 @@ This section lists all possible error codes returned by the API.
 HMAC/API-key failures use a JSON `reason` value:
 - `signature_version_required`: Challenge creation requires `X-Signature-Version: v3`; other HMAC routes accept v2/v3
 - `missing_auth_headers`: One or more HMAC headers are missing
-- `key_id_required` / `invalid_key_id`: A usable HMAC key ID was not supplied
+- `key_id_required`: The `X-Key-Id` header is missing where one is required
 - `timestamp_out_of_range`: Timestamp is outside the configured drift window
-- `invalid_signature`: HMAC signature verification failed
+- `invalid_signature`: HMAC signature verification failed, or `X-Key-Id` names a key that is not configured. The two cases get the same response so that it does not reveal which key IDs exist; `herald_auth_failure_total{reason}` tells them apart
 - `replayed_nonce`: The nonce was already consumed
 - `nonce_store_unavailable`: Redis nonce storage failed. The request is rejected in every environment
 - `unauthorized`: Authentication failed
@@ -592,8 +592,8 @@ See [deployment](DEPLOYMENT.md#otp-hash-work-admission) for sizing and retry rul
 ## HMAC identity and legacy idempotency records
 
 With only `HMAC_SECRET` configured, omit `X-Key-Id` or send exactly `default`.
-Other IDs return `401/invalid_key_id` before nonce consumption or handler side
-effects. A single secret no longer implicitly authorizes arbitrary IDs. HMAC
+Other IDs return `401/invalid_signature`, the same answer as a wrong signature,
+before nonce consumption or handler side effects. A single secret no longer implicitly authorizes arbitrary IDs. HMAC
 v2/v3 signing is unchanged. Custom IDs require an explicit `HERALD_HMAC_KEYS`
 entry; do not rename an existing caller or retry an uncertain send under another
 identity during migration. See the deployment upgrade requirements below.

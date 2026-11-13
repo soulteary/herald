@@ -14,6 +14,9 @@ func TestSecurityAndAuditCountersRecordOneEvent(t *testing.T) {
 		value  func() float64
 	}{
 		{"idempotency", func() { RecordIdempotency("delivery_unknown") }, func() float64 { return counterValue(t, idempotencyTotal.WithLabelValues("delivery_unknown")) }},
+		{"auth failure", func() { RecordAuthFailure("invalid_key_id") }, func() float64 {
+			return counterValue(t, authFailureTotal.WithLabelValues("invalid_key_id"))
+		}},
 		{"timeout", func() { RecordProviderTimeout("email") }, func() float64 { return counterValue(t, providerTimeoutTotal.WithLabelValues("email")) }},
 		{"contention", func() { RecordVerificationContention("contended") }, func() float64 { return counterValue(t, verificationContention.WithLabelValues("contended")) }},
 		{"nonce", RecordNonceReplay, func() float64 { return counterValue(t, nonceReplayTotal) }},
