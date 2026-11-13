@@ -80,7 +80,7 @@
 1. **检查挑战状态**
    ```bash
    # 检查 Redis 中的挑战数据
-   redis-cli GET "otp:ch:{challenge_id}"
+   redis-cli GET "otp2:ch:{challenge_id}"
    ```
 
 2. **验证挑战过期**

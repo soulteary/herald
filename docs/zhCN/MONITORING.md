@@ -320,8 +320,8 @@ groups:
 请同时监控 `AUDIT_SPOOL_DIR` 中的 `*.json` 文件和剩余磁盘空间，持续积压会达到
 `AUDIT_SPOOL_MAX_BYTES` 并拒绝新的审计事件。
 
-`herald_audit_dropped_total` 现在统计持久化接收前被拒绝的事件，对应接口返回
-`503/audit_unavailable`，不再统计可恢复的后端投递失败。存储恢复后应确认缓冲逐步清空，
+`herald_audit_dropped_total` 现在统计持久化接收前被拒绝的事件；除下文所述操作完成后的
+失败外，对应接口返回 `503/audit_unavailable`。该指标不再统计可恢复的后端投递失败。存储恢复后应确认缓冲逐步清空，
 不要通过删除待投递文件来消除告警。
 
 应对 `herald_audit_post_action_failure_total{operation}`（`create`、`verify`、`revoke`）配置
@@ -347,3 +347,29 @@ groups:
 
 没有独立哈希预算占用指标。结合 `503/backend_unavailable`、重试头、运行时内存和请求结果
 观察过载，不得将原始服务/密钥 ID、目标地址或客户端键加入指标标签。
+
+### 指标认证
+
+生产环境中，`/metrics` 要求配置独立的 `HERALD_METRICS_API_KEY`，长度至少 32 字节。未配置
+指标密钥时，该端点返回 401。业务 API Key 不能用于抓取，指标密钥也不能用于访问 OTP 或
+TOTP。应为两者分别生成相互独立的随机凭据。启动时会拒绝将指标密钥复用为 API Key 或任一
+已配置的 HMAC 密钥，开发和测试环境也是如此。
+
+开发和测试环境仅在未设置指标密钥时允许匿名抓取。配置密钥后，所有环境的抓取都受保护。
+可接受的请求头为 `Authorization: Bearer <key>` 和 `X-Metrics-API-Key: <key>`；不接受查询
+参数。
+
+升级生产环境前，应同时配置密钥并更新抓取端：
+
+```yaml
+scrape_configs:
+  - job_name: herald
+    static_configs:
+      - targets: ['herald:8082']
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/herald_metrics_key
+```
+
+即使启用了认证，也应将该端点置于私有网络，或在反向代理处限制访问。存活和就绪探针不变。

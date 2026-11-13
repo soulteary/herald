@@ -270,7 +270,7 @@ these checks and audit recording.
 
 Only when `ENVIRONMENT=test` and `HERALD_TEST_MODE=true`:
 
-- The create-challenge response may include a `debug_code` field (plain verification code) so callers (e.g. Stargate with `DEBUG=true`) can display it on the login page.
+- The create-challenge response includes a `debug_code` field (plain verification code) so callers (e.g. Stargate with `DEBUG=true`) can display it on the login page.
 - `GET /v1/test/code/:challenge_id` is mounted on the separate
   `HERALD_TEST_LISTENER_ADDR` listener (default `127.0.0.1:18082`), not the main
   listener. Supply `X-Test-Api-Key: $HERALD_TEST_API_KEY` (or Bearer authentication).
@@ -324,7 +324,7 @@ When `HERALD_TOTP_ENABLED=true` and `HERALD_TOTP_BASE_URL` is set, Herald proxie
 For production deployments, it is **strongly recommended** to use a dedicated Redis instance or a separate database index for Herald to avoid key space conflicts with other services.
 
 **Key Prefixes:**
-- `otp:ch:*` - Challenge data (TTL: challenge expiry time)
+- `otp2:ch:*` - Challenge data (TTL: challenge expiry time)
 - `ratelimit:*` - Rate limiting counters (TTL: rate limit window)
 - `otp:idem2:*` - Idempotency records (pending/completed: `IDEMPOTENCY_KEY_TTL`; unresolved sending: `IDEMPOTENCY_UNRESOLVED_TTL`)
 - `otp:lock:v2:<digest>` - User lockout records (TTL: lockout duration). The digest is derived from the user ID with `HERALD_PII_PEPPER`
@@ -520,8 +520,8 @@ is a browser boundary; API Key/HMAC authentication is still required independent
 ### Service permissions and metrics credentials
 
 `HERALD_SERVICE_POLICIES` optionally binds each configured HMAC key ID to a
-service and allowed actions. It requires HMAC v2/v3 authentication and disables
-legacy v1 compatibility. See [service action policies](SECURITY.md#limit-service-actions)
+service and allowed actions. It requires HMAC v2/v3 authentication with legacy
+v1 compatibility off (`HMAC_V1_ENABLED=false`); otherwise startup fails. See [service action policies](SECURITY.md#limit-service-actions)
 for the policy format and the shared-user-namespace limitation.
 
 Production metrics scraping now requires `HERALD_METRICS_API_KEY` (at least 32

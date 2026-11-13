@@ -77,9 +77,9 @@ flowchart LR
 
 ### Herald ↔ Redis
 
-- **Challenge data**: `otp:ch:*` — challenge payload, code hash, TTL, attempts.
+- **Challenge data**: `otp2:ch:*` — challenge payload, code hash, TTL, attempts.
 - **Rate limits**: `ratelimit:*` — per user, per IP, per destination.
-- **Idempotency**: `otp:idem2:*` — pre-send claim, non-expiring send record, or cached challenge response.
+- **Idempotency**: `otp:idem2:*` — pre-send claim, unresolved send record (expires after `IDEMPOTENCY_UNRESOLVED_TTL`; records written by earlier versions have no TTL), or cached challenge response.
 
 ## Security Boundaries
 

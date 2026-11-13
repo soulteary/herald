@@ -48,8 +48,14 @@ export ENVIRONMENT=production REQUEST_AUTH_MODE=api_key PROVIDER_FAILURE_POLICY=
 - `REDIS_ADDR`
 - `REDIS_PASSWORD`
 - `REDIS_DB`
+- `REDIS_USERNAME`
+- `REDIS_TLS_ENABLED`
+- `REDIS_TLS_CA_FILE`
+- `REDIS_TLS_SERVER_NAME`
 
-在 `stargate-suite` 或 compose 模板中，可能会看到 `HERALD_REDIS_ADDR` 等变量名。这类变量通常是上层编排层的统一命名，最终会映射为 Herald 实际识别的 `REDIS_*`。  
+Herald 不读取任何 `HERALD_REDIS_*` 变量，本仓库的 `docker-compose.yml` 也没有定义这类别名：它只向进程传入 `REDIS_ADDR`、`REDIS_PASSWORD` 和 `REDIS_DB`，其中只有密码取自宿主环境的同名变量 `REDIS_PASSWORD`。使用 ACL 用户名或 TLS 时，需自行在 `herald` 服务的 `environment` 中加入 `REDIS_USERNAME` 和 `REDIS_TLS_*`。
+
+在 `stargate-suite` 或其他 compose 模板中，可能会看到 `HERALD_REDIS_ADDR` 等变量名。这类变量是上层编排层的统一命名，只有被该编排层映射为 Herald 实际识别的 `REDIS_*` 后才会生效。
 部署时请以 Herald 本仓库 `internal/config/config.go` 的 `REDIS_*` 为准。
 
 ### 环境变量
@@ -141,8 +147,8 @@ Herald v1.6.0 导入 `github.com/soulteary/herald-totp/v2` v2.0.4。SMTP 和钉�
 升级为绑定操作并带 nonce 防重放的 v2；必须协调升级 TOTP 服务和 Herald
 代理，旧 HMAC 签名不再接受。仅使用 API key 的模式仍可用。
 保留 provider 凭据、TOTP 加密密钥和 Redis 数据。恢复流量前检查健康/就绪状态
-及所用认证模式下的真实操作，并遵循[安全要求](SECURITY.md)与 OTP pending
-协议迁移说明。邮件和钉钉发送有外部副作用，演练应使用隔离目标。
+及所用认证模式下的真实操作，并遵循[安全要求](SECURITY.md)与
+[pending challenge 迁移说明](MIGRATION_V2.md#pending-challenge-验证协议)。邮件和钉钉发送有外部副作用，演练应使用隔离目标。
 
 #### 邮件通道
 
@@ -311,12 +317,12 @@ fsync 和原子 rename。
 
 | 能力 | 启用条件 | 备注 |
 |------|----------|------|
-| 内置 SMTP | 未设置 `HERALD_SMTP_API_URL` | 使用 `SMTP_*` 直连 SMTP 服务 |
+| 内置 SMTP | 未设置 `HERALD_SMTP_API_URL` 且 `SMTP_HOST` 非空 | 使用 `SMTP_*` 直连 SMTP 服务 |
 | herald-smtp | `HERALD_SMTP_API_URL` 非空 | 设置后会覆盖内置 SMTP 通道 |
-| SMS HTTP API | `SMS_PROVIDER` 非空，且建议同时设置 `SMS_API_BASE_URL` | `SMS_API_KEY` 视网关要求 |
+| SMS HTTP API | `SMS_PROVIDER` 非空，且必须同时设置 `SMS_API_BASE_URL` | 缺少 `SMS_API_BASE_URL` 时启动失败；`SMS_API_KEY` 视网关要求 |
 | herald-dingtalk | `HERALD_DINGTALK_API_URL` 非空 | 可选 `HERALD_DINGTALK_API_KEY` |
 | herald-totp 代理 | `HERALD_TOTP_ENABLED=true` 且 `HERALD_TOTP_BASE_URL` 非空 | 可选 `HERALD_TOTP_API_KEY` / `HERALD_TOTP_HMAC_SECRET` |
-| OTLP | `OTLP_ENABLED=true` 且建议配置 `OTLP_ENDPOINT` | 推荐在生产明确设置 endpoint |
+| OTLP | `OTLP_ENABLED=true` 且 `OTLP_ENDPOINT` 非空 | endpoint 为空时不导出任何 span |
 
 ### Redis 配置
 
@@ -325,7 +331,7 @@ fsync 和原子 rename。
 对于生产部署，**强烈建议**为 Herald 使用专用的 Redis 实例或单独的数据库索引，以避免与其他服务的键空间冲突。
 
 **键前缀：**
-- `otp:ch:*` - 挑战数据（TTL：挑战过期时间）
+- `otp2:ch:*` - 挑战数据（TTL：挑战过期时间）
 - `ratelimit:*` - 速率限制计数器（TTL：速率限制窗口）
 - `otp:idem2:*` - 幂等记录（发送前占位和已完成响应：`IDEMPOTENCY_KEY_TTL`；不确定发送：`IDEMPOTENCY_UNRESOLVED_TTL`）
 - `otp:lock:v2:<digest>` - 用户锁定记录（TTL：锁定持续时间）。`<digest>` 是由用户 ID 结合 `HERALD_PII_PEPPER` 派生的摘要
@@ -486,12 +492,12 @@ Redis 记录或客户端签名。CORS 是浏览器来源边界，API Key/HMAC �
 ### 服务权限与指标凭据
 
 `HERALD_SERVICE_POLICIES` 为可选配置，用于把每个已配置的 HMAC Key ID 绑定到一个服务及其
-允许的操作。它要求使用 HMAC v2/v3 认证，并停用旧版 v1 兼容。策略格式以及共享用户命名空间
-的限制见[服务操作策略](../enUS/SECURITY.md#limit-service-actions)（英文）。
+允许的操作。它要求使用 HMAC v2/v3 认证，且旧版 v1 兼容处于关闭状态（`HMAC_V1_ENABLED=false`），否则启动失败。策略格式以及共享用户命名空间
+的限制见[服务操作策略](SECURITY.md#限制服务操作)。
 
 生产环境抓取指标现在要求配置 `HERALD_METRICS_API_KEY`（至少 32 字节）；未配置时
 `/metrics` 返回 401。部署前应配置一个不同于业务凭据的随机密钥，并更新 Prometheus。见
-[指标抓取凭据](MONITORING.md#基本抓取配置)。
+[指标认证](MONITORING.md#指标认证)。
 
 未知的 `ENVIRONMENT` 和 `REQUEST_AUTH_MODE` 值会在启动前被拒绝。受支持的认证别名通过与
 路由相同的解析器规范化。显式设置的开发和测试环境保留原有策略；未设置环境时仍默认为

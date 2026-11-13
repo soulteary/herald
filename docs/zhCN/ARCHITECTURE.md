@@ -77,9 +77,9 @@ flowchart LR
 
 ### Herald ↔ Redis
 
-- **Challenge 数据**：`otp:ch:*` — challenge 载荷、验证码哈希、TTL、尝试次数。
+- **Challenge 数据**：`otp2:ch:*` — challenge 载荷、验证码哈希、TTL、尝试次数。
 - **限流**：`ratelimit:*` — 按用户、IP、destination 限流。
-- **幂等**：`otp:idem2:*` — 发送前占位、不自动过期的发送记录或缓存的 challenge 响应。
+- **幂等**：`otp:idem2:*` — 发送前占位、不确定发送记录（在 `IDEMPOTENCY_UNRESOLVED_TTL` 后过期；更早版本写入的记录无 TTL）或缓存的 challenge 响应。
 
 ## 安全边界
 
