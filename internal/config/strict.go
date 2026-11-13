@@ -94,6 +94,12 @@ func strictHTTPProblems() []string {
 	if LockoutChallengeThreshold < 1 {
 		problems = append(problems, "LOCKOUT_CHALLENGE_THRESHOLD must be at least 1")
 	}
+	if FailedAttemptLockThreshold < 0 {
+		problems = append(problems, "LOCKOUT_FAILED_ATTEMPT_THRESHOLD must not be negative (0 disables it)")
+	}
+	if FailedAttemptLockThreshold > 0 && FailedAttemptLockWindow <= 0 {
+		problems = append(problems, "LOCKOUT_FAILED_ATTEMPT_WINDOW must be positive when LOCKOUT_FAILED_ATTEMPT_THRESHOLD is set")
+	}
 	if CodeLength < 4 {
 		problems = append(problems, "CODE_LENGTH must be at least 4")
 	}

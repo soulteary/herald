@@ -35,10 +35,17 @@ type userLockFixture struct {
 func newUserLockFixture(t *testing.T, threshold int) *userLockFixture {
 	t.Helper()
 	oldThreshold, oldLockout, oldPepper := config.LockoutChallengeThreshold, config.LockoutDuration, config.PIIPepper
+	oldFailedThreshold, oldFailedWindow := config.FailedAttemptLockThreshold, config.FailedAttemptLockWindow
 	t.Cleanup(func() {
 		config.LockoutChallengeThreshold, config.LockoutDuration, config.PIIPepper = oldThreshold, oldLockout, oldPepper
+		config.FailedAttemptLockThreshold, config.FailedAttemptLockWindow = oldFailedThreshold, oldFailedWindow
 	})
 	config.LockoutChallengeThreshold, config.LockoutDuration, config.PIIPepper = threshold, 10*time.Minute, "user-lock-test-pepper"
+	// These tests cover the exhausted-challenge policy on its own. The count
+	// of wrong codes across challenges is a second, independent way to lock a
+	// user and is switched off here; failed_attempts_test.go covers it and
+	// the two together.
+	config.FailedAttemptLockThreshold = 0
 	f := &userLockFixture{creationLimitFixture: newCreationLimitFixture(t)}
 	f.rc = f.h.redis
 	f.app.Post("/v1/otp/verifications", f.h.VerifyChallenge)

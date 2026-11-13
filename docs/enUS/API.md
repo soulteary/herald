@@ -210,7 +210,7 @@ Possible error codes:
 - `destination_required`: Missing required field `destination`
 - `rate_limit_exceeded`: Rate limit exceeded
 - `resend_cooldown`: Resend cooldown period not expired
-- `user_locked`: User is temporarily locked: `LOCKOUT_CHALLENGE_THRESHOLD` challenges were exhausted within `LOCKOUT_DURATION`. An exhausted challenge alone answers `locked`
+- `user_locked`: User is temporarily locked: `LOCKOUT_CHALLENGE_THRESHOLD` challenges were exhausted within `LOCKOUT_DURATION`, or `LOCKOUT_FAILED_ATTEMPT_THRESHOLD` wrong codes were submitted within `LOCKOUT_FAILED_ATTEMPT_WINDOW`. An exhausted challenge alone answers `locked`
 - `send_failed`: Failed to send verification code via provider
 - `internal_error`: Internal server error
 
@@ -515,7 +515,7 @@ HMAC/API-key failures use a JSON `reason` value:
 - `resend_cooldown`: Resend cooldown period not expired
 
 ### User Status Errors
-- `user_locked`: User is temporarily locked: `LOCKOUT_CHALLENGE_THRESHOLD` challenges were exhausted within `LOCKOUT_DURATION`. An exhausted challenge alone answers `locked`
+- `user_locked`: User is temporarily locked: `LOCKOUT_CHALLENGE_THRESHOLD` challenges were exhausted within `LOCKOUT_DURATION`, or `LOCKOUT_FAILED_ATTEMPT_THRESHOLD` wrong codes were submitted within `LOCKOUT_FAILED_ATTEMPT_WINDOW`. An exhausted challenge alone answers `locked`
 
 ### Additional transport and storage reasons
 - `invalid_destination`: Destination validation failed.

@@ -17,6 +17,7 @@ func TestSecurityAndAuditCountersRecordOneEvent(t *testing.T) {
 		{"timeout", func() { RecordProviderTimeout("email") }, func() float64 { return counterValue(t, providerTimeoutTotal.WithLabelValues("email")) }},
 		{"contention", func() { RecordVerificationContention("contended") }, func() float64 { return counterValue(t, verificationContention.WithLabelValues("contended")) }},
 		{"nonce", RecordNonceReplay, func() float64 { return counterValue(t, nonceReplayTotal) }},
+		{"failed attempt lock", RecordFailedAttemptLock, func() float64 { return counterValue(t, failedAttemptLockTotal) }},
 		{"state", func() { RecordChallengeState("revoked") }, func() float64 { return counterValue(t, challengeStateTotal.WithLabelValues("revoked")) }},
 		{"audit rejected", RecordAuditDropped, func() float64 { return counterValue(t, auditDroppedTotal) }},
 		{"audit retry", RecordAuditWriteFailure, func() float64 { return counterValue(t, auditWriteFailureTotal) }},

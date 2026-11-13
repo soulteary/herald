@@ -68,3 +68,26 @@ func TestLockoutChallengeThresholdMinimumIsOne(t *testing.T) {
 		t.Fatalf("threshold 1 rejected: %v", err)
 	}
 }
+
+func TestFailedAttemptLockBounds(t *testing.T) {
+	oldThreshold, oldWindow := FailedAttemptLockThreshold, FailedAttemptLockWindow
+	defer func() { FailedAttemptLockThreshold, FailedAttemptLockWindow = oldThreshold, oldWindow }()
+
+	FailedAttemptLockThreshold, FailedAttemptLockWindow = -1, time.Hour
+	if err := validateStrictSettings(); err == nil || !strings.Contains(err.Error(), "LOCKOUT_FAILED_ATTEMPT_THRESHOLD must not be negative") {
+		t.Fatalf("negative threshold: %v", err)
+	}
+	FailedAttemptLockThreshold, FailedAttemptLockWindow = 15, 0
+	if err := validateStrictSettings(); err == nil || !strings.Contains(err.Error(), "LOCKOUT_FAILED_ATTEMPT_WINDOW must be positive") {
+		t.Fatalf("zero window: %v", err)
+	}
+	// A disabled count does not need a window.
+	FailedAttemptLockThreshold, FailedAttemptLockWindow = 0, 0
+	if err := validateStrictSettings(); err != nil && strings.Contains(err.Error(), "LOCKOUT_FAILED_ATTEMPT") {
+		t.Fatalf("disabled count rejected: %v", err)
+	}
+	FailedAttemptLockThreshold, FailedAttemptLockWindow = 15, time.Hour
+	if err := validateStrictSettings(); err != nil && strings.Contains(err.Error(), "LOCKOUT_FAILED_ATTEMPT") {
+		t.Fatalf("defaults rejected: %v", err)
+	}
+}
