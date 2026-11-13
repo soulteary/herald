@@ -121,26 +121,6 @@ func TestRecordRateLimitHit(t *testing.T) {
 	}
 }
 
-func TestRecordRedisLatency(t *testing.T) {
-	// Reset metrics before test
-	Redis.OperationDuration.Reset()
-
-	duration := 5 * time.Millisecond
-	RecordRedisLatency("get", duration)
-
-	// Verify metric was recorded (histograms use Observe, not Write)
-	// We can't easily test histogram values without gathering metrics
-	// Just verify the metric exists and can be observed
-	Redis.OperationDuration.WithLabelValues("get").Observe(0.005)
-
-	// Test different operations
-	operations := []string{"set", "del", "exists"}
-	for _, op := range operations {
-		RecordRedisLatency(op, duration)
-		Redis.OperationDuration.WithLabelValues(op).Observe(0.005)
-	}
-}
-
 func TestMetricsMultipleIncrements(t *testing.T) {
 	// Reset metrics before test
 	OTP.ChallengesTotal.Reset()

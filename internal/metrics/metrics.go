@@ -144,11 +144,6 @@ func RecordRateLimitHit(scope string) {
 	RateLimit.RecordHit(scope)
 }
 
-// RecordRedisLatency records Redis operation latency
-func RecordRedisLatency(operation string, duration time.Duration) {
-	Redis.RecordSuccess(operation, duration)
-}
-
 // RecordRedisSuccess records a successful Redis operation
 func RecordRedisSuccess(operation string, duration time.Duration) {
 	Redis.RecordSuccess(operation, duration)
