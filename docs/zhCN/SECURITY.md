@@ -8,12 +8,12 @@
 
 1. **基于 Challenge 的验证**: 使用 challenge-verify 模型防止重放攻击，确保验证码一次性使用
 2. **安全代码存储**: 验证码使用 Argon2 哈希存储，从不以明文形式存储
-3. **多维度限流**: 按 user_id、destination（邮箱/手机）和 IP 地址进行限流，防止滥用
+3. **多维度限流**: 按 user_id、destination（邮箱/手机）和 IP 地址进行限流，防止滥用。各项限额要么一并消耗，要么都不消耗，因此被拒绝的请求（因限额、冷却或用户锁定）不会占用其他用户或目标地址的配额
 4. **服务认证**: 使用 HMAC 或 API Key 请求认证，mTLS 可作为额外的传输策略
 5. **幂等性保护**: 使用幂等键防止重复创建 challenge 和重复发送验证码
 6. **Challenge 过期**: Challenge 自动过期，可配置 TTL
 7. **尝试次数限制**: 每个 challenge 的最大尝试次数限制，防止暴力破解
-8. **重发冷却**: 防止快速重发验证码
+8. **重发冷却**: 防止快速重发验证码，既按用户与目标地址生效，也按目标地址单独生效，因此更换 `user_id` 无法绕过
 9. **审计日志**: 所有操作的完整审计跟踪，包括发送、验证和失败
 10. **Provider 安全**: 与邮件和短信提供商的安全通信
 
@@ -89,7 +89,19 @@ Herald 实现多维度限流以防止滥用：
 **限流维度**:
 - **按用户 ID**: 限制每个 user_id 在时间窗口内的 challenge 数量
 - **按目标地址**: 限制每个邮箱/手机号在时间窗口内的 challenge 数量
-- **按 IP 地址**: 限制每个客户端 IP 在时间窗口内的 challenge 数量
+- **按 IP 地址**: 限制每个调用方地址在时间窗口内的 challenge 数量
+
+按 IP 的限流以 Herald 看到的调用方地址为键，而不是请求正文中的 `client_ip` 字段；该字段仅
+用于审计记录。当 Stargate 等网关直接调用 Herald 时，所有终端用户都来自网关的地址，并共用
+一份 `RATE_LIMIT_PER_IP` 配额。如需按终端用户限流：
+
+1. 设置 `HERALD_TRUSTED_PROXY_HEADER`（例如 `X-Forwarded-For`），并在
+   `HERALD_TRUSTED_PROXIES` 中列出网关的地址或 CIDR。
+2. 让网关在该请求头中发送终端用户地址。使用 `WithClientIPHeader` 构建客户端时，Go SDK
+   会这样做。
+
+Herald 只从 `HERALD_TRUSTED_PROXIES` 中的对端读取该请求头。未做此配置时，应按网关的总请求
+速率设定 `RATE_LIMIT_PER_IP`。
 
 **配置示例**:
 ```bash
@@ -199,7 +211,9 @@ export CLIENT_CERT_MODE=require
 - 限制 Redis 的网络访问（仅允许 Herald 服务访问）
 - 使用 Redis AUTH 进行认证
 - 定期更新 Redis 以修复已知漏洞
-- Herald 未提供原生 Redis TLS 配置；需要 Redis 传输加密时，使用受保护的私有网络或经过认证的加密隧道
+- 设置 `REDIS_TLS_ENABLED=true` 可加密 Redis 连接。服务端证书始终会被校验：设置了 `REDIS_TLS_CA_FILE` 时使用该文件，否则使用系统根证书；没有跳过校验的选项。不支持 Redis 客户端证书。TLS 默认关闭，未启用时应使用受保护的私有网络
+- 设置 `REDIS_USERNAME` 可作为仅具备 Herald 所需权限的 Redis ACL 用户进行认证，而不使用默认用户
+- 生产环境中，设置了 `REDIS_TLS_CA_FILE` 或 `REDIS_TLS_SERVER_NAME` 但未设置 `REDIS_TLS_ENABLED=true`，或设置了 `REDIS_USERNAME` 但未设置 `REDIS_PASSWORD` 时会拒绝启动，因为这些设置否则会被忽略
 
 ### 审计日志
 
@@ -262,6 +276,23 @@ export CHALLENGE_EXPIRY=5m
 export MAX_ATTEMPTS=5
 export RESEND_COOLDOWN=60s
 ```
+
+### 短信目标地址规范化
+
+按目标地址的限流和重发冷却以校验后目标地址的规范形式为键。对于短信，会去除开头的 `+` 和
+国际拨号前缀 `00`，因此 `+8613800138000`、`8613800138000` 和 `008613800138000` 共用一份
+配额和一个冷却。空格和分隔符此前已被忽略。
+
+此规范化的限制：
+
+- 不推断国家代码。国内号码（`13800138000`）与其国际形式（`+8613800138000`）仍是不同的
+  限流身份。调用方应统一使用一种格式，建议使用 E.164。
+- 仅限流键发生变化。存储的 challenge、审计记录、幂等指纹以及发送给 provider 的值仍保留
+  校验后的目标地址。
+- 不识别 `00` 以外的拨号前缀（例如 `011`）。
+
+升级后，此前以 `+` 或 `00` 发送的号码会使用新的按目标地址计数键和冷却键；旧键按原有 TTL
+过期。
 
 ## 错误处理
 
@@ -326,6 +357,24 @@ exception 事件、审计失败记录只保留已知原因码。未知原因码�
 本次只调整诊断数据；客户端响应、严格策略撤销和幂等 `delivery_unknown` 处理保持不变，
 无需迁移 Redis 记录或更新客户端。既有日志和已导出的 span 不会被改写；若渠道曾回显敏感数据，
 应核查历史诊断数据的访问范围和保留期限，并轮换其中已暴露的凭据。
+
+## 停用 v1 验证
+
+`POST /v1/otp/verifications` 只接受 challenge ID 和验证码，无法检查 challenge 是否属于调用方
+预期的用户、purpose 和渠道；`POST /v2/otp/verifications` 要求提供这三项。仍在使用 v1 的
+调用方即使其他调用方已迁移，也得不到 v2 的绑定。
+
+所有调用方都使用 v2 后，设置 `HERALD_VERIFY_V1_ENABLED=false`。此后 Herald 不注册 v1 验证
+路由，对它的请求会收到 `404/not_found`。创建 challenge、撤销、v2 验证和 TOTP 路由不受影响。
+默认值为 `true`，因此现有部署在主动关闭前会保留 v1 路由。Go SDK 的 `VerifyChallenge` 方法
+调用 v1；停用前应改用 `VerifyChallengeV2`。
+
+## 追踪中的用户标识
+
+创建 challenge 和验证的 span 携带 `user_id_digest`（与限流键使用的加 pepper 摘要相同），而不是
+原始 `user_id`。追踪后端的共享范围往往比审计存储更广，因此导出的 span 中不保留原始标识。
+审计记录不变，仍包含用户 ID。按 span 属性 `user_id` 过滤的追踪查询或看板必须改用
+`user_id_digest`。升级前导出的 span 不会被改写。
 
 ## 相关文档
 

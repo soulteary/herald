@@ -109,8 +109,9 @@ ID 改变、密钥内容不变后再次通过认证。
   `409/idempotency_in_flight`，已完成请求在 TTL 内重放响应。
 - 相同键 + **不同指纹字段** → `409 Conflict`。
 - 成功后精确响应会被存储，并在重试时**原样重放**。
-- 调用渠道前将占位记录转为不自动过期的 `sending` 状态。进程退出或发送后结果不确定时，
-  同一键返回 `409/delivery_unknown`，不能因 TTL 到期而重新发送。发送前的失败仍可释放或
+- 调用渠道前将占位记录转为 `sending` 状态。进程退出或发送后结果不确定时，
+  同一键返回 `409/delivery_unknown`。支持 `IDEMPOTENCY_UNRESOLVED_TTL` 的版本会在该时长
+  （默认 `24h`）后使该记录过期；更早的版本写入时不带 TTL。发送前的失败仍可释放或
   等待占位记录过期。
 - 最终成功记录写入失败返回 `503/backend_unavailable`；若写入已提交但确认丢失，重试会重放。
 - 渠道报错（包括 strict 模式）也保留发送记录，以牺牲自动恢复来避免重复发送。
@@ -148,6 +149,8 @@ ID 改变、密钥内容不变后再次通过认证。
 
 使用 `POST /v2/otp/verifications`，从业务后端可信状态提供 `expected_user_id`、
 `expected_purpose`、`expected_channel`。v1 验证接口没有调用方提供的上下文绑定，不能把它当作 v2 使用。
+所有调用方迁移到 v2 后，设置 `HERALD_VERIFY_V1_ENABLED=false` 可停止提供 v1 验证路由
+（默认 `true`）。
 
 ---
 
@@ -184,7 +187,7 @@ ID 改变、密钥内容不变后再次通过认证。
   SDK 期间保持旧客户端可用。
 - `HMAC_V1_ENABLED=true` 只影响兼容的非创建路由，不能恢复 v1/v2 创建请求。
   服务端与调用方需按 [API 认证](API.md#hmac-v3) 协调升级。
-- Redis 键为增量式（`otp:nonce:*`、`otp:idem2:*`）；不确定的 `sending` 记录不会自动过期，回滚时也需保留并核对。其他键按 TTL
+- Redis 键为增量式（`otp:nonce:*`、`otp:idem2:*`）；不确定的 `sending` 记录在支持 `IDEMPOTENCY_UNRESOLVED_TTL` 的版本中于该时长后过期，由更早版本写入的则不会过期；回滚时也需保留并核对。其他键按 TTL
   过期，无需破坏性迁移。
 
 ---
