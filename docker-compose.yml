@@ -22,6 +22,15 @@ services:
       - REQUEST_AUTH_MODE=api_key
       - API_KEY=${HERALD_API_KEY:?set HERALD_API_KEY}
       - PROVIDER_FAILURE_POLICY=strict
+      # Optional built-in SMTP provider for the email channel. Left empty, no
+      # email provider is registered and email challenges are refused. When
+      # SMTP_HOST is set, SMTP_FROM is required and the server must offer
+      # STARTTLS.
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM=${SMTP_FROM:-}
     volumes:
       - audit_spool:/var/lib/herald/audit
     depends_on:

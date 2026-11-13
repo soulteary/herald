@@ -59,6 +59,13 @@ The easiest way to get started is with Docker Compose, which includes Redis:
 export REDIS_PASSWORD="$(openssl rand -hex 32)"
 export HERALD_API_KEY="$(openssl rand -hex 32)"
 
+# Needed to send email codes (see "Test the API"). Use an SMTP server that
+# offers STARTTLS. Skip these to start Herald without a delivery provider.
+export SMTP_HOST="smtp.example.com"
+export SMTP_USER="herald@example.com"
+export SMTP_PASSWORD="your-smtp-password"
+export SMTP_FROM="herald@example.com"
+
 # Start Herald and Redis in API-key mode
 docker compose up -d
 
@@ -76,7 +83,11 @@ Expected response:
 
 ### Test the API
 
-Create a test challenge (requires authentication - see [API Documentation](docs/enUS/API.md)):
+Create a test challenge (requires authentication - see [API Documentation](docs/enUS/API.md)).
+Herald can only deliver a code on a channel that has a provider. The Compose
+file registers the built-in SMTP provider for the `email` channel when the
+`SMTP_*` variables above were set before `docker compose up`; replace
+`user@example.com` with an address you can read.
 
 ```bash
 # Reuse the key exported before docker compose up
@@ -93,6 +104,22 @@ curl -X POST http://localhost:8082/v1/otp/challenges \
     "purpose": "login"
   }'
 ```
+
+With a working SMTP provider the code is sent and the response is:
+
+```json
+{
+  "challenge_id": "ch_...",
+  "expires_in": 300,
+  "next_resend_in": 60
+}
+```
+
+Without a provider for the channel, or when the SMTP server rejects the
+message, no code is sent and the response is an error with `"ok": false` and a
+`reason`. The Compose stack uses the strict provider policy, so a failed
+delivery is never reported as success. For SMS, DingTalk and the HTTP email
+plugin see the [Deployment Guide](docs/enUS/DEPLOYMENT.md#configuration).
 
 ### View Logs
 
