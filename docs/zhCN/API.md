@@ -183,7 +183,7 @@ Go SDK 新增 `CreateChallengeWithMetadata`，返回原响应、`CreateChallenge
 - `destination_required`：缺少必需字段 `destination`
 - `rate_limit_exceeded`：超过速率限制
 - `resend_cooldown`：重发冷却期未过期
-- `user_locked`：用户暂时被锁定
+- `user_locked`：用户暂时被锁定：在 `LOCKOUT_DURATION` 内耗尽了 `LOCKOUT_CHALLENGE_THRESHOLD` 个挑战。单个挑战耗尽只返回 `locked`
 - `send_failed`：通过提供者发送验证码失败
 - `internal_error`：内部服务器错误
 
@@ -476,7 +476,7 @@ HMAC/API Key 失败会返回 JSON `reason`：
 - `resend_cooldown`：重发冷却期未过期
 
 ### 用户状态错误
-- `user_locked`：用户暂时被锁定
+- `user_locked`：用户暂时被锁定：在 `LOCKOUT_DURATION` 内耗尽了 `LOCKOUT_CHALLENGE_THRESHOLD` 个挑战。单个挑战耗尽只返回 `locked`
 
 ### 其他传输与存储原因
 - `invalid_destination`：目标地址校验失败。

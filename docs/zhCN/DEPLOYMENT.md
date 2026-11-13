@@ -38,7 +38,8 @@ export ENVIRONMENT=production REQUEST_AUTH_MODE=api_key PROVIDER_FAILURE_POLICY=
 - 部分变量使用较短名称（例如：`REDIS_ADDR`、`API_KEY`、`HMAC_SECRET`）
 
 必须使用下表中的准确名称，不能任意添加或删除 `HERALD_` 前缀。
-`HERALD_API_KEY` 是 Compose 输入，会映射为进程的 `API_KEY`；仅明确列出的别名有效。
+`HERALD_API_KEY` 是 Compose 输入，会映射为进程的 `API_KEY`；Herald 不读取
+`HERALD_REDIS_ADDR`。仅明确列出的别名有效。
 
 ### `REDIS_ADDR` 与 `HERALD_REDIS_*` 约定
 
@@ -55,13 +56,18 @@ export ENVIRONMENT=production REQUEST_AUTH_MODE=api_key PROVIDER_FAILURE_POLICY=
 
 以下与代码实现一致（参见 `internal/config/config.go`）。
 
+取值格式在启动时检查。布尔值必须是 `1`、`t`、`T`、`TRUE`、`true`、`True`、`0`、`f`、`F`、
+`FALSE`、`false`、`False` 之一；不接受 `yes`、`on` 以及首尾带空白的值。整数必须是普通的
+十进制数字。时长必须带单位，例如 `60s` 或 `5m`；不接受 `60`。生产环境中，格式错误的值会
+阻止启动；其他环境中 Herald 记录警告并使用默认值。
+
 #### 服务与 Redis
 
 | 变量 | 描述 | 默认值 | 必需 |
 |------|------|--------|------|
-| `ENVIRONMENT` | 运行策略：`development`/`dev`、`test`/`testing`、`production`/`prod`；未知值拒绝启动 | `development` | 生产设置 `production` |
+| `ENVIRONMENT` | 运行策略：`development`/`dev`、`test`/`testing`、`production`/`prod`；未知值拒绝启动。未设置时 Herald 会在启动时记录警告，因为此时不会强制执行生产校验；后续版本将在未设置时拒绝启动 | `development` | 请显式设置；生产设置 `production` |
 | `PORT` | 服务器监听端口（可带或不带前导冒号，如 `8082` 或 `:8082`） | `:8082` | 否 |
-| `REDIS_ADDR` | Redis 地址 | `localhost:6379` | 否 |
+| `REDIS_ADDR` | Redis 地址（`host:port`）；无效值在生产环境会导致启动失败，在其他环境回退到默认值并记录警告 | `localhost:6379` | 否 |
 | `REDIS_PASSWORD` | Redis 密码 | （空） | 生产必需，除非显式风险确认 |
 | `REDIS_DB` | Redis 数据库索引 | `0` | 否 |
 | `REDIS_USERNAME` | Redis ACL 用户名；留空使用默认用户。须同时设置 `REDIS_PASSWORD` | （空） | 否 |
@@ -81,6 +87,8 @@ export ENVIRONMENT=production REQUEST_AUTH_MODE=api_key PROVIDER_FAILURE_POLICY=
 | `HERALD_TRUSTED_PROXY_HEADER` | 转发客户端 IP 的请求头；仅信任允许列表中的代理 | （空） | 配置可信代理时 |
 | `HERALD_TRUSTED_PROXIES` | 可信代理 IP/CIDR 允许列表，逗号分隔 | （空） | 配置代理请求头时 |
 
+这两项设置还决定 `RATE_LIMIT_PER_IP` 的计数对象。未配置时，限额按直连对端计算，因此代表众多终端用户调用 Herald 的网关会让这些用户共用一份配额。配置后，可信网关可以转发终端用户地址（Go SDK：`WithClientIPHeader`），限额按终端用户计算。
+
 Herald 从右向左解析转发 IP 链，仅跳过明确配置为可信的代理节点，并将遇到的第一个不可信地址作为客户端 IP；不会自动信任调用方可控的最左侧前缀。
 
 #### 服务间认证
@@ -90,15 +98,14 @@ Herald 从右向左解析转发 IP 链，仅跳过明确配置为可信的代理
 | `REQUEST_AUTH_MODE` | 请求认证：`hmac_v2`、`api_key` 或 `none`（仅开发） | `hmac_v2` | 生产必需 |
 | `API_KEY` | `api_key` 模式密钥；生产至少 32 字节 | （空） | API Key 模式 |
 | `HMAC_SECRET` | 单 HMAC 密钥；生产至少 32 字节 | （空） | HMAC 单密钥模式 |
-| `HERALD_HMAC_KEYS` | HMAC 密钥映射；ID/密钥不得为空，生产密钥至少 32 字节 | （空） | HMAC 多密钥模式 |
+| `HERALD_HMAC_KEYS` | HMAC 密钥映射；ID/密钥不得为空，生产密钥至少 32 字节。已设置但格式错误的映射在生产环境会导致启动失败；其他环境会忽略该映射并记录警告，改用 `HMAC_SECRET` | （空） | HMAC 多密钥模式 |
 | `HERALD_HMAC_DEFAULT_KEY_ID` | 配置查找默认项；密钥 map 的 v2/v3 请求仍必须显式发送 `X-Key-Id` | （空） | 可选 |
 | `HMAC_MAX_DRIFT` | HMAC v2/v3 时间戳允许偏差 | `60s` | 否 |
 | `HMAC_V1_ENABLED` | 临时启用旧版 HMAC v1 | `false` | 否 |
-| `HERALD_IDEMPOTENCY_SECRET` | 幂等记录密钥；生产仅配置多 HMAC 密钥时必需 | （空） | 条件必需 |
+| `HERALD_IDEMPOTENCY_SECRET` | 不透明幂等记录的密钥；生产仅配置多 HMAC 密钥时必需。非生产环境未设置时，Herald 依次使用 `HMAC_SECRET`、`API_KEY`、由 `HERALD_HMAC_KEYS` 派生的值；三者都没有时，每次启动生成一个随机值并记录警告，此时幂等、nonce、限流和冷却记录不在实例间共享，重启后也不会保留 | （空） | 条件必需 |
 | `HERALD_PII_PEPPER` | PII 派生 Redis/指标键的 pepper；生产至少 32 字节 | （空） | 建议 |
 
-`hmac_v2` 和 `api_key` 模式缺少可用凭据时会拒绝请求。只有显式选择 `REQUEST_AUTH_MODE=none`
-才会跳过请求认证，且生产环境禁止此模式。
+缺少凭据不会关闭认证。使用 `REQUEST_AUTH_MODE=hmac_v2`（默认）但未配置 `HMAC_SECRET`/`HERALD_HMAC_KEYS`，或使用 `api_key` 但未配置 `API_KEY` 时，Herald 在非生产环境启动时记录警告，所有需要认证的端点在配置凭据前均返回 401；生产环境拒绝启动。只有 `REQUEST_AUTH_MODE=none`（仅限开发/测试）接受未经认证的请求。
 
 #### OTP/Challenge
 
@@ -106,11 +113,13 @@ Herald 从右向左解析转发 IP 链，仅跳过明确配置为可信的代理
 |------|------|--------|------|
 | `HERALD_MAX_CONCURRENT_HASH_OPERATIONS` | 每个 handler 实例中创建与 v1/v2 验证共享的并发预算，必须为正整数 | `4` | 否 |
 | `CHALLENGE_EXPIRY` | Challenge 过期时间（如 `5m`、`300s`） | `5m` | 否 |
-| `MAX_ATTEMPTS` | 单 challenge 最大验证失败次数，超过后锁定 | `5` | 否 |
-| `LOCKOUT_DURATION` | 锁定持续时间（如 `10m`） | `10m` | 否 |
-| `RESEND_COOLDOWN` | 同一用户与 destination 两次创建 challenge 的最小间隔，必须为正值 | `60s` | 否 |
+| `MAX_ATTEMPTS` | 单个 challenge 可接受的错误验证码次数，达到后该 challenge 耗尽并返回 `locked` | `5` | 否 |
+| `LOCKOUT_DURATION` | 被锁定用户保持锁定的时长，也是统计已耗尽 challenge 的时间窗口（如 `10m`） | `10m` | 否 |
+| `LOCKOUT_CHALLENGE_THRESHOLD` | 用户在 `LOCKOUT_DURATION` 内（自第一个耗尽的 challenge 起计）须耗尽多少个 challenge（每个 `MAX_ATTEMPTS` 次错误验证码）才会被锁定。`1` 表示第一个 challenge 耗尽即锁定，与 v1.6.0 的行为相同。最小值 `1` | `3` | 否 |
+| `RESEND_COOLDOWN` | 同一用户与 destination 两次创建 challenge 的最小间隔，同一 destination 不论用户也适用该间隔；必须为正值 | `60s` | 否 |
 | `CODE_LENGTH` | 验证码位数（最小 `4`；还须在扣除紧凑的上下文绑定 V2 请求封装后不超过 `HERALD_MAX_BODY_BYTES`，当前封装为 136 字节） | `6` | 否 |
-| `IDEMPOTENCY_KEY_TTL` | 发送前占位和成功响应的 TTL；不确定发送记录不过期；`0` 表示使用 `CHALLENGE_EXPIRY` | `0` | 否 |
+| `IDEMPOTENCY_KEY_TTL` | 发送前占位和已完成响应的 TTL；不确定发送使用 `IDEMPOTENCY_UNRESOLVED_TTL`；`0` 表示使用 `CHALLENGE_EXPIRY` | `0` | 否 |
+| `IDEMPOTENCY_UNRESOLVED_TTL` | 已开始发送但尚未完成的幂等键持续返回 `409/delivery_unknown` 的时长。必须为正值，且大于 `IDEMPOTENCY_KEY_TTL`（该值为 `0` 时取 `CHALLENGE_EXPIRY`），否则启动失败。到期后该键可以发起新请求 | `24h` | 否 |
 | `ALLOWED_PURPOSES` | 允许的 purpose，逗号分隔，如 `login,reset,bind,stepup` | `login` | 否 |
 | `HERALD_VERIFY_V1_ENABLED` | 是否注册 `POST /v1/otp/verifications`（该路由不校验预期的用户、purpose 和渠道）。所有调用方改用 `POST /v2/otp/verifications` 后可设为 `false`，此后 v1 路由返回 404 | `true` | 否 |
 
@@ -237,13 +246,16 @@ fsync 和原子 rename。
 
 目录不可用时启动失败；缓冲写满或运行中本地写入失败时，相关接口返回
 `503/audit_unavailable`，不会返回业务成功。创建请求的首次审计失败会阻止发送；
-验证和撤销操作会在改变 challenge 状态前记录尝试。若后续结果记录写入失败，已发生的
-业务操作不会回滚；对于不确定的发送结果，应使用相同幂等键查询或重试，不能直接补发。
+验证和撤销操作会在改变 challenge 状态前记录尝试。在消息已被接受、验证码已被消费或撤销
+已完成之后，结果记录写入失败不会改变响应：请求成功，
+`herald_audit_post_action_failure_total{operation}` 加一，并以一条 error 日志记录该事件。
+应对该计数器配置告警，因为这些事件不会出现在审计记录中。
+对于不确定的发送结果，应使用相同幂等键查询或重试，不能直接补发。
 待投递文件不自动过期，受字节上限约束，需监控磁盘空间和投递失败。
 
 投递语义为**至少一次**：后端已提交但本地文件尚未删除时退出，会以相同 `event_id` 回放，
 下游可据此去重。destination 在本地落盘前脱敏。请保护和备份持久卷；文件系统或卷丢失
-不在保障范围内。后端审计 TTL 不会淘汰本地待投递文件。
+不在保障范围内。后端审计 TTL 在投递后生效，不会淘汰本地待投递文件。
 显式设置 `AUDIT_ENABLED=false` 会关闭审计及这些检查。
 
 
@@ -268,7 +280,7 @@ fsync 和原子 rename。
 仅当同时设置 `ENVIRONMENT=test` 和 `HERALD_TEST_MODE=true` 时：
 
 - 创建 challenge 的响应中会包含 `debug_code` 字段（明文验证码），便于调用方（如 Stargate 在 `DEBUG=true` 时）在登录页直接展示。
-- 会开放接口 `GET /v1/test/code/:challenge_id`，用于根据 challenge_id 查询验证码（供集成测试或 Stargate 在创建响应未带 `debug_code` 时回退使用）。
+- `GET /v1/test/code/:challenge_id` 挂载在独立的 `HERALD_TEST_LISTENER_ADDR` 监听器上（默认 `127.0.0.1:18082`），不在主监听器上。请求须携带 `X-Test-Api-Key: $HERALD_TEST_API_KEY`（或使用 Bearer 认证）。
 
 **安全：** 生产环境必须设置 `HERALD_TEST_MODE=false`。测试模式会暴露验证码，不得在生产环境使用。
 
@@ -315,8 +327,9 @@ fsync 和原子 rename。
 **键前缀：**
 - `otp:ch:*` - 挑战数据（TTL：挑战过期时间）
 - `ratelimit:*` - 速率限制计数器（TTL：速率限制窗口）
-- `otp:idem2:*` - 幂等记录（发送前占位和成功响应按配置 TTL 过期；不确定发送不过期）
-- `otp:lock:*` - 用户锁定记录（TTL：锁定持续时间）
+- `otp:idem2:*` - 幂等记录（发送前占位和已完成响应：`IDEMPOTENCY_KEY_TTL`；不确定发送：`IDEMPOTENCY_UNRESOLVED_TTL`）
+- `otp:lock:v2:<digest>` - 用户锁定记录（TTL：锁定持续时间）。`<digest>` 是由用户 ID 结合 `HERALD_PII_PEPPER` 派生的摘要
+- `otp:lock:exhausted:<digest>` - 计入锁定的已耗尽 challenge（TTL：自第一个起计的锁定持续时间）
 
 **不确定的发送记录：**
 
@@ -325,21 +338,26 @@ fsync 和原子 rename。
 配置 Redis 持久化和故障转移。在存在未核对记录或仍可能重试时，不要清空数据库或轮换
 `HERALD_IDEMPOTENCY_SECRET`，否则派生键变化会绕过旧记录。
 
-`sending` 状态记录不设 TTL，包含用于核对的 `challenge_id`。监控 `delivery_unknown`
-结果和未完成记录数量，并用该 challenge ID（也是传给渠道的幂等键）查询渠道日志。
-管理员处理记录前需确认原请求已停止、投递结果已核实，不能自动过期或删除记录，也不能
-直接换键重发；确需补发时应作为业务上的独立决定处理。持久化后、发送前退出也会留下
-记录，因此需要为人工核对和存储容量留出空间。这保证不确定键最多尝试发送一次，不保证投递成功。
+`sending` 状态记录在 `IDEMPOTENCY_UNRESOLVED_TTL`（默认 `24h`）后过期，包含用于核对的
+`challenge_id`。在此之前该键返回 `409/delivery_unknown`。监控 `delivery_unknown` 幂等
+结果和未完成记录数量。管理员处理记录前，应先用该 challenge ID（也是传给渠道的幂等键）
+查询渠道投递日志。不要提前删除这些记录：原请求可能仍在执行，其消息也可能已经送达。
+确需补发时，应作为一项单独、明确的业务决定处理。TTL 到期后记录被移除，使用相同键的请求
+视为新请求，因此取值应长于客户端对同一个键持续重试的时间。在 TTL 内，这保证不确定键最多
+尝试发送一次，不保证投递成功。
+
+`IDEMPOTENCY_UNRESOLVED_TTL` 出现之前的版本写入的无 TTL 记录不会被修改，也不会过期。
+仍按原有方式核对并移除这些记录。
 
 **容量规划：**
 
 使用代表性流量测量载荷和 Redis 开销，计入 challenge、激活索引、会过期的已完成幂等响应、
-不自动过期的不确定发送、限流/冷却、nonce 和审计保留。峰值速率乘以 challenge TTL 不能
+在 `IDEMPOTENCY_UNRESOLVED_TTL` 内保留的不确定发送、限流/冷却、nonce 和审计保留。峰值速率乘以 challenge TTL 不能
 界定总容量。持久化审计缓冲磁盘及进程哈希预算需另行规划，并结合 `MEMORY USAGE`、键数量
 和保留记录增长量调整配置。
 
 `REDIS_ADDR` 指定单一 Redis 端点；Herald 未提供原生 Cluster 或 Sentinel 发现配置。
-高可用部署使用外部管理的故障切换端点并保留数据，不应假定多键激活脚本兼容 Redis Cluster。
+高可用部署使用外部管理的故障切换端点并保留数据。多键激活脚本和幂等脚本不兼容 Redis Cluster。
 
 ## 与其他服务集成（可选）
 
@@ -417,7 +435,7 @@ scrape_configs:
 
 当前单次 Argon2 约需 64 MiB。应结合内存、CPU、垃圾回收和进程其他开销配置预算，不能将它
 视作进程 RSS 的硬上限。超额请求不排队，返回 `503/backend_unavailable` 和 `Retry-After: 1`。
-创建准入先于限流和冷却写入；Redis 可用时会释放该请求的发送前幂等占位。即使预算已满，
+创建准入先于用户锁定检查以及限流和冷却步骤；Redis 可用时会释放该请求的发送前幂等占位。即使预算已满，
 已完成幂等响应仍可重放。被拒绝的验证不会消费验证码或增加尝试次数。
 
 验码锁发生竞争时只立即尝试一次，返回现有的可重试 `409/lock_contention`，不占用预算轮询等待。
@@ -431,7 +449,7 @@ HMAC 部署先暂停创建流量、排空在途创建请求，再替换全部旧
 `HERALD_IDEMPOTENCY_SECRET`；改变派生密钥会绕过全部已有幂等记录。
 
 旧空 Key ID 记录保持原样，相同服务/客户端键返回 `409/idempotency_namespace_conflict`，
-需由运维核对，不能改键自动重试。不自动过期的发送记录继续保留，不能根据当前默认密钥猜测
+需由运维核对，不能改键自动重试。更早版本写入的无 TTL 发送记录仍不带 TTL。不能根据当前默认密钥猜测
 原凭据，也不能在密钥轮换后盲目重放或迁移旧响应。没有旧记录冲突时，仍获授权的显式 Key ID 记录继续正常使用。
 
 旧版本无法执行此保护。回滚前保持创建停用，直到受影响记录和调用身份已核对完成，且不能在
@@ -464,6 +482,20 @@ HMAC 部署先暂停创建流量、排空在途创建请求，再替换全部旧
 升级前移除独立通配项，只保留预期来源，或清空配置关闭 CORS。回滚前同样应修正配置，旧版本
 仍接受混合通配列表。开发/测试环境的通配支持、正常显式列表及请求认证保持不变，无需迁移
 Redis 记录或客户端签名。CORS 是浏览器来源边界，API Key/HMAC 认证仍独立执行。
+
+### 服务权限与指标凭据
+
+`HERALD_SERVICE_POLICIES` 为可选配置，用于把每个已配置的 HMAC Key ID 绑定到一个服务及其
+允许的操作。它要求使用 HMAC v2/v3 认证，并停用旧版 v1 兼容。策略格式以及共享用户命名空间
+的限制见[服务操作策略](../enUS/SECURITY.md#limit-service-actions)（英文）。
+
+生产环境抓取指标现在要求配置 `HERALD_METRICS_API_KEY`（至少 32 字节）；未配置时
+`/metrics` 返回 401。部署前应配置一个不同于业务凭据的随机密钥，并更新 Prometheus。见
+[指标抓取凭据](MONITORING.md#基本抓取配置)。
+
+未知的 `ENVIRONMENT` 和 `REQUEST_AUTH_MODE` 值会在启动前被拒绝。受支持的认证别名通过与
+路由相同的解析器规范化。显式设置的开发和测试环境保留原有策略；未设置环境时仍默认为
+开发环境。
 
 
 ## 从 v1.4.1 升级到 v1.4.2
@@ -599,3 +631,39 @@ Redis 端点。回滚后会重新注册 v1 验证路由，span 重新输出 `use
 的客户端须先移除该调用，再降低模块版本。从源码重建 Go 应用时，应恢复升级前的
 `go.mod` 和 `go.sum`，并在构建前用 `go list -m all` 核对实际选中的版本。上文更早的
 迁移要求仍然适用。
+
+## 从 v1.6.0 升级
+
+无需转换数据。限流计数器和既有的用户+destination 冷却保持原有的 Redis 键名、窗口和 TTL
+处理方式，因此进行中的计数和冷却继续生效，滚动升级期间新旧实例共用这些记录。
+
+- 创建 challenge 时，用户、IP 和 destination 限额以及冷却在一次 Redis Lua 调用中执行，
+  该调用读写五个键。Herald 连接单一 Redis 端点；把键路由到不同分片的代理必须支持多键脚本。
+- 被限额、冷却或 `user_locked` 拒绝的请求不再消耗配额。被锁定且同时超出限额的用户现在
+  收到 `403/user_locked`，而不是 `429`。
+- 新增第二个冷却键 `ratelimit:cooldown:dest:<digest>`，按 destination 应用
+  `RESEND_COOLDOWN`，不区分 `user_id`。在冷却时间内以多个用户 ID 向同一 destination
+  正常发送的调用方，现在会收到 `429/resend_cooldown`。运行 v1.6.0 的实例不读取该键，
+  因此仅按 destination 的冷却要到所有实例升级后才完全生效。
+- `herald_redis_operation_duration_seconds` 和 `herald_redis_operations_total` 以
+  `operation="ratelimit_create"` 报告创建 challenge 时的限流操作。创建 challenge 不再输出
+  `ratelimit_user`、`ratelimit_ip`、`ratelimit_dest` 和 `cooldown` 这些取值；筛选这些取值的
+  看板需要更新。
+- `24h` 不合适时请设置 `IDEMPOTENCY_UNRESOLVED_TTL`。它必须大于 `IDEMPOTENCY_KEY_TTL`
+  （该值为 `0` 时取 `CHALLENGE_EXPIRY`）；发送前占位 TTL 为 24h 或更长的部署必须显式设置，
+  否则启动失败。新的不确定 `sending` 记录在该时长后过期，已存储的无 TTL 记录保持原样。
+- 仅结果记录在操作完成后写入失败时，创建、验证和撤销不再返回 `503/audit_unavailable`。
+  应对 `herald_audit_post_action_failure_total` 配置告警。
+
+回滚到 v1.6.0 会保留全部 Redis 数据。v1.6.0 忽略仅按 destination 的冷却键和
+`IDEMPOTENCY_UNRESOLVED_TTL`；新版本写入的 `sending` 记录保留其 TTL，仍会过期。
+
+用户锁定：
+
+- 单个 challenge 耗尽不再锁定其用户。锁定需要在 `LOCKOUT_DURATION` 内耗尽
+  `LOCKOUT_CHALLENGE_THRESHOLD`（默认 `3`）个 challenge。设置
+  `LOCKOUT_CHALLENGE_THRESHOLD=1` 可恢复此前的行为。
+- 锁定键由 `otp:lock:<user_id>` 改为 `otp:lock:v2:<digest>`。无需迁移：旧键会在
+  `LOCKOUT_DURATION` 内过期。升级时正在生效的锁定不会延续，滚动升级期间两个版本的实例
+  不共用锁定。
+- 摘要依赖 `HERALD_PII_PEPPER`。轮换 pepper 会丢弃当前的锁定和计数。
