@@ -21,7 +21,44 @@ type journalEntry struct {
 	size int64
 	busy bool
 	next time.Time
+	// unreadable counts consecutive attempts that could not read or decode
+	// the file. Backend delivery failures do not count: they are retried
+	// for as long as the backend is down.
+	unreadable int
 }
+
+// quarantineSuffix is appended to the name of a spool file that could not be
+// read or decoded. A quarantined file is kept for inspection, is not retried,
+// is not picked up again after a restart and does not count towards the spool
+// size limit. Renaming it back to its ".json" name makes the next start retry
+// it.
+const quarantineSuffix = ".quarantined"
+
+// maxUnreadableAttempts is how often an unreadable spool file is tried before
+// it is quarantined. More than one, so a transient read error does not set a
+// good record aside.
+const maxUnreadableAttempts = 5
+
+// unreadableRetryDelay and quarantineRetryDelay are variables so tests need
+// not wait for them. The second applies when the rename into quarantine
+// itself fails and the entry has to stay in place.
+var (
+	unreadableRetryDelay = time.Second
+	quarantineRetryDelay = time.Hour
+)
+
+// QuarantinedError is passed to the failure callback when a spool file is set
+// aside. Name is the quarantined file's base name.
+type QuarantinedError struct {
+	Name string
+	Err  error
+}
+
+func (e *QuarantinedError) Error() string {
+	return fmt.Sprintf("audit spool entry quarantined as %s after %d failed reads: %v", e.Name, maxUnreadableAttempts, e.Err)
+}
+
+func (e *QuarantinedError) Unwrap() error { return e.Err }
 
 // journalStorage acknowledges a record only after its file and directory entry
 // have been synced. The channel contains wake-up hints, never the only copy of
@@ -39,6 +76,9 @@ type journalStorage struct {
 	done              chan struct{}
 	closed            bool
 	onFailure         func(error)
+	// quarantinedAtStart is the number of quarantined files found when the
+	// spool was opened.
+	quarantinedAtStart int
 }
 
 func newJournalStorage(backend audit.Storage, dir string, limit int64, queue, workers int, onFailure func(error)) (*journalStorage, error) {
@@ -165,11 +205,17 @@ func (j *journalStorage) run() {
 		if err == nil {
 			err = json.Unmarshal(payload, &rec)
 		}
-		if err == nil {
-			ctx, cancel := context.WithTimeout(j.ctx, 5*time.Second)
-			err = j.backend.Write(ctx, &rec)
-			cancel()
+		if err != nil {
+			// Not a delivery failure: retrying forever cannot succeed.
+			err = j.recordUnreadable(name, err)
+			if j.onFailure != nil {
+				j.onFailure(err)
+			}
+			continue
 		}
+		ctx, cancel := context.WithTimeout(j.ctx, 5*time.Second)
+		err = j.backend.Write(ctx, &rec)
+		cancel()
 		j.mu.Lock()
 		e := j.entries[name]
 		if err == nil {
@@ -190,6 +236,39 @@ func (j *journalStorage) run() {
 		}
 	}
 }
+
+// recordUnreadable notes one failed attempt to read or decode a spool file
+// and returns the error to report. After maxUnreadableAttempts the file is
+// renamed into quarantine and dropped from the retry set; the returned error
+// is then a *QuarantinedError.
+func (j *journalStorage) recordUnreadable(name string, cause error) error {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	e, ok := j.entries[name]
+	if !ok {
+		return cause
+	}
+	e.busy = false
+	e.unreadable++
+	if e.unreadable < maxUnreadableAttempts {
+		e.next = time.Now().Add(unreadableRetryDelay)
+		return fmt.Errorf("audit spool entry %s is unreadable (attempt %d of %d): %w", name, e.unreadable, maxUnreadableAttempts, cause)
+	}
+	quarantined := name + quarantineSuffix
+	if err := os.Rename(filepath.Join(j.dir, name), filepath.Join(j.dir, quarantined)); err != nil {
+		// Leave the entry where it is, but stop trying it every second.
+		e.next = time.Now().Add(quarantineRetryDelay)
+		return fmt.Errorf("audit spool entry %s is unreadable and could not be quarantined: %w", name, errors.Join(cause, err))
+	}
+	j.bytes -= e.size
+	delete(j.entries, name)
+	_ = j.dirFile.Sync()
+	return &QuarantinedError{Name: quarantined, Err: cause}
+}
+
+// QuarantinedAtStart reports how many quarantined files the spool directory
+// held when it was opened.
+func (j *journalStorage) QuarantinedAtStart() int { return j.quarantinedAtStart }
 
 func (j *journalStorage) Query(ctx context.Context, filter *audit.QueryFilter) ([]*audit.Record, error) {
 	return j.backend.Query(ctx, filter)
@@ -221,6 +300,8 @@ func (j *journalStorage) recoverPendingEntries() error {
 				}
 				j.entries[f.Name()] = &journalEntry{size: info.Size()}
 				j.bytes += info.Size()
+			} else if strings.HasSuffix(f.Name(), quarantineSuffix) {
+				j.quarantinedAtStart++
 			} else if strings.HasSuffix(f.Name(), ".tmp") {
 				// Temporary files were never acknowledged to a caller.
 				if e := os.Remove(filepath.Join(dir, f.Name())); e != nil {
