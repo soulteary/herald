@@ -199,6 +199,17 @@ responses. API Key and HMAC wire formats are unchanged.
 | `HERALD_HEALTHCHECK_TLS_CLIENT_CERT_FILE` | Client certificate for the loopback probe | (empty) | Client cert required |
 | `HERALD_HEALTHCHECK_TLS_CLIENT_KEY_FILE` | Client key for the loopback probe; must accompany its certificate | (empty) | Client cert required |
 
+#### Startup warnings
+
+Some settings are valid but probably not intended. Herald logs one warning for
+each at startup and keeps starting. The `check` field names the warning.
+
+| `check` | Logged when | Why it matters |
+|---------|-------------|----------------|
+| `config.rate_limit_ip` | `HERALD_TRUSTED_PROXY_HEADER` and `HERALD_TRUSTED_PROXIES` are unset | `RATE_LIMIT_PER_IP` counts the direct peer, so a gateway that calls Herald for many end users shares one quota among all of them |
+| `config.listener_tls` | `ENVIRONMENT=production` and `TLS_CERT_FILE`/`TLS_KEY_FILE` are unset | Verification requests carry the code in their body, and with `REQUEST_AUTH_MODE=api_key` every request also carries the static key, which can be replayed if captured. If TLS is terminated by a proxy in front of Herald, keep the hop to Herald on a trusted local network |
+| `config.code_length` | `CODE_LENGTH` is below `6` | Lengths `4` and `5` are accepted, but each digit removed makes a single guess ten times more likely to succeed while the attempt and rate limits stay the same |
+
 #### Audit logging
 
 | Variable | Description | Default | Required |
