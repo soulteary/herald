@@ -103,7 +103,7 @@ herald_rate_limit_hits_total{scope="resend_cooldown"} 200
 直方图，跟踪 Redis 操作延迟。
 
 **标签：**
-- `operation`: 已埋点的限流/冷却包装操作（`ratelimit`、`ratelimit_user`、`ratelimit_ip`、`ratelimit_dest`、`cooldown`），并非全部 Redis 命令
+- `operation`: 已埋点的包装操作，并非全部 Redis 命令。创建 challenge 时各项限流和冷却在一次调用中执行，记为 `ratelimit_create`。各限流器的包装操作（`ratelimit`、`ratelimit_user`、`ratelimit_ip`、`ratelimit_dest`、`cooldown`）不再用于创建 challenge
 
 **桶：** [0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0]
 
@@ -298,7 +298,7 @@ groups:
 
 ## OpenTelemetry 支持
 
-当设置 `OTLP_ENABLED=true` 且配置 `OTLP_ENDPOINT` 时，Herald 会启用 OpenTelemetry 追踪中间件。追踪上下文通过 `traceparent` 与 `tracestate` 请求头传播。核心 span 包括 challenge 创建、provider 发送与验码；span 标签包括 `channel`、`purpose`、`provider`、`result`、`reason`。配置方式见 [DEPLOYMENT.md](DEPLOYMENT.md) 中的 `OTLP_ENDPOINT`（如 OTLP HTTP 使用 `http://localhost:4318`）。
+当设置 `OTLP_ENABLED=true` 且配置 `OTLP_ENDPOINT` 时，Herald 会启用 OpenTelemetry 追踪中间件。追踪上下文通过 `traceparent` 与 `tracestate` 请求头传播。核心 span 包括 challenge 创建、provider 发送与验码；span 标签包括 `channel`、`purpose`、`provider`、`result`、`reason`。span 上以 `user_id_digest` 标识用户，这是以 `HERALD_PII_PEPPER` 为密钥的加 pepper 摘要；原始 `user_id` 不会被导出。同一 pepper 下摘要保持稳定，仍可用于关联同一用户的 span。配置方式见 [DEPLOYMENT.md](DEPLOYMENT.md) 中的 `OTLP_ENDPOINT`（如 OTLP HTTP 使用 `http://localhost:4318`）。
 
 ## 最佳实践
 
@@ -323,6 +323,12 @@ groups:
 `herald_audit_dropped_total` 现在统计持久化接收前被拒绝的事件，对应接口返回
 `503/audit_unavailable`，不再统计可恢复的后端投递失败。存储恢复后应确认缓冲逐步清空，
 不要通过删除待投递文件来消除告警。
+
+应对 `herald_audit_post_action_failure_total{operation}`（`create`、`verify`、`revoke`）配置
+告警：消息已发送、验证码已消费或撤销已完成后，结果记录未能被接收。请求已正常响应，因此
+审计记录中缺少该事件。每次发生还会使 `herald_audit_dropped_total` 加一，并写入一条 error
+日志，包含 `stage="post_action"`、事件类型、challenge ID、结果、原因和 `user_id_digest`；
+可据此日志补录该记录。
 
 ## 发送渠道失败诊断
 
