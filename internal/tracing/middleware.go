@@ -2,6 +2,7 @@ package tracing
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 	common_tracing "github.com/soulteary/tracing-kit/v2"
@@ -22,7 +23,9 @@ func TracingMiddleware(serviceName string) fiber.Handler {
 		reqHeaders := make(map[string]string)
 		// nolint:staticcheck // SA1019: VisitAll is deprecated but we need to iterate all headers
 		c.Request().Header.VisitAll(func(key, value []byte) {
-			reqHeaders[string(key)] = string(value)
+			// The server normalizes header names ("Traceparent"), while
+			// propagators look fields up in lower case ("traceparent").
+			reqHeaders[strings.ToLower(string(key))] = string(value)
 		})
 		ctx := propagator.Extract(c.Context(), &headerCarrier{headers: reqHeaders})
 
@@ -81,7 +84,7 @@ func TracingMiddleware(serviceName string) fiber.Handler {
 		respHeaders := make(map[string]string)
 		// nolint:staticcheck // SA1019: VisitAll is deprecated but we need to iterate all headers
 		c.Response().Header.VisitAll(func(key, value []byte) {
-			respHeaders[string(key)] = string(value)
+			respHeaders[strings.ToLower(string(key))] = string(value)
 		})
 		propagator.Inject(ctx, &headerCarrier{headers: respHeaders})
 		// Update response headers
@@ -93,17 +96,19 @@ func TracingMiddleware(serviceName string) fiber.Handler {
 	}
 }
 
-// headerCarrier implements the TextMapCarrier interface for Fiber headers
+// headerCarrier implements the TextMapCarrier interface for Fiber headers.
+// HTTP header names are case-insensitive, so keys are held in lower case and
+// looked up in lower case.
 type headerCarrier struct {
 	headers map[string]string
 }
 
 func (c *headerCarrier) Get(key string) string {
-	return c.headers[key]
+	return c.headers[strings.ToLower(key)]
 }
 
 func (c *headerCarrier) Set(key, value string) {
-	c.headers[key] = value
+	c.headers[strings.ToLower(key)] = value
 }
 
 func (c *headerCarrier) Keys() []string {
