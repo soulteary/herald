@@ -23,7 +23,7 @@ func TestSingleSecretKeyIDCannotSplitNonceIdentity(t *testing.T) {
 			rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 			t.Cleanup(func() { _ = rc.Close() })
 			cfg := Config{Mode: ModeHMACV2, DefaultKeyID: "default", KeyProvider: config.GetHMACSecret,
-				NonceStore: NewNonceStore(rc, "nonce:", []byte("nonce-secret"), time.Minute), FailClosed: true}
+				NonceStore: NewNonceStore(rc, "nonce:", []byte("nonce-secret"), time.Minute)}
 			now := time.Now()
 			headers := func(keyID string) map[string]string {
 				h := signedHeaders(now, "same-nonce", keyID, "single-secret")

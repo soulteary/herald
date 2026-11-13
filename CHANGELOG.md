@@ -47,6 +47,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Stop using the fixed secret `herald-idempotency-fallback` when none of
+  `HERALD_IDEMPOTENCY_SECRET`, `HMAC_SECRET` and `API_KEY` is set, which is
+  possible only outside production. The value is public in this repository,
+  and it keyed idempotency records, HMAC nonce records and PII digests. With
+  `HERALD_HMAC_KEYS` configured the secret is now derived from the key map, so
+  instances that share the map still agree. With no secret material at all
+  Herald generates a random secret at each start and logs a warning; such a
+  deployment does not share those records between instances or keep them
+  across restarts. Existing records keyed by the old value are no longer
+  found. Deployments that set a secret, and production, are unchanged.
+- Reject HMAC requests when the nonce cannot be recorded, in every
+  environment. Outside production a Redis failure let the request through, so
+  replays were accepted while Redis was down. Development and test now answer
+  `503/nonce_store_unavailable`, as production does.
+- Log a startup warning when `ENVIRONMENT` is unset or empty. It defaults to
+  `development`, where most configuration problems are warnings and not
+  startup errors. The default is unchanged in this release; a later release
+  will refuse to start without the variable. Setting it to `development` or
+  `test` silences the warning.
 - Do not spend rate-limit quota on challenge requests that are rejected. A
   request denied by the resend cooldown, by `user_locked` or by a later limit
   previously still incremented the per-user, per-IP and per-destination

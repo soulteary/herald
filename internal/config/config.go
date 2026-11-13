@@ -1,9 +1,13 @@
 package config
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -265,6 +269,9 @@ func Initialize(l *logger.Logger) error {
 	if parseEnvironment(EnvironmentValue) == "" {
 		return fmt.Errorf("ENVIRONMENT must be development, test, or production")
 	}
+	if environmentUnset(os.LookupEnv) {
+		log.Warn().Str("check", "config.environment").Msg(environmentUnsetWarning)
+	}
 
 	// Validate required configs
 	if RedisAddr == "" {
@@ -331,6 +338,53 @@ func Initialize(l *logger.Logger) error {
 	}
 
 	return nil
+}
+
+// environmentUnsetWarning is logged when ENVIRONMENT is absent or empty. The
+// default is development, where Validate() reports most problems as warnings,
+// so a deployment that omits the variable runs without production checks.
+const environmentUnsetWarning = "ENVIRONMENT is not set: defaulting to development, production validation is NOT enforced; set ENVIRONMENT explicitly to development, test, or production (a later release will refuse to start without it)"
+
+// environmentUnset reports whether ENVIRONMENT is absent or blank. Both select
+// the development default.
+func environmentUnset(lookup func(string) (string, bool)) bool {
+	value, set := lookup("ENVIRONMENT")
+	return !set || strings.TrimSpace(value) == ""
+}
+
+// generatedSecretWarning is logged when no secret is configured and a random
+// one is generated for this process.
+const generatedSecretWarning = "no secret configured (HERALD_IDEMPOTENCY_SECRET, HMAC_SECRET, API_KEY, HERALD_HMAC_KEYS): generated a random secret for this process; it is not shared between instances and does not survive a restart, so idempotency keys, HMAC nonce records, rate-limit and cooldown digests are not consistent across instances or restarts; a multi-instance or restart-sensitive deployment must set HERALD_IDEMPOTENCY_SECRET and HERALD_PII_PEPPER"
+
+// secretFromKeyMap derives a stable secret from the configured HMAC key map.
+// Entries are hashed in key-ID order so the result does not depend on map
+// iteration.
+func secretFromKeyMap(keys map[string]string) string {
+	ids := make([]string, 0, len(keys))
+	for id := range keys {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	h := sha256.New()
+	h.Write([]byte("herald-derived-secret\x00"))
+	for _, id := range ids {
+		h.Write([]byte(id))
+		h.Write([]byte{0})
+		h.Write([]byte(keys[id]))
+		h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// generatedSecretBytes is the size of the per-process secret.
+const generatedSecretBytes = 32
+
+func generateProcessSecret() (string, error) {
+	buf := make([]byte, generatedSecretBytes)
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("generate process secret: %w", err)
+	}
+	return hex.EncodeToString(buf), nil
 }
 
 // missingCredentialWarning describes what the selected REQUEST_AUTH_MODE does
@@ -517,7 +571,9 @@ func GetHMACDefaultKeyID() string {
 func initializeSecretsAndPrivacy() error {
 	// Derive an idempotency secret if not explicitly configured. Prefer a
 	// dedicated secret; otherwise reuse an existing service secret so keys are
-	// still opaque and principal-namespaced.
+	// still opaque and principal-namespaced. With no secret at all (possible
+	// only outside production) a random per-process value is used: a fixed
+	// value in the source would be known to anyone.
 	if IdempotencySecret == "" {
 		switch {
 		case HMACSecret != "":
@@ -526,8 +582,18 @@ func initializeSecretsAndPrivacy() error {
 			IdempotencySecret = APIKey
 		case len(hmacKeysMap) > 0 && Env == EnvProduction:
 			return fmt.Errorf("HERALD_IDEMPOTENCY_SECRET must be set in production when only HERALD_HMAC_KEYS is configured")
+		case len(hmacKeysMap) > 0:
+			// Outside production a key map is the only secret material. Derive
+			// from it so every instance with the same map agrees on nonce and
+			// idempotency keys, which a per-process value would not give.
+			IdempotencySecret = secretFromKeyMap(hmacKeysMap)
 		default:
-			IdempotencySecret = "herald-idempotency-fallback"
+			secret, err := generateProcessSecret()
+			if err != nil {
+				return err
+			}
+			IdempotencySecret = secret
+			log.Warn().Str("check", "config.secrets").Msg(generatedSecretWarning)
 		}
 	}
 

@@ -287,3 +287,43 @@ func TestCreationCannotDowngradeToV2WithOrWithoutIdempotency(t *testing.T) {
 		t.Fatalf("v2 verification auth rejected: %d", resp.StatusCode)
 	}
 }
+
+// A nonce-store failure rejects a correctly signed request in every
+// environment; outside production it used to be accepted.
+func TestAuthNonceStoreFailureRejectsInEveryEnvironment(t *testing.T) {
+	for _, env := range []config.Environment{config.EnvDevelopment, config.EnvTest, config.EnvProduction} {
+		t.Run(string(env), func(t *testing.T) {
+			defer withV2Config(t)()
+			origEnv := config.Env
+			defer func() { config.Env = origEnv }()
+			config.Env = env
+
+			rc, _ := testutil.NewTestRedisClient()
+			rw := NewRouterWithClientAndHandlers(rc, testLogger())
+			// Closing the client makes every later Redis command fail.
+			if err := rc.Close(); err != nil {
+				t.Fatal(err)
+			}
+
+			body := []byte(`{"challenge_id":"ch_missing","code":"123456"}`)
+			timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+			canonical := auth.CanonicalRequest{Method: "POST", Path: "/v1/otp/verifications", Timestamp: timestamp, Nonce: "nonce-outage", Service: "svc", Body: body}
+			req := httptest.NewRequest("POST", "/v1/otp/verifications", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			for k, v := range map[string]string{
+				auth.HeaderSignatureVersion: auth.SignatureVersionV2, auth.HeaderTimestamp: timestamp,
+				auth.HeaderNonce: "nonce-outage", auth.HeaderService: "svc", auth.HeaderSignature: auth.SignV2("v2-secret", canonical),
+			} {
+				req.Header.Set(k, v)
+			}
+			resp, err := rw.App.Test(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, _ := io.ReadAll(resp.Body)
+			if resp.StatusCode != fiber.StatusServiceUnavailable || !strings.Contains(string(got), "nonce_store_unavailable") {
+				t.Fatalf("status=%d body=%s, want 503 nonce_store_unavailable", resp.StatusCode, got)
+			}
+		})
+	}
+}

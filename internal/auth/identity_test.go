@@ -20,7 +20,7 @@ func TestVerifiedHMACIdentityUsesResolvedKeyWithoutChangingWireHeader(t *testing
 			rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 			t.Cleanup(func() { _ = rc.Close() })
 			now := time.Now()
-			cfg := Config{Mode: ModeHMACV2, DefaultKeyID: "primary", KeyProvider: func(string) string { return "secret" }, NonceStore: NewNonceStore(rc, "nonce:", []byte("secret"), time.Minute), FailClosed: true}
+			cfg := Config{Mode: ModeHMACV2, DefaultKeyID: "primary", KeyProvider: func(string) string { return "secret" }, NonceStore: NewNonceStore(rc, "nonce:", []byte("secret"), time.Minute)}
 			app := fiber.New()
 			app.Use(New(cfg))
 			app.Post("/resource", func(c fiber.Ctx) error {

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/rs/zerolog"
 	"github.com/soulteary/herald/internal/metrics"
 	"github.com/soulteary/herald/internal/serviceauth"
 )
@@ -67,14 +66,8 @@ type Config struct {
 	// V1Handler runs the legacy v1 verification (delegated to middleware-kit).
 	V1Handler fiber.Handler
 
-	// FailClosed makes nonce-store backend failures reject the request. Set true
-	// in production.
-	FailClosed bool
-
 	// Clock is injectable for tests; defaults to time.Now.
 	Clock Clock
-
-	Logger *zerolog.Logger
 }
 
 func deny(c fiber.Ctx, reason string) error {
@@ -233,14 +226,9 @@ func verifyHMACV2(c fiber.Ctx, cfg Config) error {
 func consumeVerifiedNonce(c fiber.Ctx, cfg Config, service, lookupKeyID, nonce string) error {
 	fresh, err := cfg.NonceStore.Consume(c.Context(), service, lookupKeyID, nonce)
 	if err != nil {
-		// Backend failure: fail closed in production, otherwise allow (dev).
-		if cfg.FailClosed {
-			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "nonce_store_unavailable"})
-		}
-		if cfg.Logger != nil {
-			cfg.Logger.Warn().Msg("nonce store unavailable; allowing request (non-production)")
-		}
-		return continueVerifiedHMAC(c, service, lookupKeyID)
+		// Backend failure: reject in every environment. Accepting the request
+		// would accept replays for as long as the store is down.
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "nonce_store_unavailable"})
 	}
 	if !fresh {
 		metrics.RecordNonceReplay()

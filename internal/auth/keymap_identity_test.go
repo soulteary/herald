@@ -14,7 +14,7 @@ func TestKeyMapRequiresSignedWireIdentityAcrossDefaults(t *testing.T) {
 			store := newNonceStore(t)
 			cfg := Config{
 				Mode: ModeHMACV2, RequireKeyID: true, DefaultKeyID: "old",
-				Clock: func() time.Time { return now }, NonceStore: store, FailClosed: true,
+				Clock: func() time.Time { return now }, NonceStore: store,
 				KeyProvider: func(id string) string {
 					if id == "old" || id == "alias" {
 						return "same-secret"

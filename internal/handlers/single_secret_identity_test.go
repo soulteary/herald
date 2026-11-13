@@ -30,7 +30,7 @@ func TestSingleSecretCannotCreateArbitraryIdempotencyNamespaces(t *testing.T) {
 	app := fiber.New()
 	app.Use(auth.New(auth.Config{Mode: auth.ModeHMACV2, RequireV3: true,
 		DefaultKeyID: "default", KeyProvider: config.GetHMACSecret,
-		NonceStore: auth.NewNonceStore(rc, "single:nonce:", []byte("nonce-secret"), time.Minute), FailClosed: true}))
+		NonceStore: auth.NewNonceStore(rc, "single:nonce:", []byte("nonce-secret"), time.Minute)}))
 	app.Post("/v1/otp/challenges", h.CreateChallenge)
 	first := defaultKeyRequest(t, app, "default", "first")
 	require.Equal(t, 503, first.status)
