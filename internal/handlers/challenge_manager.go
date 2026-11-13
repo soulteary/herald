@@ -10,6 +10,9 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	challengekit "github.com/soulteary/challenge-kit"
+
+	"github.com/soulteary/herald/internal/config"
+	"github.com/soulteary/herald/internal/security"
 )
 
 // Separate record and mutex namespaces prevent older verifiers, which ignore
@@ -27,6 +30,36 @@ type atomicChallengeManager struct {
 	challengekit.ManagerInterface
 	client *redis.Client
 	config challengekit.Config
+}
+
+// User lock key spaces. v1.6.0 and earlier wrote "otp:lock:<user_id>"; the
+// version segment keeps those raw-identifier keys apart from the digested ones.
+const (
+	userLockKeyPrefix     = "otp:lock:v2:"
+	userLockCounterPrefix = "otp:lock:exhausted:"
+)
+
+// withUserLockPolicy sets the user lock policy on a challenge configuration: a
+// user is locked after LOCKOUT_CHALLENGE_THRESHOLD exhausted challenges within
+// LockoutDuration, and lock keys carry a peppered digest in place of the user
+// ID, as the rate-limit keys do.
+func withUserLockPolicy(cfg challengekit.Config, digester *security.Digester) challengekit.Config {
+	cfg.LockKeyPrefix = userLockKeyPrefix
+	cfg.LockCounterPrefix = userLockCounterPrefix
+	cfg.LockoutThreshold = config.LockoutChallengeThreshold
+	cfg.LockIdentity = func(userID string) string {
+		return digester.DigestParts("user-lock", userID)
+	}
+	return cfg
+}
+
+// IsUserLockedE forwards to the wrapped manager so the handlers can tell a
+// locked user from a Redis outage.
+func (m *atomicChallengeManager) IsUserLockedE(ctx context.Context, userID string) (bool, error) {
+	if checker, ok := m.ManagerInterface.(challengekit.UserLockChecker); ok {
+		return checker.IsUserLockedE(ctx, userID)
+	}
+	return m.IsUserLocked(ctx, userID), nil
 }
 
 func newAtomicChallengeManager(client *redis.Client, cfg challengekit.Config) *atomicChallengeManager {

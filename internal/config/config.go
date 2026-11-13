@@ -135,6 +135,10 @@ var (
 	CodeLength        = env.GetInt("CODE_LENGTH", 6)
 	LockoutDuration   = env.GetDuration("LOCKOUT_DURATION", 10*time.Minute)
 	IdempotencyKeyTTL = env.GetDuration("IDEMPOTENCY_KEY_TTL", 0) // 0 means use ChallengeExpiry
+	// LockoutChallengeThreshold is the number of challenges a user must
+	// exhaust (MAX_ATTEMPTS wrong codes each) within LOCKOUT_DURATION before
+	// the user is locked. 1 locks on the first exhausted challenge.
+	LockoutChallengeThreshold = env.GetInt("LOCKOUT_CHALLENGE_THRESHOLD", 3)
 	// IdempotencyUnresolvedTTL bounds idempotency records whose delivery
 	// outcome is unknown (a request that stopped between the send boundary and
 	// its result). Until it elapses the key answers 409 delivery_unknown.
@@ -779,6 +783,7 @@ var integerEnvNames = []string{
 	"CODE_LENGTH",
 	"HERALD_MAX_BODY_BYTES",
 	"HERALD_MAX_CONCURRENT_HASH_OPERATIONS",
+	"LOCKOUT_CHALLENGE_THRESHOLD",
 	"MAX_ATTEMPTS",
 	"PROVIDER_MAX_RESPONSE_BYTES",
 	"RATE_LIMIT_PER_DESTINATION",

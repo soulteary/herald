@@ -91,6 +91,9 @@ func strictHTTPProblems() []string {
 	if ChallengeExpiry <= 0 || MaxAttempts <= 0 || LockoutDuration <= 0 {
 		problems = append(problems, "CHALLENGE_EXPIRY, MAX_ATTEMPTS, and LOCKOUT_DURATION must be positive")
 	}
+	if LockoutChallengeThreshold < 1 {
+		problems = append(problems, "LOCKOUT_CHALLENGE_THRESHOLD must be at least 1")
+	}
 	if CodeLength < 4 {
 		problems = append(problems, "CODE_LENGTH must be at least 4")
 	}

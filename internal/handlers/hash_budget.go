@@ -51,14 +51,14 @@ func (h *Handlers) prepareChallenge(c fiber.Ctx, ctx context.Context, req Create
 	defer release()
 	// The lock check is read-only and runs first: a locked user is refused
 	// without spending any quota or starting a cooldown.
-	if h.challengeManager.IsUserLocked(ctx, req.UserID) {
+	locked, lockErr := h.userLocked(ctx, req.UserID)
+	if lockErr != nil {
+		// A lock that cannot be read is an outage, not a locked user.
 		failIdem()
-		// IsUserLocked also reports true when it cannot reach Redis. Now that
-		// it precedes the limiter, an outage must still answer 503 rather
-		// than tell the caller the user is locked.
-		if h.redis != nil && h.redis.Ping(ctx).Err() != nil {
-			return nil, "", true, c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "backend_unavailable"})
-		}
+		return nil, "", true, c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "backend_unavailable"})
+	}
+	if locked {
+		failIdem()
 		return nil, "", true, c.Status(fiber.StatusForbidden).JSON(fiber.Map{"ok": false, "reason": "user_locked"})
 	}
 	if allowed, err := h.checkCreationLimits(c, ctx, req, peerIP, failIdem); !allowed {
@@ -80,4 +80,14 @@ func (h *Handlers) verifyWithBudget(ctx context.Context, id, code, peerIP string
 		return h.challengeManager.Verify(ctx, id, code, peerIP)
 	}
 	return h.challengeManager.VerifyWithOptions(ctx, id, code, peerIP, *opts)
+}
+
+// userLocked reports whether the user is locked, with the backend error when
+// the manager can provide it. A manager that cannot is trusted as is: its
+// IsUserLocked already answers true on an outage.
+func (h *Handlers) userLocked(ctx context.Context, userID string) (bool, error) {
+	if checker, ok := h.challengeManager.(challengekit.UserLockChecker); ok {
+		return checker.IsUserLockedE(ctx, userID)
+	}
+	return h.challengeManager.IsUserLocked(ctx, userID), nil
 }

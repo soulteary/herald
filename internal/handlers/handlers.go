@@ -108,9 +108,9 @@ func NewHandlersWithError(redisClient *redis.Client, log *logger.Logger) (*Handl
 		LockoutDuration:    config.LockoutDuration,
 		CodeLength:         config.CodeLength,
 		ChallengeKeyPrefix: challengeRecordPrefix,
-		LockKeyPrefix:      "otp:lock:",
 	}
-	challengeMgr := newAtomicChallengeManager(redisClient, challengeConfig)
+	digester := security.NewDigester([]byte(config.PIIPepper))
+	challengeMgr := newAtomicChallengeManager(redisClient, withUserLockPolicy(challengeConfig, digester))
 
 	rateLimitMgr := ratelimit.NewManager(redisClient)
 
@@ -201,7 +201,7 @@ func NewHandlersWithError(redisClient *redis.Client, log *logger.Logger) (*Handl
 		testCodeCache:    testCodeCache,
 		idempotencyStore: idempotencyStore,
 		totpClient:       totpClient,
-		digester:         security.NewDigester([]byte(config.PIIPepper)),
+		digester:         digester,
 		log:              log,
 	}, nil
 }

@@ -1526,6 +1526,9 @@ func TestHandlers_CreateChallenge_UserLocked(t *testing.T) {
 	config.ChallengeExpiry = 5 * time.Minute
 	config.MaxAttempts = 3
 	config.LockoutDuration = 10 * time.Minute
+	// One exhausted challenge locks the user in this test.
+	defer func(old int) { config.LockoutChallengeThreshold = old }(config.LockoutChallengeThreshold)
+	config.LockoutChallengeThreshold = 1
 
 	redisClient := testRedisClient(t)
 	defer func() {
@@ -1622,6 +1625,9 @@ func TestHandlers_VerifyChallenge_FailureReasons(t *testing.T) {
 	config.MaxAttempts = 5
 	config.LockoutDuration = 10 * time.Minute
 	config.ChallengeExpiry = time.Minute // Expiration is injected after activation below.
+	// One exhausted challenge locks the user in the "locked challenge" case.
+	defer func(old int) { config.LockoutChallengeThreshold = old }(config.LockoutChallengeThreshold)
+	config.LockoutChallengeThreshold = 1
 
 	redisClient := testRedisClient(t)
 	defer func() {
