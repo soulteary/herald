@@ -109,10 +109,10 @@ func TestStore_SendingSurvivesRestartAndCannotBeCleared(t *testing.T) {
 		t.Fatalf("Fail after send: %v", err)
 	}
 	require.NoError(t, s.Refresh(ctx, "p", "key", "fp", owner))
-	if ttl := mr.TTL(s.redisKey("p", "key")); ttl != 0 {
-		t.Fatalf("sending TTL=%s, want no expiry", ttl)
+	if ttl := mr.TTL(s.redisKey("p", "key")); ttl != DefaultUnresolvedTTL {
+		t.Fatalf("sending TTL=%s, want %s", ttl, DefaultUnresolvedTTL)
 	}
-	mr.FastForward(24 * time.Hour)
+	mr.FastForward(23 * time.Hour)
 	restarted := NewStore(rc, "test:idem:", []byte("secret"), time.Minute)
 	if _, _, err := restarted.Begin(ctx, "p", "key", "fp"); err != ErrDeliveryUnknown {
 		t.Fatalf("restart Begin: %v", err)
@@ -181,4 +181,46 @@ func TestStore_StaleOwnerCannotMutateReplacement(t *testing.T) {
 	if err := s.Succeed(ctx, "p1", "k1", "fp1", replacementOwner, json.RawMessage(`{"fresh":true}`)); err != nil {
 		t.Fatalf("replacement Succeed: %v", err)
 	}
+}
+
+// A sending record is held for the unresolved TTL and then expires, so an
+// interrupted request does not leave a permanent key.
+func TestStore_SendingRecordExpiresAfterUnresolvedTTL(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rc.Close() })
+	s := NewStore(rc, "test:idem:", []byte("secret"), time.Minute).WithUnresolvedTTL(2 * time.Hour)
+	ctx := context.Background()
+	key := s.redisKey("p", "key")
+
+	_, owner, err := s.Begin(ctx, "p", "key", "fp")
+	require.NoError(t, err)
+	require.Equal(t, time.Minute, mr.TTL(key))
+	require.NoError(t, s.MarkSending(ctx, "p", "key", "fp", owner, "ch"))
+	require.Equal(t, 2*time.Hour, mr.TTL(key), "MarkSending must set the unresolved TTL")
+
+	// Refresh used to remove the TTL of a sending record; it now renews it.
+	mr.FastForward(30 * time.Minute)
+	require.NoError(t, s.Refresh(ctx, "p", "key", "fp", owner))
+	require.Equal(t, 2*time.Hour, mr.TTL(key), "Refresh must keep a sending record bounded")
+
+	// Inside the TTL the key still refuses a second send.
+	mr.FastForward(2*time.Hour - time.Second)
+	_, _, err = s.Begin(ctx, "p", "key", "fp")
+	require.ErrorIs(t, err, ErrDeliveryUnknown)
+
+	mr.FastForward(2 * time.Second)
+	require.False(t, mr.Exists(key), "sending record must expire after the unresolved TTL")
+	_, newOwner, err := s.Begin(ctx, "p", "key", "fp")
+	require.NoError(t, err)
+	require.NotEmpty(t, newOwner)
+	// The original handler lost the record and can no longer complete it.
+	require.ErrorIs(t, s.Succeed(ctx, "p", "key", "fp", owner, json.RawMessage(`{}`)), ErrOwnershipLost)
+}
+
+func TestStore_WithUnresolvedTTLIgnoresNonPositive(t *testing.T) {
+	s := NewStore(nil, "", nil, time.Minute)
+	require.Equal(t, DefaultUnresolvedTTL, s.unresolvedTTL)
+	require.Equal(t, DefaultUnresolvedTTL, s.WithUnresolvedTTL(0).unresolvedTTL)
+	require.Equal(t, time.Hour, s.WithUnresolvedTTL(time.Hour).unresolvedTTL)
 }

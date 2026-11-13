@@ -120,6 +120,17 @@ func strictDeliveryProblems() []string {
 	if IdempotencyKeyTTL > 0 && ProviderTimeout > 0 && IdempotencyKeyTTL <= ProviderTimeout {
 		problems = append(problems, "IDEMPOTENCY_KEY_TTL must be greater than PROVIDER_TIMEOUT")
 	}
+	// An unresolved record that expired before the pending lease would reopen
+	// the key for a second send sooner than an untouched claim does.
+	pendingTTL := IdempotencyKeyTTL
+	if pendingTTL == 0 {
+		pendingTTL = ChallengeExpiry
+	}
+	if IdempotencyUnresolvedTTL <= 0 {
+		problems = append(problems, "IDEMPOTENCY_UNRESOLVED_TTL must be positive")
+	} else if pendingTTL > 0 && IdempotencyUnresolvedTTL <= pendingTTL {
+		problems = append(problems, "IDEMPOTENCY_UNRESOLVED_TTL must be greater than IDEMPOTENCY_KEY_TTL (CHALLENGE_EXPIRY when that is 0)")
+	}
 	if HMACMaxDrift <= 0 {
 		problems = append(problems, "HMAC_MAX_DRIFT must be positive")
 	}

@@ -39,6 +39,8 @@ func (b *hashBudget) acquire(ctx context.Context) (func(), error) {
 
 // Admission precedes rate/cooldown mutation so an overloaded request can retry
 // after capacity returns. Completed idempotency responses bypass this stage.
+// Order: hash budget, user lock (read-only), then limits and cooldowns as one
+// all-or-nothing step, then challenge creation.
 func (h *Handlers) prepareChallenge(c fiber.Ctx, ctx context.Context, req CreateChallengeRequest, peerIP string, failIdem func()) (*challengekit.Challenge, string, bool, error) {
 	release, err := h.hashBudget.acquire(ctx)
 	if err != nil {
@@ -47,12 +49,20 @@ func (h *Handlers) prepareChallenge(c fiber.Ctx, ctx context.Context, req Create
 		return nil, "", true, c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "backend_unavailable"})
 	}
 	defer release()
-	if allowed, err := h.checkCreationLimits(c, ctx, req, peerIP, failIdem); !allowed {
-		return nil, "", true, err
-	}
+	// The lock check is read-only and runs first: a locked user is refused
+	// without spending any quota or starting a cooldown.
 	if h.challengeManager.IsUserLocked(ctx, req.UserID) {
 		failIdem()
+		// IsUserLocked also reports true when it cannot reach Redis. Now that
+		// it precedes the limiter, an outage must still answer 503 rather
+		// than tell the caller the user is locked.
+		if h.redis != nil && h.redis.Ping(ctx).Err() != nil {
+			return nil, "", true, c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "backend_unavailable"})
+		}
 		return nil, "", true, c.Status(fiber.StatusForbidden).JSON(fiber.Map{"ok": false, "reason": "user_locked"})
+	}
+	if allowed, err := h.checkCreationLimits(c, ctx, req, peerIP, failIdem); !allowed {
+		return nil, "", true, err
 	}
 	ch, code, err := h.challengeManager.Create(ctx, challengekit.CreateRequest{
 		UserID: req.UserID, Channel: challengekit.Channel(req.Channel), Destination: req.Destination, Purpose: req.Purpose, ClientIP: peerIP,

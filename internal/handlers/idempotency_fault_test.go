@@ -102,7 +102,8 @@ func assertNoResendAfterRestart(t *testing.T, mr *miniredis.Miniredis) {
 	rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rc.Close() })
 	app := faultApp(t, rc, nil)
-	for _, advance := range []time.Duration{2 * time.Minute, 0, 24 * time.Hour} {
+	// The advances stay inside the default 24h unresolved TTL.
+	for _, advance := range []time.Duration{2 * time.Minute, 0, 23 * time.Hour} {
 		mr.FastForward(advance)
 		resp, err := idemRequest(app, "fault-key", faultBody)
 		if err != nil {
@@ -263,7 +264,7 @@ func TestIdempotency_LostWriteAcknowledgement(t *testing.T) {
 			nextClient := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 			t.Cleanup(func() { _ = nextClient.Close() })
 			if state == "sending" {
-				mr.FastForward(24 * time.Hour)
+				mr.FastForward(23 * time.Hour)
 			}
 			resp, err = idemRequest(faultApp(t, nextClient, nil), "fault-key", faultBody)
 			if err != nil {

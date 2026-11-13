@@ -176,7 +176,7 @@ func TestHMACKeyFormRetryAfterRestartDoesNotResend(t *testing.T) {
 	restarted := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = restarted.Close() })
 	app := identityProviderApp(t, restarted, &faultProvider{rc: restarted})
-	mr.FastForward(24 * time.Hour)
+	mr.FastForward(23 * time.Hour)
 	retry := defaultKeyRequest(t, app, "primary", "restarted")
 	require.Equal(t, 409, retry.status)
 	require.Contains(t, string(retry.body), "delivery_unknown")

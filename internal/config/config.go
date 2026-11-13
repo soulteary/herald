@@ -131,6 +131,10 @@ var (
 	CodeLength        = env.GetInt("CODE_LENGTH", 6)
 	LockoutDuration   = env.GetDuration("LOCKOUT_DURATION", 10*time.Minute)
 	IdempotencyKeyTTL = env.GetDuration("IDEMPOTENCY_KEY_TTL", 0) // 0 means use ChallengeExpiry
+	// IdempotencyUnresolvedTTL bounds idempotency records whose delivery
+	// outcome is unknown (a request that stopped between the send boundary and
+	// its result). Until it elapses the key answers 409 delivery_unknown.
+	IdempotencyUnresolvedTTL = env.GetDuration("IDEMPOTENCY_UNRESOLVED_TTL", 24*time.Hour)
 	// IdempotencySecret derives opaque Redis keys for idempotency records so a
 	// raw client-supplied key is never used directly and principals cannot
 	// collide. Falls back to HMAC_SECRET / API_KEY when unset (see Initialize).
@@ -726,6 +730,7 @@ var durationEnvNames = []string{
 	"HERALD_WRITE_TIMEOUT",
 	"HMAC_MAX_DRIFT",
 	"IDEMPOTENCY_KEY_TTL",
+	"IDEMPOTENCY_UNRESOLVED_TTL",
 	"LOCKOUT_DURATION",
 	"PROVIDER_TIMEOUT",
 	"RESEND_COOLDOWN",

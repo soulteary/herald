@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `IDEMPOTENCY_UNRESOLVED_TTL` (default `24h`). It must be positive and
+  greater than `IDEMPOTENCY_KEY_TTL` (`CHALLENGE_EXPIRY` when that is `0`), or
+  Herald refuses to start in every environment. A deployment whose pending TTL
+  is 24h or longer must set it explicitly.
+- Add the counter `herald_audit_post_action_failure_total{operation}`
+  (`create`, `verify`, `revoke`) for audit result records that could not be
+  stored after the action had completed.
+
+### Changed
+
+- Challenge creation checks the user lock first, then applies the user, IP and
+  destination limits and the resend cooldowns in one Redis Lua call. Counter
+  key names, fixed-window behaviour and TTLs match the previous limiter, so
+  existing counters and cooldowns stay valid and mixed versions share them. A
+  locked user who is also over a limit now gets `403/user_locked` instead of
+  `429`. Redis metrics for this step use `operation="ratelimit_create"`
+  instead of `ratelimit_user`, `ratelimit_ip`, `ratelimit_dest` and `cooldown`.
+
+### Fixed
+
+- Expire idempotency records left in the `sending` state. They had no TTL, so a
+  request interrupted between the send boundary and its result left a permanent
+  Redis key that answered `409/delivery_unknown` forever. They now expire after
+  `IDEMPOTENCY_UNRESOLVED_TTL`; until then behaviour is unchanged and no second
+  send happens. After expiry the same key starts a new request. Records already
+  stored without a TTL by earlier versions are not modified.
+- Stop returning `503/audit_unavailable` when only the audit result record
+  fails after the action can no longer be undone: the provider accepted the
+  message, a v1 or v2 verification consumed the code, or a revoke completed.
+  The request now returns its normal response, the idempotency record is
+  completed instead of staying unresolved, the new counter is incremented and
+  one error line records the event without the code or destination. In soft
+  provider-failure mode the same applies to the `delivery_status=failed`
+  response. Audit records required before the action still refuse the request
+  with 503.
+
+### Security
+
+- Do not spend rate-limit quota on challenge requests that are rejected. A
+  request denied by the resend cooldown, by `user_locked` or by a later limit
+  previously still incremented the per-user, per-IP and per-destination
+  counters, so a caller could exhaust another user's or destination's quota
+  without any message being sent. The counters are now incremented together
+  or not at all. A provider failure still keeps the quota spent.
+- Apply `RESEND_COOLDOWN` per destination as well as per user and destination.
+  Rotating `user_id` against one destination no longer bypasses the cooldown.
+  The existing cooldown key is unchanged; the additional key
+  `ratelimit:cooldown:dest:<digest>` is not read by v1.6.0 instances, so the
+  destination-only cooldown is complete once every instance is upgraded.
+  Callers that send to one destination for several user IDs within the
+  cooldown now receive `429/resend_cooldown`.
+
 ## [1.6.0] - 2026-11-13
 
 ### Added

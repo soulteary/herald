@@ -13,12 +13,14 @@ import (
 // Manager handles rate limiting operations
 type Manager struct {
 	limiter *rediskitratelimit.RateLimiter
+	client  *redis.Client
 }
 
 // NewManager creates a new rate limit manager
 func NewManager(redisClient *redis.Client) *Manager {
 	return &Manager{
 		limiter: rediskitratelimit.NewRateLimiter(redisClient),
+		client:  redisClient,
 	}
 }
 

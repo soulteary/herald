@@ -10,6 +10,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/redis/go-redis/v9"
+	audit "github.com/soulteary/audit-kit/v2"
 	logger "github.com/soulteary/logger-kit/v3"
 	rediskitcache "github.com/soulteary/redis-kit/cache"
 	secure "github.com/soulteary/secure-kit/v2"
@@ -163,7 +164,8 @@ func NewHandlersWithError(redisClient *redis.Client, log *logger.Logger) (*Handl
 
 	// Atomic idempotency store (Phase 3): principal-namespaced, fingerprinted,
 	// SET NX pending placeholder.
-	idempotencyStore := idempotency.NewStore(redisClient, "otp:idem2:", []byte(config.IdempotencySecret), config.IdempotencyKeyTTL)
+	idempotencyStore := idempotency.NewStore(redisClient, "otp:idem2:", []byte(config.IdempotencySecret), config.IdempotencyKeyTTL).
+		WithUnresolvedTTL(config.IdempotencyUnresolvedTTL)
 
 	// TOTP client: when Herald proxies TOTP to herald-totp
 	var totpClient *totpProxyClient
@@ -478,9 +480,10 @@ func (h *Handlers) VerifyChallenge(c fiber.Ctx) error {
 	metrics.RecordVerification("success", "")
 	metrics.RecordVerificationContention("acquired")
 
-	// Audit: challenge verified
+	// Audit: challenge verified. The code is already consumed, so an audit
+	// failure here must not turn the verification into an error.
 	if err := auditlog.LogVerificationSuccess(verifyCtx, ch.ID, ch.UserID, string(ch.Channel), ch.Destination, ch.Purpose, peerIP); err != nil {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
+		h.reportPostActionAuditFailure("verify", audit.EventChallengeVerified, audit.ResultSuccess, ch.ID, ch.UserID, "", err)
 	}
 
 	// Generate AMR based on channel (use string to avoid depending on challengekit.ChannelDingTalk in v1.0.0)
@@ -560,8 +563,9 @@ func (h *Handlers) VerifyChallengeV2(c fiber.Ctx) error {
 		attribute.String("purpose", ch.Purpose),
 	)
 	metrics.RecordVerification("success", "")
+	// The code is already consumed; see VerifyChallenge.
 	if err := auditlog.LogVerificationSuccess(verifyCtx, ch.ID, ch.UserID, string(ch.Channel), ch.Destination, ch.Purpose, peerIP); err != nil {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
+		h.reportPostActionAuditFailure("verify", audit.EventChallengeVerified, audit.ResultSuccess, ch.ID, ch.UserID, "", err)
 	}
 
 	amr := verificationAMR(string(ch.Channel))
@@ -608,9 +612,10 @@ func (h *Handlers) RevokeChallenge(c fiber.Ctx) error {
 	}
 	metrics.RecordChallengeState("revoked")
 
-	// Audit: challenge revoked
+	// Audit: challenge revoked. The revocation already happened, so an audit
+	// failure here must not report it as failed.
 	if err := auditlog.LogChallengeRevoked(spanCtx, challengeID, c.IP()); err != nil {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
+		h.reportPostActionAuditFailure("revoke", audit.EventChallengeRevoked, audit.ResultSuccess, challengeID, "", "", err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -760,56 +765,31 @@ func (h *Handlers) validateCreateRequest(c fiber.Ctx, req *CreateChallengeReques
 	return true, nil
 }
 
+// checkCreationLimits applies the per-user, per-IP and per-destination limits
+// and both resend cooldowns in one atomic step. A request denied by any of
+// them consumes nothing, so a caller cannot drain another user's or
+// destination's quota with requests that are never sent.
 func (h *Handlers) checkCreationLimits(c fiber.Ctx, spanCtx context.Context, req CreateChallengeRequest, peerIP string, failIdem func()) (bool, error) {
-	// Check rate limits
-	// 1. Per user (peppered digest so raw user id never lands in a Redis key)
-	allowed, _, resetTime, err := h.rateLimitManager.CheckUserRateLimit(
-		spanCtx, h.digester.Digest(req.UserID), config.RateLimitPerUser, time.Hour,
-	)
-	if err != nil {
-		h.log.Error().Err(err).Msg("Rate limit check failed")
-		failIdem()
-		return false, c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "backend_unavailable",
-		})
-	}
-	if !allowed {
-		metrics.RecordRateLimitHit("user")
-		failIdem()
-		return challengeRateLimitResponse(c, "rate_limit_exceeded", resetTime)
-	}
-
-	// 2. Per IP (peppered). Uses the trusted peer IP, never the self-reported one.
-	allowed, _, resetTime, err = h.rateLimitManager.CheckIPRateLimit(
-		spanCtx, h.digester.Digest(peerIP), config.RateLimitPerIP, time.Minute,
-	)
-	if err != nil {
-		h.log.Error().Err(err).Msg("Rate limit check failed")
-		failIdem()
-		return false, c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "backend_unavailable",
-		})
-	}
-	if !allowed {
-		metrics.RecordRateLimitHit("ip")
-		failIdem()
-		return challengeRateLimitResponse(c, "rate_limit_exceeded", resetTime)
-	}
-
-	return h.checkDestinationLimits(c, spanCtx, req, failIdem)
-}
-
-func (h *Handlers) checkDestinationLimits(c fiber.Ctx, spanCtx context.Context, req CreateChallengeRequest, failIdem func()) (bool, error) {
-	// 3. Per destination (peppered digest of the canonical limiter identity).
-	// The limiter identity collapses equivalent spellings of one SMS number
+	// All identities are peppered digests so raw values never land in a Redis
+	// key. The IP is the trusted peer IP, never the self-reported one. The
+	// destination identity collapses equivalent spellings of one SMS number
 	// ("+86...", "86...", "0086..."); req.Destination itself is unchanged and
 	// is still what gets stored and sent to the provider.
 	limitDest := destination.LimitKey(req.Channel, req.Destination)
-	allowed, _, resetTime, err := h.rateLimitManager.CheckDestinationRateLimit(
-		spanCtx, h.digester.Digest(limitDest), config.RateLimitPerDestination, time.Hour,
-	)
+	destDigest := h.digester.Digest(limitDest)
+	denied, resetTime, err := h.rateLimitManager.AdmitCreation(spanCtx, ratelimit.CreationAdmission{
+		UserID: h.digester.Digest(req.UserID), UserLimit: config.RateLimitPerUser, UserWindow: time.Hour,
+		IP: h.digester.Digest(peerIP), IPLimit: config.RateLimitPerIP, IPWindow: time.Minute,
+		Destination: destDigest, DestinationLimit: config.RateLimitPerDestination, DestinationWindow: time.Hour,
+		// The user+destination key keeps its existing format. The
+		// destination-only key stops a caller from bypassing the cooldown by
+		// rotating user_id against one destination.
+		CooldownKeys: []string{
+			h.digester.DigestParts(req.UserID, limitDest),
+			ratelimit.DestinationCooldownPrefix + destDigest,
+		},
+		Cooldown: config.ResendCooldown,
+	})
 	if err != nil {
 		h.log.Error().Err(err).Msg("Rate limit check failed")
 		failIdem()
@@ -818,30 +798,15 @@ func (h *Handlers) checkDestinationLimits(c fiber.Ctx, spanCtx context.Context, 
 			"reason": "backend_unavailable",
 		})
 	}
-	if !allowed {
-		metrics.RecordRateLimitHit("destination")
-		failIdem()
-		return challengeRateLimitResponse(c, "rate_limit_exceeded", resetTime)
+	if denied == "" {
+		return true, nil
 	}
-
-	// 4. Resend cooldown (peppered digest of user+destination)
-	cooldownKey := h.digester.DigestParts(req.UserID, limitDest)
-	allowed, resetTime, err = h.rateLimitManager.CheckResendCooldown(spanCtx, cooldownKey, config.ResendCooldown)
-	if err != nil {
-		h.log.Error().Err(err).Msg("Cooldown check failed")
-		failIdem()
-		return false, c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-			"ok":     false,
-			"reason": "backend_unavailable",
-		})
-	}
-	if !allowed {
-		metrics.RecordRateLimitHit("resend_cooldown")
-		failIdem()
+	metrics.RecordRateLimitHit(denied)
+	failIdem()
+	if denied == ratelimit.DeniedByCooldown {
 		return challengeRateLimitResponse(c, "resend_cooldown", resetTime)
 	}
-
-	return true, nil
+	return challengeRateLimitResponse(c, "rate_limit_exceeded", resetTime)
 }
 
 func (h *Handlers) deliverChallenge(c fiber.Ctx, spanCtx context.Context, req CreateChallengeRequest, ch *challengekit.Challenge, msg *provider.Message, providerName, peerIP string) (bool, bool, error) {
@@ -896,8 +861,11 @@ func (h *Handlers) deliverChallenge(c fiber.Ctx, spanCtx context.Context, req Cr
 				"error":  "Failed to send verification code",
 			})
 		}
+		// The provider was already called. In soft mode the request completes
+		// with delivery_status=failed; an audit failure must not replace that
+		// outcome and leave the challenge pending and the key unresolved.
 		if auditErr != nil {
-			return false, false, c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
+			h.reportPostActionAuditFailure("create", audit.EventSendFailed, audit.ResultFailure, ch.ID, req.UserID, errorReason, auditErr)
 		}
 		// Soft mode (only permitted outside production / degraded): the challenge
 		// stays created but we surface delivery_status=failed so the caller knows
@@ -919,12 +887,38 @@ func (h *Handlers) deliverChallenge(c fiber.Ctx, spanCtx context.Context, req Cr
 		if sendResult != nil {
 			messageID = sendResult.MessageID
 		}
+		// The provider accepted the message. Returning an error here would
+		// report a sent code as failed and leave the idempotency key
+		// unresolved, so the request continues to activation.
 		if err := auditlog.LogSendSuccess(providerCtx, ch.ID, req.UserID, req.Channel, req.Destination, req.Purpose, providerName, messageID, peerIP); err != nil {
-			return false, false, c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
+			h.reportPostActionAuditFailure("create", audit.EventSendSuccess, audit.ResultSuccess, ch.ID, req.UserID, "", err)
 		}
 	}
 
 	return softDeliveryFailed, true, nil
+}
+
+// reportPostActionAuditFailure records an audit event that could not be
+// written after its action had already taken effect (message sent, code
+// consumed, challenge revoked). The request is answered normally, so the
+// metric and this log line are the only trace of the event. The line carries
+// the event's non-sensitive fields; the user appears only as a peppered
+// digest, and the code and destination are never included.
+func (h *Handlers) reportPostActionAuditFailure(operation string, event audit.EventType, result audit.Result, challengeID, userID, reason string, err error) {
+	metrics.RecordAuditPostActionFailure(operation)
+	entry := h.log.Error().Err(err).
+		Str("stage", "post_action").
+		Str("operation", operation).
+		Str("event_type", string(event)).
+		Str("challenge_id", challengeID).
+		Str("result", string(result))
+	if reason != "" {
+		entry = entry.Str("reason", reason)
+	}
+	if userID != "" {
+		entry = entry.Str("user_id_digest", h.digester.Digest(userID))
+	}
+	entry.Msg("audit record not written after the action completed; request answered normally")
 }
 
 func (h *Handlers) activateChallenge(c fiber.Ctx, spanCtx context.Context, ch *challengekit.Challenge, principal, idempotencyKey, fingerprint, idempotencyOwner string) (bool, error) {
@@ -934,8 +928,8 @@ func (h *Handlers) activateChallenge(c fiber.Ctx, spanCtx context.Context, ch *c
 	// previously active challenge so an older, still-live code cannot be
 	// redeemed. A backend error here must not leave a redeemable-but-unindexed
 	// code, so on failure we revoke this pending challenge and fail closed.
-	// Re-check ownership immediately before activation. Sending records remain
-	// non-expiring; a backend error must not reopen the key for another send.
+	// Re-check ownership immediately before activation. Sending records keep
+	// the unresolved TTL; a backend error must not reopen the key for another send.
 	if idempotencyKey != "" {
 		if err := h.idempotencyStore.Refresh(spanCtx, principal, idempotencyKey, fingerprint, idempotencyOwner); err != nil {
 			_ = h.challengeManager.RevokePending(spanCtx, ch.ID)
@@ -1056,8 +1050,9 @@ func (h *Handlers) buildDeliveryMessage(req CreateChallengeRequest, challengeID,
 }
 
 func (h *Handlers) persistSendBoundary(c fiber.Ctx, spanCtx context.Context, ch *challengekit.Challenge, principal, idempotencyKey, fingerprint, idempotencyOwner string) (bool, error) {
-	// Persist the send boundary before invoking the provider. A TTL lease alone
-	// would expire after a process exit and allow a second delivery.
+	// Persist the send boundary before invoking the provider. The short pending
+	// lease alone would expire soon after a process exit and allow a second
+	// delivery; the sending record holds the key for IDEMPOTENCY_UNRESOLVED_TTL.
 	if idempotencyKey != "" {
 		if err := h.idempotencyStore.MarkSending(spanCtx, principal, idempotencyKey, fingerprint, idempotencyOwner, ch.ID); err != nil {
 			_ = h.challengeManager.RevokePending(spanCtx, ch.ID)

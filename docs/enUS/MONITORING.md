@@ -104,7 +104,7 @@ herald_rate_limit_hits_total{scope="resend_cooldown"} 200
 Histogram tracking Redis operation latency.
 
 **Labels:**
-- `operation`: Instrumented wrapper (`ratelimit`, `ratelimit_user`, `ratelimit_ip`, `ratelimit_dest`, `cooldown`); not every Redis command is instrumented
+- `operation`: Instrumented wrapper; not every Redis command is instrumented. Challenge creation applies its limits and cooldowns in one call reported as `ratelimit_create`. The per-limiter wrappers (`ratelimit`, `ratelimit_user`, `ratelimit_ip`, `ratelimit_dest`, `cooldown`) are no longer used by challenge creation
 
 **Buckets:** [0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0]
 
@@ -326,6 +326,14 @@ but undelivered records remain in the local buffer for retry. Monitor pending
 acceptance. Such failures return `503/audit_unavailable`; it no longer counts
 recoverable backend delivery failures. Verify that retries drain the buffer
 after storage recovery. Never delete pending files to silence an alert.
+
+Alert on `herald_audit_post_action_failure_total{operation}` (`create`,
+`verify`, `revoke`): a result record could not be accepted after the message
+was sent, the code was consumed or the revoke completed. The request was
+answered normally, so the event is missing from the audit trail. Each
+occurrence also increments `herald_audit_dropped_total` and writes one error
+log line with `stage="post_action"`, the event type, challenge ID, result,
+reason and `user_id_digest`; use that line to reconstruct the record.
 
 ## Provider failure diagnostics
 

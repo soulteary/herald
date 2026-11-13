@@ -106,9 +106,10 @@ A missing credential does not disable authentication. With `REQUEST_AUTH_MODE=hm
 | `CHALLENGE_EXPIRY` | Challenge expiry (e.g. `5m`, `300s`) | `5m` | No |
 | `MAX_ATTEMPTS` | Max verify failures per challenge before lockout | `5` | No |
 | `LOCKOUT_DURATION` | Lockout duration (e.g. `10m`) | `10m` | No |
-| `RESEND_COOLDOWN` | Minimum interval between challenges for the same user and destination; must be positive | `60s` | No |
+| `RESEND_COOLDOWN` | Minimum interval between challenges for the same user and destination, and for the same destination regardless of user; must be positive | `60s` | No |
 | `CODE_LENGTH` | Verification code length (digits, minimum `4`; must also fit `HERALD_MAX_BODY_BYTES` after the compact context-bound V2 envelope, currently 136 bytes) | `6` | No |
-| `IDEMPOTENCY_KEY_TTL` | Pre-send claim and completed response TTL; unresolved sends do not expire; `0` = use `CHALLENGE_EXPIRY` | `0` | No |
+| `IDEMPOTENCY_KEY_TTL` | Pre-send claim and completed response TTL; unresolved sends use `IDEMPOTENCY_UNRESOLVED_TTL`; `0` = use `CHALLENGE_EXPIRY` | `0` | No |
+| `IDEMPOTENCY_UNRESOLVED_TTL` | How long an idempotency key whose send was started but not completed keeps answering `409/delivery_unknown`. Must be positive and greater than `IDEMPOTENCY_KEY_TTL` (`CHALLENGE_EXPIRY` when that is `0`); otherwise startup fails. After it elapses the key can start a new request | `24h` | No |
 | `ALLOWED_PURPOSES` | Allowed purposes, comma-separated (e.g. `login,reset,bind,stepup`) | `login` | No |
 | `HERALD_VERIFY_V1_ENABLED` | Register `POST /v1/otp/verifications`, which has no expected user/purpose/channel binding. Set `false` once all callers use `POST /v2/otp/verifications`; the v1 route then returns 404 | `true` | No |
 
@@ -230,7 +231,11 @@ An unavailable spool prevents startup. If the buffer fills or a later local
 write fails, affected APIs return `503/audit_unavailable` rather than success.
 Create requests stop before sending when their initial audit cannot be stored;
 verification and revoke attempts are stored before changing challenge state.
-A later result-record failure does not roll back an already completed operation.
+A result record that fails after the message was accepted, the code was
+consumed or the revoke completed does not change the response: the request
+succeeds, `herald_audit_post_action_failure_total{operation}` is incremented and
+one error line records the event. Alert on that counter, because those events
+are missing from the audit trail.
 Use the same idempotency key for uncertain send results rather than blindly
 resending. Pending audit files have no automatic expiry and are bounded by the
 configured byte limit; monitor disk space and delivery failures.
@@ -320,7 +325,7 @@ For production deployments, it is **strongly recommended** to use a dedicated Re
 **Key Prefixes:**
 - `otp:ch:*` - Challenge data (TTL: challenge expiry time)
 - `ratelimit:*` - Rate limiting counters (TTL: rate limit window)
-- `otp:idem2:*` - Idempotency records (pending/completed: configured TTL; unresolved sending: no expiry)
+- `otp:idem2:*` - Idempotency records (pending/completed: `IDEMPOTENCY_KEY_TTL`; unresolved sending: `IDEMPOTENCY_UNRESOLVED_TTL`)
 - `otp:lock:*` - User lockout records (TTL: lockout duration)
 
 **Unresolved sends:**
@@ -332,21 +337,27 @@ Redis persistence and failover settings for the durability your deployment needs
 Do not flush the database or rotate `HERALD_IDEMPOTENCY_SECRET` while unresolved
 records or retries remain: changing the derived key would bypass an old record.
 
-A `sending` record has no TTL and includes `challenge_id` for reconciliation.
-Monitor `delivery_unknown` idempotency outcomes and the number of unresolved
-records. Check provider delivery logs using that challenge ID (also the provider
-idempotency key) before an administrator resolves the record. Do not automatically
-expire or delete these records: the original request may still be running, or
-its message may already have been delivered. Establish a separate, explicit
-business decision for any replacement send. Unresolved records consume storage
-until reconciled, including crashes between persisting the record and sending.
-This is an at-most-once send attempt for an unresolved key, not guaranteed delivery.
+A `sending` record expires after `IDEMPOTENCY_UNRESOLVED_TTL` (default `24h`)
+and includes `challenge_id` for reconciliation. Until then the key answers
+`409/delivery_unknown`. Monitor `delivery_unknown` idempotency outcomes and the
+number of unresolved records. Check provider delivery logs using that challenge
+ID (also the provider idempotency key) before an administrator resolves the
+record. Do not delete these records early: the original request may still be
+running, or its message may already have been delivered. Establish a separate,
+explicit business decision for any replacement send. Once the TTL has elapsed
+the record is removed and a request with the same key is treated as new, so
+choose a value longer than any client retries a key. Within the TTL this is an
+at-most-once send attempt for an unresolved key, not guaranteed delivery.
+
+Records stored without a TTL by versions that predate
+`IDEMPOTENCY_UNRESOLVED_TTL` are not modified and do not expire. Reconcile and
+remove them as before.
 
 **Capacity Planning:**
 
 Measure payload size and Redis overhead under representative traffic. Include
 challenges and activation indexes, expiring completed idempotency responses,
-non-expiring unresolved sends, rate/cooldown keys, nonces, and audit retention.
+unresolved sends retained for `IDEMPOTENCY_UNRESOLVED_TTL`, rate/cooldown keys, nonces, and audit retention.
 A peak-rate × challenge-TTL estimate alone does not bound total storage. Account
 separately for persistent audit-buffer disk space and the process hash-work
 budget. Use `MEMORY USAGE`, key counts and retained-record growth for sizing.
@@ -432,8 +443,8 @@ replicas. It does not change Argon2 parameters or apply to the TOTP proxy.
 Each current Argon2 operation uses about 64 MiB. Size the budget for available
 memory and CPU, including garbage collection and other process overhead; this
 is not a hard RSS limit. Excess requests are rejected without queueing with
-`503/backend_unavailable` and `Retry-After: 1`. Creation admission precedes rate
-and cooldown mutation; the pre-send idempotency claim is released when Redis is
+`503/backend_unavailable` and `Retry-After: 1`. Creation admission precedes the
+user-lock check and the rate and cooldown step; the pre-send idempotency claim is released when Redis is
 available. Completed idempotency responses remain replayable while capacity is
 full. Rejected verifications do not consume codes or increment their attempts.
 
@@ -453,8 +464,8 @@ stable. Changing the derivation secret bypasses all existing idempotency records
 
 Legacy empty-key-ID records are retained. A matching service/client key returns
 `409/idempotency_namespace_conflict`; this is an operator-reconciliation condition,
-not permission to retry with another key. Non-expiring sending records remain
-non-expiring. Do not infer the original credential from the current default or
+not permission to retry with another key. Sending records stored without a
+TTL by earlier versions keep no TTL. Do not infer the original credential from the current default or
 blindly replay/migrate old responses after key rotation. Authorized explicit-key records
 continue normally when there is no conflicting legacy record.
 
@@ -689,3 +700,41 @@ under the canonical key are not read by v1.5.2 for numbers written with `+` or
 downgrading its module. For a Go application rebuilt from source, restore the
 pre-upgrade `go.mod` and `go.sum` and inspect `go list -m all` before building.
 Older migration requirements above still apply.
+
+## Upgrade from v1.6.0
+
+No data conversion is required. Rate-limit counters and the existing
+user+destination cooldown keep their Redis key names, window and TTL handling,
+so counters and cooldowns in progress continue to apply, and old and new
+instances share them during a rolling upgrade.
+
+- Challenge creation applies the user, IP and destination limits and the
+  cooldowns in one Redis Lua call that reads and writes five keys. Herald
+  connects to a single Redis endpoint; a proxy that routes keys to different
+  shards must support multi-key scripts.
+- A request rejected by a limit, a cooldown or `user_locked` no longer consumes
+  quota. A locked user who is also over a limit now receives `403/user_locked`
+  instead of `429`.
+- A second cooldown key, `ratelimit:cooldown:dest:<digest>`, applies
+  `RESEND_COOLDOWN` per destination regardless of `user_id`. Callers that
+  legitimately send to one destination for several user IDs within the cooldown
+  now receive `429/resend_cooldown`. Instances running v1.6.0 do not read this
+  key, so the destination-only cooldown is fully effective once every instance
+  is upgraded.
+- `herald_redis_operation_duration_seconds` and
+  `herald_redis_operations_total` report challenge creation limits under
+  `operation="ratelimit_create"`. The `ratelimit_user`, `ratelimit_ip`,
+  `ratelimit_dest` and `cooldown` values are no longer emitted by challenge
+  creation; update dashboards that select them.
+- Set `IDEMPOTENCY_UNRESOLVED_TTL` if `24h` is not suitable. It must exceed
+  `IDEMPOTENCY_KEY_TTL` (`CHALLENGE_EXPIRY` when that is `0`); a deployment with
+  a pending TTL of 24h or more must set it explicitly or startup fails. New
+  unresolved `sending` records expire after it. Records already stored without a
+  TTL are left as they are.
+- Create, verify and revoke no longer return `503/audit_unavailable` when only
+  the result record fails after the action completed. Alert on
+  `herald_audit_post_action_failure_total`.
+
+Rolling back to v1.6.0 keeps all Redis data. v1.6.0 ignores the
+destination-only cooldown key and `IDEMPOTENCY_UNRESOLVED_TTL`; `sending`
+records written by the newer version keep their TTL and still expire.

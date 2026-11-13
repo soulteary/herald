@@ -129,9 +129,11 @@ without nonce replay protection.
   sending, or replay a completed response within its TTL.
 - Same key + **different fingerprinted fields** → `409 Conflict`.
 - After success, the exact response is stored and **replayed** for retries.
-- Before delivery, the claim becomes a non-expiring `sending` record. A crash
+- Before delivery, the claim becomes a `sending` record. A crash
   or an uncertain post-send failure leaves the key blocked with
-  `409/delivery_unknown`; it cannot be reclaimed by TTL expiry. Failures before
+  `409/delivery_unknown`. Versions with `IDEMPOTENCY_UNRESOLVED_TTL` expire the
+  record after that duration (default `24h`); earlier versions stored it
+  without a TTL. Failures before
   this boundary can still release or expire the pending claim.
 - A failed success-record write returns `503/backend_unavailable`. If Redis
   committed the write but its acknowledgement was lost, a retry replays it.
@@ -217,7 +219,9 @@ deleted from your environment.
   non-creation routes. It cannot restore v1/v2 challenge creation. Coordinate
   server/client upgrades as described in [API authentication](API.md#hmac-v3).
 - Redis keys are additive (`otp:nonce:*`, `otp:idem2:*`). Nonce and completed
-  response keys expire normally; unresolved `sending` records do not. Preserve
+  response keys expire normally; unresolved `sending` records expire after
+  `IDEMPOTENCY_UNRESOLVED_TTL` where that setting exists, and not at all when
+  written by earlier versions. Preserve
   them during rollback and reconcile them before any cleanup.
 
 ---
