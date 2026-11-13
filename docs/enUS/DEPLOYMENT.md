@@ -13,7 +13,7 @@ export HERALD_API_KEY="$(openssl rand -hex 32)"
 docker compose up -d
 ```
 
-The checked-in Compose service sets `PROVIDER_FAILURE_POLICY=strict`, which is required for production startup.
+The checked-in Compose service sets `PROVIDER_FAILURE_POLICY=strict`. Production requires `strict`; it is also what production uses when the variable is unset.
 
 ### Manual Deployment on Linux
 
@@ -133,13 +133,17 @@ A missing credential does not disable authentication. With `REQUEST_AUTH_MODE=hm
 | `SMTP_USER` | SMTP username | (empty) | No |
 | `SMTP_PASSWORD` | SMTP password | (empty) | No |
 | `SMTP_FROM` | From address | (empty) | Recommended |
-| `PROVIDER_FAILURE_POLICY` | On send failure: `soft` (still create challenge) or `strict` (do not create) | `soft` | No |
+| `PROVIDER_FAILURE_POLICY` | On send failure: `soft` (still create challenge) or `strict` (do not create) | `soft`; `strict` when `ENVIRONMENT=production` | No |
+
+Production forbids `soft`. When the variable is unset or empty in production, Herald uses `strict` and logs `Production default: PROVIDER_FAILURE_POLICY=strict`; an explicit `soft` still fails startup.
+
+Provider and TOTP base URLs (`HERALD_SMTP_API_URL`, `SMS_API_BASE_URL`, `HERALD_DINGTALK_API_URL`, `HERALD_TOTP_BASE_URL`) must use `https://` in production, where a plain `http://` URL fails startup. Other environments accept `http://` and log a warning.
 
 **herald-smtp plugin** (when set, built-in SMTP is not used):
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
-| `HERALD_SMTP_API_URL` | [herald-smtp](https://github.com/soulteary/herald-smtp) base URL (e.g. `http://herald-smtp:8084`) | (empty) | When using plugin |
+| `HERALD_SMTP_API_URL` | [herald-smtp](https://github.com/soulteary/herald-smtp) base URL (e.g. `https://herald-smtp.internal:8084`) | (empty) | When using plugin |
 | `HERALD_SMTP_API_KEY` | Must match herald-smtp `API_KEY` if set | (empty) | No |
 
 #### SMS channel (HTTP API mode)
@@ -156,7 +160,7 @@ The implementation calls an external SMS HTTP API; Aliyun/etc. credentials are h
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
-| `HERALD_DINGTALK_API_URL` | [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) base URL (e.g. `http://herald-dingtalk:8083`) | (empty) | When using DingTalk |
+| `HERALD_DINGTALK_API_URL` | [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) base URL (e.g. `https://herald-dingtalk.internal:8083`) | (empty) | When using DingTalk |
 | `HERALD_DINGTALK_API_KEY` | Must match herald-dingtalk `API_KEY` if set | (empty) | No |
 
 #### TOTP (herald-totp proxy)
@@ -179,7 +183,7 @@ responses. API Key and HMAC wire formats are unchanged.
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
 | `HERALD_TOTP_ENABLED` | Enable TOTP proxy | `false` | No |
-| `HERALD_TOTP_BASE_URL` | herald-totp service base URL (e.g. `http://herald-totp:8085`) | (empty) | When TOTP enabled |
+| `HERALD_TOTP_BASE_URL` | herald-totp service base URL (e.g. `https://herald-totp.internal:8085`) | (empty) | When TOTP enabled |
 | `HERALD_TOTP_API_KEY` | API key for Herald to call herald-totp (if herald-totp requires it) | (empty) | No |
 | `HERALD_TOTP_HMAC_SECRET` | HMAC secret for Herald to call herald-totp (if herald-totp uses HMAC) | (empty) | No |
 | `HERALD_TOTP_HMAC_KEY_ID` | Explicit TOTP signing key ID; required when the backend accepts multiple keys | (empty; omit ID) | No |
@@ -298,7 +302,7 @@ destinations.
 
 When `HERALD_SMTP_API_URL` is set, Herald does not use built-in SMTP. It forwards email sends to [herald-smtp](https://github.com/soulteary/herald-smtp) over HTTP. All SMTP credentials and sending logic live in herald-smtp; Herald does not store any SMTP credentials for the email channel in this mode.
 
-- Set `HERALD_SMTP_API_URL` to the base URL of your herald-smtp service (e.g. `http://herald-smtp:8084`).
+- Set `HERALD_SMTP_API_URL` to the base URL of your herald-smtp service (e.g. `https://herald-smtp.internal:8084`).
 - If herald-smtp is configured with `API_KEY`, set `HERALD_SMTP_API_KEY` to the same value so Herald can authenticate when calling herald-smtp.
 - When `HERALD_SMTP_API_URL` is set, Herald ignores `SMTP_HOST` and related built-in SMTP settings (they are not used for the email channel).
 
@@ -306,14 +310,14 @@ When `HERALD_SMTP_API_URL` is set, Herald does not use built-in SMTP. It forward
 
 When `channel` is `dingtalk`, Herald does not send messages itself. It forwards the send to [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) over HTTP. All DingTalk credentials and business logic live in herald-dingtalk; Herald does not store any DingTalk credentials.
 
-- Set `HERALD_DINGTALK_API_URL` to the base URL of your herald-dingtalk service (e.g. `http://herald-dingtalk:8083`).
+- Set `HERALD_DINGTALK_API_URL` to the base URL of your herald-dingtalk service (e.g. `https://herald-dingtalk.internal:8083`).
 - If herald-dingtalk is configured with `API_KEY`, set `HERALD_DINGTALK_API_KEY` to the same value so Herald can authenticate when calling herald-dingtalk.
 
 ### TOTP (herald-totp)
 
 When `HERALD_TOTP_ENABLED=true` and `HERALD_TOTP_BASE_URL` is set, Herald proxies TOTP (Authenticator) operations to [herald-totp](https://github.com/soulteary/herald-totp). Stargate (or other callers) can use a single Herald base URL for both OTP (SMS/email/DingTalk) and TOTP flows.
 
-- Set `HERALD_TOTP_BASE_URL` to the base URL of your herald-totp service (e.g. `http://herald-totp:8085`).
+- Set `HERALD_TOTP_BASE_URL` to the base URL of your herald-totp service (e.g. `https://herald-totp.internal:8085`).
 - If herald-totp requires API key or HMAC auth, set `HERALD_TOTP_API_KEY` or `HERALD_TOTP_HMAC_SECRET` accordingly.
 - See [API.md](API.md#totp-proxy-optional) for TOTP endpoints (status, verify, enroll/start, enroll/confirm, revoke).
 
