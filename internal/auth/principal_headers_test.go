@@ -18,7 +18,7 @@ func TestAmbiguousPrincipalHeadersRejectBeforeSideEffects(t *testing.T) {
 				rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 				t.Cleanup(func() { _ = rc.Close() })
 				now := time.Now()
-				cfg := Config{Mode: Mode(mode), APIKey: "test-api-key", Clock: func() time.Time { return now }, FailClosed: true,
+				cfg := Config{Mode: Mode(mode), APIKey: "test-api-key", Clock: func() time.Time { return now },
 					KeyProvider: func(string) string { return "test-secret" }, NonceStore: NewNonceStore(rc, "test:nonce:", []byte("test-nonce-secret"), time.Minute)}
 				headers := signedHeaders(now, "nonce", "key", "test-secret")
 				headers[field] = "first|kid:second"

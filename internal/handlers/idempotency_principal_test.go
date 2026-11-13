@@ -36,7 +36,7 @@ func TestIdempotencyPrincipalCannotAliasDifferentHMACKeys(t *testing.T) {
 	}
 	app := fiber.New()
 	app.Post("/v1/otp/challenges", auth.New(auth.Config{
-		Mode: auth.ModeHMACV2, FailClosed: true,
+		Mode: auth.ModeHMACV2,
 		KeyProvider: func(keyID string) string {
 			for _, credential := range credentials {
 				if credential.keyID == keyID {

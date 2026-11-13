@@ -375,8 +375,6 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 		MaxDrift:        config.HMACMaxDrift,
 		V1Enabled:       config.HMACV1Enabled,
 		V1Handler:       v1Handler,
-		FailClosed:      config.IsProduction(),
-		Logger:          &zerologLogger,
 	}
 	authHandler := auth.New(authConfig)
 	authorize := func(action string) fiber.Handler { return auth.AuthorizeService(policies, action) }

@@ -491,7 +491,7 @@ HMAC/API-key failures use a JSON `reason` value:
 - `timestamp_out_of_range`: Timestamp is outside the configured drift window
 - `invalid_signature`: HMAC signature verification failed
 - `replayed_nonce`: The nonce was already consumed
-- `nonce_store_unavailable`: Redis nonce storage failed in fail-closed mode
+- `nonce_store_unavailable`: Redis nonce storage failed. The request is rejected in every environment
 - `unauthorized`: Authentication failed
 
 ### Idempotency and verification coordination errors

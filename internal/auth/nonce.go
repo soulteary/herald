@@ -12,8 +12,7 @@ import (
 )
 
 // ErrNonceStoreUnavailable is returned when the nonce backend fails. Callers
-// must fail closed (reject the request) in production rather than allowing a
-// replay window.
+// must fail closed (reject the request) rather than allowing a replay window.
 var ErrNonceStoreUnavailable = errors.New("auth: nonce store unavailable")
 
 // NonceStore consumes single-use nonces via Redis SET NX EX. The nonce is

@@ -42,7 +42,7 @@ func TestV3HeaderTamperingDoesNotConsumeNonce(t *testing.T) {
 			defer func() { _ = rc.Close() }()
 			now := time.Now()
 			nonceStore := NewNonceStore(rc, "v3:", []byte("pepper"), time.Minute)
-			cfg := Config{Mode: ModeHMACV2, RequireV3: true, FailClosed: true, Clock: func() time.Time { return now }, KeyProvider: func(string) string { return "secret" }, NonceStore: nonceStore}
+			cfg := Config{Mode: ModeHMACV2, RequireV3: true, Clock: func() time.Time { return now }, KeyProvider: func(string) string { return "secret" }, NonceStore: nonceStore}
 			headers := signedHeaders(now, "nonce", "key", "secret")
 			headers[HeaderSignatureVersion] = SignatureVersionV3
 			headers["Idempotency-Key"] = tc.wire

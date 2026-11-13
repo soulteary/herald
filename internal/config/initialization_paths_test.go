@@ -27,7 +27,7 @@ func TestInitializeSecretDerivation(t *testing.T) {
 			hmacKeysMap = nil
 			hmacKeysMapOnce = sync.Once{}
 			Env = EnvDevelopment
-			want := "herald-idempotency-fallback"
+			want := ""
 			switch source {
 			case "hmac":
 				HMACSecret = strings.Repeat("h", 32)
@@ -45,6 +45,13 @@ func TestInitializeSecretDerivation(t *testing.T) {
 					t.Fatalf("implicit multi-key secret accepted: %v", err)
 				}
 				return
+			}
+			if source == "development fallback" {
+				// No secret configured: a per-process value is generated.
+				want = IdempotencySecret
+				if err != nil || len(want) < 64 {
+					t.Fatalf("generated secret: err=%v len=%d", err, len(want))
+				}
 			}
 			if err != nil || IdempotencySecret != want || PIIPepper != want {
 				t.Fatalf("derived secrets: err=%v", err)

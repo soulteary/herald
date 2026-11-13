@@ -66,7 +66,7 @@ func identityDefaultApp(t *testing.T, rc *redis.Client, p provider.Provider, def
 			return "replacement-secret"
 		}
 		return ""
-	}, NonceStore: auth.NewNonceStore(rc, "identity:nonce:", []byte("nonce-secret"), time.Minute), FailClosed: true}))
+	}, NonceStore: auth.NewNonceStore(rc, "identity:nonce:", []byte("nonce-secret"), time.Minute)}))
 	app.Post("/v1/otp/challenges", h.CreateChallenge)
 	return app
 }

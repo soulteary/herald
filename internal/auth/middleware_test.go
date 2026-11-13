@@ -107,7 +107,7 @@ func TestMiddleware_HMACV2SuccessReplayAndSignatureOrder(t *testing.T) {
 			}
 			return ""
 		},
-		NonceStore: store, FailClosed: true,
+		NonceStore: store,
 	}
 
 	bad := signedHeaders(now, "nonce-order", "key-1", "wrong-secret")
@@ -134,7 +134,7 @@ func TestMiddleware_HMACV2DefaultKeyID(t *testing.T) {
 			}
 			return ""
 		},
-		NonceStore: newNonceStore(t), FailClosed: true,
+		NonceStore: newNonceStore(t),
 	}
 	if status, reason := runMiddlewareRequest(t, cfg, headers); status != http.StatusNoContent {
 		t.Fatalf("status=%d reason=%q", status, reason)
@@ -164,7 +164,6 @@ func TestMiddleware_HMACV2ReplayThroughoutTimestampWindow(t *testing.T) {
 				KeyProvider: func(string) string { return "secret" },
 				// This is the retention previously configured by the router.
 				NonceStore: NewNonceStore(client, "test:nonce:", []byte("secret"), drift+30*time.Second),
-				FailClosed: true,
 			}
 			headers := signedHeaders(now.Add(drift), "future-nonce", "key-1", "secret")
 			if status, reason := runMiddlewareRequest(t, cfg, headers); status != http.StatusNoContent {
@@ -205,7 +204,7 @@ func TestMiddleware_HMACV2Rejections(t *testing.T) {
 			}
 			return ""
 		},
-		NonceStore: newNonceStore(t), FailClosed: true,
+		NonceStore: newNonceStore(t),
 	}
 	valid := signedHeaders(now, "nonce-base", "key-1", "secret")
 	clone := func() map[string]string {
@@ -246,22 +245,18 @@ func TestMiddleware_HMACV2Rejections(t *testing.T) {
 	}
 }
 
-func TestMiddleware_HMACV2NonceBackendPolicy(t *testing.T) {
+// A nonce-store failure rejects a correctly signed request. There is no
+// option that accepts it: doing so would accept replays while Redis is down.
+func TestMiddleware_HMACV2NonceBackendFailureRejects(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	headers := signedHeaders(now, "nonce-backend", "key-1", "secret")
-	base := Config{
+	cfg := Config{
 		Mode: ModeHMACV2, Clock: func() time.Time { return now },
 		KeyProvider: func(string) string { return "secret" },
 		NonceStore:  NewNonceStore(nil, "", nil, 0),
 	}
-
-	closed := base
-	closed.FailClosed = true
-	if status, reason := runMiddlewareRequest(t, closed, headers); status != http.StatusServiceUnavailable || reason != "nonce_store_unavailable" {
-		t.Fatalf("fail closed: status=%d reason=%q", status, reason)
-	}
-	if status, reason := runMiddlewareRequest(t, base, headers); status != http.StatusNoContent {
-		t.Fatalf("fail open: status=%d reason=%q", status, reason)
+	if status, reason := runMiddlewareRequest(t, cfg, headers); status != http.StatusServiceUnavailable || reason != "nonce_store_unavailable" {
+		t.Fatalf("status=%d reason=%q, want 503/nonce_store_unavailable", status, reason)
 	}
 }
 

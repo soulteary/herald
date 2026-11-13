@@ -56,7 +56,7 @@ other environments Herald logs a warning and uses the default.
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
-| `ENVIRONMENT` | Runtime policy: `development`/`dev`, `test`/`testing`, `production`/`prod`; unknown values fail startup | `development` | Set `production` in production |
+| `ENVIRONMENT` | Runtime policy: `development`/`dev`, `test`/`testing`, `production`/`prod`; unknown values fail startup. When it is unset Herald logs a startup warning, because production validation is then not enforced; a later release will refuse to start without it | `development` | Set it explicitly; `production` in production |
 | `PORT` | Server listen port (with or without leading colon, e.g. `8082` or `:8082`) | `:8082` | No |
 | `REDIS_ADDR` | Redis address (`host:port`); an invalid value fails startup in production and falls back to the default with a warning elsewhere | `localhost:6379` | No |
 | `REDIS_PASSWORD` | Redis password | (empty) | Production, unless explicitly risk-acknowledged |
@@ -93,7 +93,7 @@ Forwarded IP chains are parsed from right to left. Herald skips only explicitly 
 | `HERALD_HMAC_DEFAULT_KEY_ID` | Default for configuration lookups; key-map v2/v3 requests still require an explicit `X-Key-Id` | (empty) | Optional |
 | `HMAC_MAX_DRIFT` | Accepted HMAC v2/v3 timestamp drift | `60s` | No |
 | `HMAC_V1_ENABLED` | Temporarily enable legacy HMAC v1 | `false` | No |
-| `HERALD_IDEMPOTENCY_SECRET` | Key for opaque idempotency records; required for production multi-key-only auth | (empty) | Conditional |
+| `HERALD_IDEMPOTENCY_SECRET` | Key for opaque idempotency records; required for production multi-key-only auth. Outside production, when it is unset Herald uses `HMAC_SECRET`, then `API_KEY`, then a value derived from `HERALD_HMAC_KEYS`; with none of them it generates a random value at each start and logs a warning, so idempotency, nonce, rate-limit and cooldown records are not shared between instances and do not survive a restart | (empty) | Conditional |
 | `HERALD_PII_PEPPER` | Pepper for PII-derived Redis/metric keys; at least 32 bytes in production | (empty) | Recommended |
 
 A missing credential does not disable authentication. With `REQUEST_AUTH_MODE=hmac_v2` (the default) and no `HMAC_SECRET`/`HERALD_HMAC_KEYS`, or with `api_key` and no `API_KEY`, Herald logs a startup warning outside production and every authenticated endpoint returns 401 until the credential is configured; production refuses to start. Only `REQUEST_AUTH_MODE=none` (dev/test only) accepts unauthenticated requests.

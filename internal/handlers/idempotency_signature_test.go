@@ -29,7 +29,7 @@ func TestSignedIdempotencyKeyCannotBeRewrittenForSecondDelivery(t *testing.T) {
 		t.Fatal(err)
 	}
 	app := fiber.New()
-	app.Post("/v1/otp/challenges", auth.New(auth.Config{Mode: auth.ModeHMACV2, RequireV3: true, FailClosed: true, KeyProvider: func(string) string { return "signing-secret" }, DefaultKeyID: "key", NonceStore: auth.NewNonceStore(rc, "tamper:nonce:", []byte("nonce-secret"), time.Minute)}), h.CreateChallenge)
+	app.Post("/v1/otp/challenges", auth.New(auth.Config{Mode: auth.ModeHMACV2, RequireV3: true, KeyProvider: func(string) string { return "signing-secret" }, DefaultKeyID: "key", NonceStore: auth.NewNonceStore(rc, "tamper:nonce:", []byte("nonce-secret"), time.Minute)}), h.CreateChallenge)
 	var statuses []int
 	var ids []string
 	for i, wireKey := range []string{"rewritten-key", "client-key"} {
