@@ -279,8 +279,8 @@ Only when `ENVIRONMENT=test` and `HERALD_TEST_MODE=true`:
 
 ### Provider deployment versions
 
-Pin `ghcr.io/soulteary/herald-dingtalk:1.2.6`,
-`ghcr.io/soulteary/herald-smtp:1.2.6`, and
+Pin `ghcr.io/soulteary/herald-dingtalk:1.2.8`,
+`ghcr.io/soulteary/herald-smtp:1.2.9`, and
 `ghcr.io/soulteary/herald-totp:2.0.4` (or verified immutable digests).
 Herald v1.6.0 imports `github.com/soulteary/herald-totp/v2` v2.0.4. SMTP and
 DingTalk retain their existing patch-level interfaces. TOTP keeps its `/v1` HTTP

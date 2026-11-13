@@ -391,7 +391,7 @@
 
 - `401/invalid_key_id`：仅使用 `HMAC_SECRET` 时省略 ID 或精确填写 `default`。已知自定义 ID 需显式加入 `HERALD_HMAC_KEYS` 并保持调用方身份不变，不能换 ID 重试不确定发送。
 - `409/idempotency_namespace_conflict`：存在身份不明的旧空 Key ID 记录。保留原内容和 TTL，结合渠道及审计证据核对；它不是可直接重试的发送失败。
-- `409/delivery_unknown`：消息可能已经发送。保持身份和客户端键，不得删除不自动过期的发送记录来强制补发。
+- `409/delivery_unknown`：消息可能已经发送。保持身份和客户端键，不得删除尚未确认的发送记录来强制补发。该记录在 `IDEMPOTENCY_UNRESOLVED_TTL`（默认 `24h`）后过期。
 - 生产 CORS 启动报错时，应移除列表中所有独立 `*` 项或关闭 CORS。未列出的来源不应得到通配响应，API Key/HMAC 认证仍独立执行。
 
 升级及回滚均需遵循 [HMAC 升级步骤](DEPLOYMENT.md#hmac-身份升级) 和 [CORS 要求](DEPLOYMENT.md#生产-cors-来源列表)。
