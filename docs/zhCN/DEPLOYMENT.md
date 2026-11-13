@@ -124,8 +124,8 @@ Herald 从右向左解析转发 IP 链，仅跳过明确配置为可信的代理
 
 #### Provider 部署版本
 
-固定使用 `ghcr.io/soulteary/herald-dingtalk:1.2.6`、
-`ghcr.io/soulteary/herald-smtp:1.2.6`、
+固定使用 `ghcr.io/soulteary/herald-dingtalk:1.2.8`、
+`ghcr.io/soulteary/herald-smtp:1.2.9`、
 `ghcr.io/soulteary/herald-totp:2.0.4`，或经过核验的不可变摘要。
 Herald v1.6.0 导入 `github.com/soulteary/herald-totp/v2` v2.0.4。SMTP 和钉钉
 保留补丁版本接口。TOTP 保留 `/v1` HTTP 路由与凭据存储格式，但 HMAC 协议
