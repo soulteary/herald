@@ -417,6 +417,53 @@ exception 事件、审计失败记录只保留已知原因码。未知原因码�
 现在启动和路由构建都会拒绝生产列表任意位置的独立通配项，详见
 [部署要求](DEPLOYMENT.md#生产-cors-来源列表)。
 
+### 限制服务操作
+
+默认服务凭据仍可执行全部 OTP 和 TOTP 操作。调用方权限不同时，将 `HERALD_SERVICE_POLICIES`
+设置为 JSON map，把 HMAC Key ID 映射到固定的服务名和允许的操作：
+
+```json
+{
+  "gateway": {
+    "service": "stargate",
+    "actions": ["otp:create", "otp:verify", "totp:status", "totp:verify"]
+  },
+  "account-admin": {
+    "service": "account-admin",
+    "actions": ["totp:enroll", "totp:revoke", "otp:revoke"]
+  }
+}
+```
+
+为 `HERALD_HMAC_KEYS` 中的每个 Key ID 配置各不相同的随机密钥，包括未列入策略的 Key ID。
+启用策略后会拒绝共用的密钥：否则持有共用密钥的调用方可以用权限更高的 Key ID 签名。
+策略模式下，无效的 HMAC key map 不能回退到单密钥。单密钥模式下唯一的 Key ID 是 `default`。
+策略要求 `REQUEST_AUTH_MODE=hmac_v2` 且 `HMAC_V1_ENABLED=false`。未知的 Key ID 以及
+与策略不匹配的已签名 `X-Service` 值会被拒绝；调用方无法通过修改请求头来选择服务身份。
+被拒绝的操作在 handler 或 provider 运行前返回 403。认证失败仍返回 401。被拒绝的服务身份
+不消费 nonce；通过认证但被操作策略拒绝的请求会消费其 nonce。
+
+支持的操作为 `otp:create`、`otp:verify`、`otp:revoke`、`totp:status`、`totp:verify`、
+`totp:enroll` 和 `totp:revoke`。注册操作同时涵盖开始和确认。验证操作同时涵盖两个版本的
+OTP 验证。策略变量为空时保留此前的受信任服务行为；显式的空 map、无效条目或引用未配置的
+Key ID 都会阻止启动。应先部署包含当前全部所需调用方的策略，再限制凭据。
+
+这是服务/操作边界，不是租户或用户隔离。获得授权的 TOTP 操作仍作用于共享的 subject
+命名空间。对于不能共享该命名空间的调用方，应使用独立的实例、Redis 凭据和 TOTP 后端。
+
+## 已认证的上游请求
+
+TOTP 代理使用 herald-totp 提供的绑定操作的 HMAC v2。应在暂停调用方期间协调升级 TOTP
+服务和 Herald；升级后的服务拒绝仅对请求正文签名的旧签名。代理保留其 TLS、重定向和响应
+大小检查。HMAC 请求不携带可选的 API key。
+
+公开的 Herald SDK 现在拒绝重定向，包括同源重定向。应配置最终服务 URL，使 API key 和
+请求正文不会被发送到非预期的端点。
+
+已签名的路径和原始查询串必须原样到达 herald-totp。若入口网关会剥离或改写公开 URL 前缀，
+应使用 herald-totp 的内部服务地址（origin）。在上游 Redis ACL 中放行带过期时间的
+`totp:auth:nonce:*` 键。
+
 ### OTP 激活失败后的恢复
 
 严格激活先写入活动索引，最后才将验证码记录标记为 active。Redis 脚本运行时

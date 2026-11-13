@@ -231,6 +231,27 @@ v1 验证接口保留原有的无上下文绑定语义。
 列表中的独立 `*` 项。两项变化均无需新签名格式，HMAC 创建仍要求 v3。旧 v1 回退已弃用，
 不具备 nonce 防重放保护。
 
+## Pending challenge 验证协议
+
+Herald 现在启用 challenge-kit 的 `RequireActiveVerification`，并使用独立的记录
+（`otp2:ch:`）、验证锁（`otp2:vlock:`）和激活索引（`otp2:active:v2:`）命名空间。创建时
+写入 pending 记录；仅凭渠道发送成功，该记录还不能用于验证。激活会原子地改变其状态并取代
+此前的 active 验证码。激活失败且清理也失败时，pending 记录可能保留到原有 TTL 到期，但
+验证会拒绝它。
+
+停止创建，排空进行中的请求，等待此前配置的最长 challenge 有效期结束，并替换全部 Herald
+实例，之后再恢复。未命中时不要回退到 `otp:ch:`，也不要让旧版二进制指向新前缀。旧版
+challenge-kit 忽略激活状态；命名空间隔离使它们看不到新的 pending 记录。新的记录前缀不是在
+`otp:ch:` 之后追加内容：旧版验证实例会把未经校验的 challenge ID 直接拼接到该前缀之后，
+因此 `otp:ch:v2:` 这类仅追加后缀的命名空间仍可通过提交 `v2:<new-id>` 访问到。已有的用户
+锁定仍保存在 `otp:lock:`。
+
+保持 `otp:idem2:*`、其派生密钥、nonce 状态和审计卷不变。不确定的 `sending` 记录仍返回
+`delivery_unknown`，需与渠道核对；更换 challenge 命名空间不代表可以用新的幂等键重试。
+激活响应丢失时，新的 active 记录可能已经提交。pending 清理不会删除已经 active 的记录，
+重试也不会重新发送其验证码。回滚前同样应停止创建并等待新 challenge 的有效期结束；回滚
+不会让旧版验证实例看到新记录。
+
 ## Herald v1.4.0 协调升级
 
 Herald 公开 Go 模块路径及外部 HTTP 数据结构保持不变，但本次安全版本需要
