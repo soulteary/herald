@@ -103,7 +103,7 @@ A missing credential does not disable authentication. With `REQUEST_AUTH_MODE=hm
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
 | `HERALD_MAX_CONCURRENT_HASH_OPERATIONS` | Shared creation/v1/v2 verification admission budget per handler instance; positive integer | `4` | No |
-| `CHALLENGE_EXPIRY` | Challenge expiry (e.g. `5m`, `300s`) | `5m` | No |
+| `CHALLENGE_EXPIRY` | Challenge expiry (e.g. `5m`, `300s`). Built-in messages state it in whole minutes, rounded down, and as 1 minute when it is under a minute | `5m` | No |
 | `MAX_ATTEMPTS` | Wrong codes a challenge accepts before it is exhausted and answers `locked` | `5` | No |
 | `LOCKOUT_DURATION` | How long a locked user stays locked, and the window in which exhausted challenges are counted (e.g. `10m`) | `10m` | No |
 | `LOCKOUT_CHALLENGE_THRESHOLD` | Number of challenges a user must exhaust (`MAX_ATTEMPTS` wrong codes each) within `LOCKOUT_DURATION`, counted from the first one, before the user is locked. `1` locks on the first exhausted challenge, as v1.6.0 did. Minimum `1` | `3` | No |

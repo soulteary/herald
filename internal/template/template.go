@@ -261,18 +261,26 @@ func (m *Manager) renderBuiltIn(locale, channel, purpose string, data TemplateDa
 	}
 }
 
+// expiryMinutes converts a code lifetime in seconds to the whole minutes the
+// built-in messages state. The texts only have a minutes placeholder, so a
+// lifetime under one minute is stated as one minute: the smallest value that
+// reads correctly, where truncation gave "0 minutes" and the login text
+// substituted a fixed 5. Longer lifetimes are rounded down, never up.
+func expiryMinutes(seconds int) int {
+	if seconds < 60 {
+		return 1
+	}
+	return seconds / 60
+}
+
 // renderEmailBuiltIn renders built-in email templates.
 // For purpose "login", reuses provider-kit FormatVerificationEmailWithMinutes for simple verification copy.
 func (m *Manager) renderEmailBuiltIn(locale, purpose string, data TemplateData) (subject, body string) {
+	minutes := expiryMinutes(data.ExpiresIn)
 	if purpose == "login" {
-		minutes := data.ExpiresIn / 60
-		if minutes <= 0 {
-			minutes = 5
-		}
 		return provider.FormatVerificationEmailWithMinutes(data.Code, locale, minutes)
 	}
 	lang := m.parseLanguage(locale)
-	minutes := data.ExpiresIn / 60
 	subject = m.bundle.GetTranslation(lang, "email.subject")
 	params := map[string]interface{}{
 		"code":    data.Code,
@@ -287,15 +295,11 @@ func (m *Manager) renderEmailBuiltIn(locale, purpose string, data TemplateData) 
 // renderSMSBuiltIn renders built-in SMS templates.
 // For purpose "login", reuses provider-kit FormatVerificationSMSWithMinutes for simple verification copy.
 func (m *Manager) renderSMSBuiltIn(locale, purpose string, data TemplateData) string {
+	minutes := expiryMinutes(data.ExpiresIn)
 	if purpose == "login" {
-		minutes := data.ExpiresIn / 60
-		if minutes <= 0 {
-			minutes = 5
-		}
 		return provider.FormatVerificationSMSWithMinutes(data.Code, locale, minutes)
 	}
 	lang := m.parseLanguage(locale)
-	minutes := data.ExpiresIn / 60
 	params := map[string]interface{}{
 		"code":    data.Code,
 		"minutes": minutes,
