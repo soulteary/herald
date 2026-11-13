@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Refuse to start when `RESEND_COOLDOWN` is `0`. The value passed validation,
+  but the limiter rejects a zero cooldown, so every challenge request answered
+  503 `backend_unavailable` after spending its rate-limit quota.
 - Correct the startup warning for missing service credentials. It said
   authentication "will be disabled", but `hmac_v2` and `api_key` reject every
   request with 401 until a credential is set. The warning now names the
@@ -44,6 +47,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   number. `+8613800138000`, `8613800138000` and `008613800138000` previously
   had separate quotas; they now share one. Delivery and stored challenges are
   unchanged, and national numbers are not matched to their international form.
+  Counters and cooldowns recorded under the old key for a number written with
+  `+` or `00` are not carried over: such a number starts with a fresh quota
+  after the upgrade, and old and new instances count it separately while both
+  are running.
 - Update Go to 1.27.4, which fixes GO-2026-6859 in `net/http`. The build image is
   now `golang:1.27.4-alpine3.24`.
 - SDK: `TOTPRevoke` returns an error with reason `revoke_not_confirmed` when
@@ -53,13 +60,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Report boolean environment variables whose value `strconv.ParseBool` does not
   accept (for example `AUDIT_MASK_DESTINATION=yes`). They previously fell back to
   the default without notice. This is fatal in production and a warning elsewhere.
+  Accepted spellings are `1`, `t`, `T`, `TRUE`, `true`, `True`, `0`, `f`, `F`,
+  `FALSE`, `false` and `False`, with no surrounding whitespace.
+- Report integer and duration environment variables that cannot be parsed, such
+  as `HMAC_MAX_DRIFT=60` (no unit) or `RATE_LIMIT_PER_IP=5/m`. They also fell
+  back to the default without notice. This is fatal in production and a warning
+  elsewhere.
 
 ### Changed
 
-- Update Fiber to v3.7.0, `middleware-kit/v3` to v3.0.5, `audit-kit/v2` to v2.1.5
-  (audit log files are created with mode 0600) and `provider-kit` to v1.7.5 (an
+- Update Fiber to v3.7.0 and fasthttp to v1.78.0. Request trailers are no longer
+  readable as headers, so authentication and idempotency headers must be sent in
+  the header section. A request that announces more than 16 trailer names is
+  answered with a plain-text 431 before Herald's JSON error handling. A chunked
+  body that ends before its last chunk is answered with 400 `request_error`; it
+  was previously processed as a shorter body.
+- Update `middleware-kit/v3` to v3.0.6, `audit-kit/v2` to v2.1.6 (audit log
+  files are created with mode 0600 since v2.1.5), `provider-kit` to v1.7.5 (an
   SMTP QUIT failure after the message was accepted is no longer a failed send),
-  and refresh indirect dependencies.
+  `challenge-kit` to v1.11.2, `redis-kit` to v1.8.2, `cli-kit` to v1.9.4,
+  `health-kit/v4` to v4.0.7, `http-kit/v2` to v2.1.1 and the other kits to
+  their current releases, and refresh indirect dependencies.
+- The module requires Go 1.27.4. SDK consumers on an older toolchain need to
+  update it.
+
+## [1.5.2] - 2026-11-09
+
+### Added
+
+- Add `-version`, which writes the build's `version`, `commit` and `build_date`
+  as one JSON object and exits before configuration is validated or any
+  dependency is contacted. See [VERSION_CLI](docs/enUS/VERSION_CLI.md).
+
+## [1.5.1] - 2026-11-09
+
+### Fixed
+
+- Preserve DingTalk recipient IDs as given, apart from surrounding whitespace.
+  They were lowercased before delivery, fingerprinting and rate limiting,
+  although corporate user IDs are opaque and can be case-sensitive.
+
+### Changed
+
+- The release workflow binds each release to its reviewed revision and refuses
+  to overwrite a published version.
 
 ## [1.5.0] - 2026-11-08
 

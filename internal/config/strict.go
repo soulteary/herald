@@ -103,8 +103,13 @@ func strictHTTPProblems() []string {
 func strictDeliveryProblems() []string {
 	var problems []string
 
-	if ResendCooldown < 0 || IdempotencyKeyTTL < 0 {
-		problems = append(problems, "RESEND_COOLDOWN and IDEMPOTENCY_KEY_TTL must not be negative")
+	// A zero cooldown is rejected by the limiter at request time, so every
+	// challenge request would fail with 503 after spending its quota.
+	if ResendCooldown <= 0 {
+		problems = append(problems, "RESEND_COOLDOWN must be positive")
+	}
+	if IdempotencyKeyTTL < 0 {
+		problems = append(problems, "IDEMPOTENCY_KEY_TTL must not be negative")
 	}
 	if RateLimitPerUser <= 0 || RateLimitPerIP <= 0 || RateLimitPerDestination <= 0 {
 		problems = append(problems, "all rate limits must be positive")

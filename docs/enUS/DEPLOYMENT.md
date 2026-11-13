@@ -45,6 +45,13 @@ Use the exact variable names listed below. Prefixes are not interchangeable.
 
 The following match the implementation in `internal/config/config.go`.
 
+Value formats are checked at startup. A boolean must be one of `1`, `t`, `T`,
+`TRUE`, `true`, `True`, `0`, `f`, `F`, `FALSE`, `false` or `False`; `yes`, `on`
+and values with surrounding whitespace are not accepted. An integer must be a
+plain decimal number. A duration needs a unit, for example `60s` or `5m`; `60`
+is not accepted. A value in the wrong format stops startup in production. In
+other environments Herald logs a warning and uses the default.
+
 #### Server and Redis
 
 | Variable | Description | Default | Required |
@@ -99,7 +106,7 @@ A missing credential does not disable authentication. With `REQUEST_AUTH_MODE=hm
 | `CHALLENGE_EXPIRY` | Challenge expiry (e.g. `5m`, `300s`) | `5m` | No |
 | `MAX_ATTEMPTS` | Max verify failures per challenge before lockout | `5` | No |
 | `LOCKOUT_DURATION` | Lockout duration (e.g. `10m`) | `10m` | No |
-| `RESEND_COOLDOWN` | Resend cooldown for same challenge | `60s` | No |
+| `RESEND_COOLDOWN` | Minimum interval between challenges for the same user and destination; must be positive | `60s` | No |
 | `CODE_LENGTH` | Verification code length (digits, minimum `4`; must also fit `HERALD_MAX_BODY_BYTES` after the compact context-bound V2 envelope, currently 136 bytes) | `6` | No |
 | `IDEMPOTENCY_KEY_TTL` | Pre-send claim and completed response TTL; unresolved sends do not expire; `0` = use `CHALLENGE_EXPIRY` | `0` | No |
 | `ALLOWED_PURPOSES` | Allowed purposes, comma-separated (e.g. `login,reset,bind,stepup`) | `login` | No |

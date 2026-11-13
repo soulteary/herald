@@ -437,6 +437,10 @@ Revoke TOTP for a subject.
 
 **Response:** Proxied from herald-totp. On proxy error, Herald returns `502` with `proxy_failed`.
 
+A `200` response confirms the revocation only when its body has `"ok": true`.
+The Go SDK method `TOTPRevoke` returns an error with reason
+`revoke_not_confirmed` for a `200` response without it.
+
 **TOTP error codes (from Herald proxy):**
 - `totp_not_configured`: TOTP not enabled or herald-totp URL not set
 - `proxy_failed`: Request to herald-totp failed
