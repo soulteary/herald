@@ -254,7 +254,7 @@ these checks and audit recording.
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
-| `TEMPLATE_DIR` | Optional path to email/SMS template directory | (empty) | No |
+| `TEMPLATE_DIR` | Optional path to email/SMS template directory; see [message templates](#message-templates) | (empty) | No |
 | `OTLP_ENABLED` | Enable OpenTelemetry | `false` | No |
 | `OTLP_ENDPOINT` | OTLP endpoint (e.g. `http://localhost:4318`) | (empty) | When OTLP enabled |
 
@@ -276,6 +276,46 @@ Only when `ENVIRONMENT=test` and `HERALD_TEST_MODE=true`:
   listener. Supply `X-Test-Api-Key: $HERALD_TEST_API_KEY` (or Bearer authentication).
 
 **Security:** Always set `HERALD_TEST_MODE=false` in production. Test mode exposes verification codes and must not be used in production environments.
+
+### Message templates
+
+Without `TEMPLATE_DIR` Herald sends built-in text. With it, Herald loads custom
+templates once at startup from this layout:
+
+```text
+{TEMPLATE_DIR}/{locale}/{channel}/{purpose}.txt
+
+templates/
+├── en/
+│   ├── email/login.txt
+│   └── sms/login.txt
+└── zh-CN/
+    ├── email/login.txt
+    └── sms/reset.txt
+```
+
+- `{locale}` is a language or locale tag such as `en`, `zh`, `zh-CN` or
+  `pt_BR`; case and `-`/`_` do not matter. Templates are selected by language
+  only: `zh-CN`, `zh_TW` and `zh` are the same language, and so is a request
+  `locale` of any of them. If two directories name the same language, the
+  first in name order is used and the other is reported at startup. A request
+  with an unknown or empty locale uses `en`.
+- `{channel}` is `email` or `sms`. DingTalk messages use the `sms` templates.
+- `{purpose}` is a value from `ALLOWED_PURPOSES`, for example `login`. The
+  file extension is ignored.
+
+Files are Go `text/template` sources. The available fields are `{{.Code}}`,
+`{{.ExpiresIn}}` (seconds), `{{.Purpose}}` and `{{.Locale}}`; any other field
+is an error. For `email`, the first line is the subject and the rest is the
+body; a one-line template is used as the body with the subject
+`Verification Code`. A rendered message is limited to 16 KiB.
+
+A file that cannot be read or parsed, sits at another depth, or names an
+unrecognized locale or channel is not loaded. Herald logs one warning per file
+(`check=templates`, message `template not loaded: ...`) and keeps starting. A
+missing template, and a template that fails while rendering, fall back to the
+built-in text, so a mistake changes the wording of a message but does not stop
+delivery. Restart Herald after changing templates.
 
 ### Provider deployment versions
 
