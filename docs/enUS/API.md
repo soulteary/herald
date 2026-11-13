@@ -501,7 +501,8 @@ HMAC/API-key failures use a JSON `reason` value:
 - `idempotency_namespace_conflict` (409): A legacy empty-key-ID record needs operator reconciliation.
 - `context_required` (400) / `context_mismatch` (409): Required v2 context is missing or does not match.
 - `lock_contention` (409): Verification lock is contended; retry with a fresh nonce.
-- `backend_unavailable` / `audit_unavailable` (503): Backend, hash capacity, or durable audit acceptance is unavailable. A failure after a side effect does not undo that side effect.
+- `backend_unavailable` / `audit_unavailable` (503): Backend or durable audit acceptance is unavailable. A failure after a side effect does not undo that side effect.
+- `hash_capacity_exceeded` (503, `Retry-After: 1`): Every hash slot of this instance (`HERALD_MAX_CONCURRENT_HASH_OPERATIONS`) is in use. Nothing was consumed; retry shortly. It indicates load on this instance, not a backend failure.
 
 ### Challenge Errors
 - `expired`: Challenge has expired
@@ -582,8 +583,10 @@ changes are required.
 ## Hash capacity overload
 
 Creation and v1/v2 OTP verification share a local hash-work admission budget
-(default 4). When it is full, requests return `503/backend_unavailable` with
-`Retry-After: 1` before hashing. Overloaded creation requests do not reserve rate
+(default 4). When it is full, requests return `503/hash_capacity_exceeded` with
+`Retry-After: 1` before hashing. Releases up to v1.6.0 answered
+`503/backend_unavailable` here, the same reason as a Redis outage; the status and
+header are unchanged. Overloaded creation requests do not reserve rate
 or cooldown capacity, and rejected verifications consume no attempt or code.
 Completed idempotency responses can still replay. Lock contention is reported
 immediately as the existing `409/lock_contention` with `Retry-After: 1`.

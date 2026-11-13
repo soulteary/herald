@@ -445,7 +445,9 @@ replicas. It does not change Argon2 parameters or apply to the TOTP proxy.
 Each current Argon2 operation uses about 64 MiB. Size the budget for available
 memory and CPU, including garbage collection and other process overhead; this
 is not a hard RSS limit. Excess requests are rejected without queueing with
-`503/backend_unavailable` and `Retry-After: 1`. Creation admission precedes the
+`503/hash_capacity_exceeded` and `Retry-After: 1` (`503/backend_unavailable` up to
+v1.6.0). A sustained rate of this reason means the budget is too small for the
+load; it is unrelated to Redis health. Creation admission precedes the
 user-lock check and the rate and cooldown step; the pre-send idempotency claim is released when Redis is
 available. Completed idempotency responses remain replayable while capacity is
 full. Rejected verifications do not consume codes or increment their attempts.

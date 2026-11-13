@@ -11,6 +11,12 @@ import (
 
 var errHashCapacity = errors.New("hash work capacity unavailable")
 
+// reasonHashCapacityExceeded is the reason a request gets when every hash
+// slot of this instance is in use. It is a local, short-lived condition and
+// has its own reason so that it is not read as a Redis outage, which answers
+// backend_unavailable.
+const reasonHashCapacityExceeded = "hash_capacity_exceeded"
+
 // A shared, non-queueing budget for creation and both verification routes.
 // Slots cover hashing and required prechecks, never provider network delivery.
 type hashBudget struct{ slots chan struct{} }
@@ -46,7 +52,11 @@ func (h *Handlers) prepareChallenge(c fiber.Ctx, ctx context.Context, req Create
 	if err != nil {
 		failIdem()
 		c.Set("Retry-After", "1")
-		return nil, "", true, c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "backend_unavailable"})
+		reason := "backend_unavailable"
+		if errors.Is(err, errHashCapacity) {
+			reason = reasonHashCapacityExceeded
+		}
+		return nil, "", true, c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": reason})
 	}
 	defer release()
 	// The lock check is read-only and runs first: a locked user is refused
@@ -73,7 +83,11 @@ func (h *Handlers) prepareChallenge(c fiber.Ctx, ctx context.Context, req Create
 func (h *Handlers) verifyWithBudget(ctx context.Context, id, code, peerIP string, opts *challengekit.VerifyOptions) (*challengekit.VerifyResult, error) {
 	release, err := h.hashBudget.acquire(ctx)
 	if err != nil {
-		return &challengekit.VerifyResult{OK: false, Reason: challengekit.ReasonBackendUnavailable}, err
+		reason := challengekit.ReasonBackendUnavailable
+		if errors.Is(err, errHashCapacity) {
+			reason = reasonHashCapacityExceeded
+		}
+		return &challengekit.VerifyResult{OK: false, Reason: reason}, err
 	}
 	defer release()
 	if opts == nil {

@@ -662,7 +662,7 @@ func verificationFailureStatus(reason string, err error) int {
 		return fiber.StatusServiceUnavailable
 	}
 	normalized := strings.ToLower(reason)
-	if normalized == "backend_unavailable" || normalized == "internal_error" ||
+	if normalized == "backend_unavailable" || normalized == "internal_error" || normalized == reasonHashCapacityExceeded ||
 		contains(normalized, "storage_error") || contains(normalized, "unavailable") {
 		return fiber.StatusServiceUnavailable
 	}

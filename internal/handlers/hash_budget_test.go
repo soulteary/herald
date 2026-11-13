@@ -71,7 +71,7 @@ func TestCreateHashWorkHasBoundedAdmission(t *testing.T) {
 		case <-manager.entered:
 		case resp := <-responses:
 			require.Equal(t, 503, resp.status)
-			require.Contains(t, string(resp.body), "backend_unavailable")
+			require.JSONEq(t, `{"ok":false,"reason":"hash_capacity_exceeded"}`, string(resp.body))
 			rejected++
 		case err := <-failures:
 			t.Fatal(err)
