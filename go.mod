@@ -11,9 +11,8 @@ require (
 	github.com/prometheus/client_model v0.6.3
 	github.com/pterm/pterm v0.12.84
 	github.com/redis/go-redis/v9 v9.23.0
-	github.com/rs/zerolog v1.35.1
 	github.com/soulteary/audit-kit/v2 v2.1.6
-	github.com/soulteary/challenge-kit v1.11.2
+	github.com/soulteary/challenge-kit v1.12.0
 	github.com/soulteary/cli-kit v1.9.4
 	github.com/soulteary/health-kit/v4 v4.0.7
 	github.com/soulteary/herald-totp/v2 v2.0.4
@@ -60,6 +59,7 @@ require (
 	github.com/philhofer/fwd v1.2.1 // indirect
 	github.com/prometheus/common v0.74.0 // indirect
 	github.com/prometheus/procfs v0.23.0 // indirect
+	github.com/rs/zerolog v1.35.1 // indirect
 	github.com/tinylib/msgp v1.6.5 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.78.0 // indirect

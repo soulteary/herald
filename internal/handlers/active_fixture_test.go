@@ -4,6 +4,9 @@ import (
 	"context"
 	"github.com/redis/go-redis/v9"
 	challengekit "github.com/soulteary/challenge-kit"
+
+	"github.com/soulteary/herald/internal/config"
+	"github.com/soulteary/herald/internal/security"
 )
 
 // Verification fixtures represent codes whose provider delivery has completed.
@@ -15,6 +18,8 @@ func newActiveTestChallengeManager(rc *redis.Client, cfg challengekit.Config) ch
 	cfg.ChallengeKeyPrefix = challengeRecordPrefix
 	cfg.VerifyLockPrefix = challengeVerifyLockPrefix
 	cfg.ActiveIndexPrefix = challengeActiveIndexPrefix
+	// Share the handlers' user lock keys so a lock set here is seen by them.
+	cfg = withUserLockPolicy(cfg, security.NewDigester([]byte(config.PIIPepper)))
 	return &activeTestChallengeManager{challengekit.NewManager(rc, cfg)}
 }
 func (m *activeTestChallengeManager) Create(ctx context.Context, req challengekit.CreateRequest) (*challengekit.Challenge, string, error) {

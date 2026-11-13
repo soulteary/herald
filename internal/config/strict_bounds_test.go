@@ -16,6 +16,7 @@ func TestStrictNumericBoundsReportSpecificSetting(t *testing.T) {
 	}{
 		{"body", &MaxBodyBytes, "HERALD_MAX_BODY_BYTES"},
 		{"attempts", &MaxAttempts, "MAX_ATTEMPTS"},
+		{"lockout threshold", &LockoutChallengeThreshold, "LOCKOUT_CHALLENGE_THRESHOLD"},
 		{"audit queue", &AuditWriterQueueSize, "audit writer queue"},
 		{"audit workers", &AuditWriterWorkers, "audit writer queue"},
 	} {
@@ -52,5 +53,18 @@ func TestStrictDurationBounds(t *testing.T) {
 				t.Fatalf("expected %s error, got %v", tc.want, err)
 			}
 		})
+	}
+}
+
+func TestLockoutChallengeThresholdMinimumIsOne(t *testing.T) {
+	old := LockoutChallengeThreshold
+	defer func() { LockoutChallengeThreshold = old }()
+	LockoutChallengeThreshold = 0
+	if err := validateStrictSettings(); err == nil || !strings.Contains(err.Error(), "LOCKOUT_CHALLENGE_THRESHOLD must be at least 1") {
+		t.Fatalf("threshold 0 accepted: %v", err)
+	}
+	LockoutChallengeThreshold = 1
+	if err := validateStrictSettings(); err != nil {
+		t.Fatalf("threshold 1 rejected: %v", err)
 	}
 }

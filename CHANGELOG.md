@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `LOCKOUT_CHALLENGE_THRESHOLD` (integer, default `3`, minimum `1`): the
+  number of challenges a user must exhaust within `LOCKOUT_DURATION` before
+  the user is locked. `1` keeps the behaviour of v1.6.0.
 - Add `IDEMPOTENCY_UNRESOLVED_TTL` (default `24h`). It must be positive and
   greater than `IDEMPOTENCY_KEY_TTL` (`CHALLENGE_EXPIRY` when that is `0`), or
   Herald refuses to start in every environment. A deployment whose pending TTL
@@ -19,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Update `challenge-kit` to v1.12.0, which provides the lockout threshold, the
+  lock key identity and a lock check that returns the Redis error. Challenge
+  creation uses that check to answer `503/backend_unavailable` during an
+  outage, in place of the extra `PING` it made before.
 - Challenge creation checks the user lock first, then applies the user, IP and
   destination limits and the resend cooldowns in one Redis Lua call. Counter
   key names, fixed-window behaviour and TTLs match the previous limiter, so
@@ -47,6 +54,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Lock a user only after `LOCKOUT_CHALLENGE_THRESHOLD` exhausted challenges
+  within `LOCKOUT_DURATION`, not after the first one. `MAX_ATTEMPTS` wrong
+  codes on a single challenge used to lock the user for every challenge,
+  purpose and channel, so one challenge per `LOCKOUT_DURATION` kept a user
+  locked out. An exhausted challenge still answers `locked`; the user's other
+  challenges keep working until the threshold is reached. Guesses per user
+  remain bounded by `RATE_LIMIT_PER_USER` multiplied by `MAX_ATTEMPTS` per
+  hour, as before.
+- Keep the raw `user_id` out of the user lock key. Locks are stored under
+  `otp:lock:v2:<digest>`, with the digest keyed by `HERALD_PII_PEPPER`, and
+  exhausted challenges under `otp:lock:exhausted:<digest>`.
+  `otp:lock:<user_id>` keys from earlier versions are no longer read and
+  expire within `LOCKOUT_DURATION`. A lock in force during the upgrade is not
+  carried over, and old and new instances do not share locks during a rolling
+  upgrade.
 - Stop using the fixed secret `herald-idempotency-fallback` when none of
   `HERALD_IDEMPOTENCY_SECRET`, `HMAC_SECRET` and `API_KEY` is set, which is
   possible only outside production. The value is public in this repository,
