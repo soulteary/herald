@@ -4,7 +4,7 @@
 
 | Metric | Value |
 | ------ | ----- |
-| Files | 138 |
+| Files | 147 |
 | Issues | 12 |
 
 ## Checks
@@ -22,30 +22,30 @@
 
 ### gocyclo
 
-- `internal/handlers/work_im_pilot_test.go`
-  - Line 138: cyclomatic complexity 29 for function TestWorkIMPilotHTTPProviderBindingAndVerify
-- `internal/handlers/totp_security_test.go`
-  - Line 121: cyclomatic complexity 17 for function TestTOTPSecurityPreservesSuccessfulWireContract
-- `pkg/herald/challenge_metadata_test.go`
-  - Line 56: cyclomatic complexity 16 for function TestCreateChallengeMetadataPreservesErrorsAndDoesNotRetry
-- `internal/serviceauth/policy.go`
-  - Line 27: cyclomatic complexity 16 for function ParseServicePolicies
-- `internal/config/config.go`
-  - Line 239: cyclomatic complexity 16 for function Initialize
 - `pkg/herald/credential_selection_test.go`
   - Line 14: cyclomatic complexity 20 for function TestSDKSelectsOneCredentialScheme
+- `pkg/herald/challenge_metadata_test.go`
+  - Line 56: cyclomatic complexity 16 for function TestCreateChallengeMetadataPreservesErrorsAndDoesNotRetry
+- `pkg/herald/challenge_metadata.go`
+  - Line 22: cyclomatic complexity 16 for function challengeRetryMetadata
+- `internal/serviceauth/policy.go`
+  - Line 27: cyclomatic complexity 16 for function ParseServicePolicies
 - `internal/auth/middleware.go`
   - Line 148: cyclomatic complexity 20 for function verifyHMACV2
 - `version_cli_test.go`
   - Line 26: cyclomatic complexity 18 for function TestVersionCLIActualMain
+- `internal/router/router.go`
+  - Line 205: cyclomatic complexity 17 for function NewRouterWithClientAndHandlersE
+- `internal/handlers/totp_security_test.go`
+  - Line 121: cyclomatic complexity 17 for function TestTOTPSecurityPreservesSuccessfulWireContract
 - `internal/handlers/totp_rate_limit_response_test.go`
   - Line 14: cyclomatic complexity 17 for function TestTOTPConfirmPreservesBoundedUpstreamRateLimit
-- `pkg/herald/challenge_metadata.go`
-  - Line 22: cyclomatic complexity 16 for function challengeRetryMetadata
-- `internal/router/router.go`
-  - Line 205: cyclomatic complexity 16 for function NewRouterWithClientAndHandlersE
 - `internal/handlers/handlers.go`
   - Line 92: cyclomatic complexity 16 for function NewHandlersWithError
+- `internal/config/config.go`
+  - Line 254: cyclomatic complexity 16 for function Initialize
+- `internal/handlers/work_im_pilot_test.go`
+  - Line 138: cyclomatic complexity 29 for function TestWorkIMPilotHTTPProviderBindingAndVerify
 
 ---
 
