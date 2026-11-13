@@ -48,8 +48,14 @@ export ENVIRONMENT=production REQUEST_AUTH_MODE=api_key PROVIDER_FAILURE_POLICY=
 - `REDIS_ADDR`
 - `REDIS_PASSWORD`
 - `REDIS_DB`
+- `REDIS_USERNAME`
+- `REDIS_TLS_ENABLED`
+- `REDIS_TLS_CA_FILE`
+- `REDIS_TLS_SERVER_NAME`
 
-在 `stargate-suite` 或 compose 模板中，可能会看到 `HERALD_REDIS_ADDR` 等变量名。这类变量通常是上层编排层的统一命名，最终会映射为 Herald 实际识别的 `REDIS_*`。  
+Herald 不读取任何 `HERALD_REDIS_*` 变量，本仓库的 `docker-compose.yml` 也没有定义这类别名：它只向进程传入 `REDIS_ADDR`、`REDIS_PASSWORD` 和 `REDIS_DB`，其中只有密码取自宿主环境的同名变量 `REDIS_PASSWORD`。使用 ACL 用户名或 TLS 时，需自行在 `herald` 服务的 `environment` 中加入 `REDIS_USERNAME` 和 `REDIS_TLS_*`。
+
+在 `stargate-suite` 或其他 compose 模板中，可能会看到 `HERALD_REDIS_ADDR` 等变量名。这类变量是上层编排层的统一命名，只有被该编排层映射为 Herald 实际识别的 `REDIS_*` 后才会生效。
 部署时请以 Herald 本仓库 `internal/config/config.go` 的 `REDIS_*` 为准。
 
 ### 环境变量
@@ -311,12 +317,12 @@ fsync 和原子 rename。
 
 | 能力 | 启用条件 | 备注 |
 |------|----------|------|
-| 内置 SMTP | 未设置 `HERALD_SMTP_API_URL` | 使用 `SMTP_*` 直连 SMTP 服务 |
+| 内置 SMTP | 未设置 `HERALD_SMTP_API_URL` 且 `SMTP_HOST` 非空 | 使用 `SMTP_*` 直连 SMTP 服务 |
 | herald-smtp | `HERALD_SMTP_API_URL` 非空 | 设置后会覆盖内置 SMTP 通道 |
-| SMS HTTP API | `SMS_PROVIDER` 非空，且建议同时设置 `SMS_API_BASE_URL` | `SMS_API_KEY` 视网关要求 |
+| SMS HTTP API | `SMS_PROVIDER` 非空，且必须同时设置 `SMS_API_BASE_URL` | 缺少 `SMS_API_BASE_URL` 时启动失败；`SMS_API_KEY` 视网关要求 |
 | herald-dingtalk | `HERALD_DINGTALK_API_URL` 非空 | 可选 `HERALD_DINGTALK_API_KEY` |
 | herald-totp 代理 | `HERALD_TOTP_ENABLED=true` 且 `HERALD_TOTP_BASE_URL` 非空 | 可选 `HERALD_TOTP_API_KEY` / `HERALD_TOTP_HMAC_SECRET` |
-| OTLP | `OTLP_ENABLED=true` 且建议配置 `OTLP_ENDPOINT` | 推荐在生产明确设置 endpoint |
+| OTLP | `OTLP_ENABLED=true` 且 `OTLP_ENDPOINT` 非空 | endpoint 为空时不导出任何 span |
 
 ### Redis 配置
 
