@@ -301,6 +301,13 @@ groups:
 
 When `OTLP_ENABLED=true` and `OTLP_ENDPOINT` is set, Herald enables OpenTelemetry tracing middleware. Trace context is propagated via `traceparent` and `tracestate` headers. Core spans include challenge create, provider send, and verify operations; span tags include `channel`, `purpose`, `provider`, `result`, and `reason`. Users are identified on spans by `user_id_digest`, a peppered digest (keyed by `HERALD_PII_PEPPER`); the raw `user_id` is not exported. The digest is stable for a given pepper, so it can still be used to correlate spans for one user. The creation span carries the destination as `destination_digest` in the same way, and no span carries the client address. Configure `OTLP_ENDPOINT` as `host:port` (for example `localhost:4318`) or as an `http://` or `https://` URL (for example `http://localhost:4318`), as described in [DEPLOYMENT.md](DEPLOYMENT.md); spans are sent with OTLP over HTTP. Herald logs `OpenTelemetry tracing initialized` with the resolved endpoint only when an exporter was set up. With an empty endpoint, or one it cannot parse, it logs that no spans are exported.
 
+The request span of each HTTP request is named `<METHOD> <route template>`, for
+example `POST /v1/otp/challenges/:id/revoke`, and carries the template as
+`http.route`. A request that matches no route is named `<METHOD>
+unmatched_route` and has no `http.route`. The request path itself is not
+exported, neither in the span name nor as `http.target`, because it contains
+caller-supplied segments such as a challenge ID.
+
 ## Best Practices
 
 1. **Monitor Key Business Metrics**: Track challenge creation, verification success rates, and send success rates

@@ -1,6 +1,7 @@
 package tracing
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -29,31 +30,20 @@ func TracingMiddleware(serviceName string) fiber.Handler {
 		})
 		ctx := propagator.Extract(c.Context(), &headerCarrier{headers: reqHeaders})
 
-		// Determine span name from the templated route path only. Never fall back
-		// to the raw URL/path: it can be high-cardinality and may carry PII in the
-		// query string (e.g. ?subject=...).
-		spanName := c.Route().Path
-		if spanName == "" {
-			spanName = c.Method() + " unmatched_route"
-		}
-
-		// http.target is the path WITHOUT the query string so PII carried in query
-		// params never lands in a span attribute.
-		path := c.Path()
-
-		// Start span
+		// The span is named after the matched route template, which is only
+		// known once the handler chain has run: inside a middleware
+		// registered with Use, c.Route() is the middleware's own route ("/")
+		// until then. It starts under the name an unmatched request keeps.
+		// The raw path is never recorded, neither as the name nor as an
+		// attribute: it is high-cardinality and carries caller-supplied
+		// segments, such as a challenge ID that has not been validated yet.
+		own := c.Route()
 		ctx, span := tracer.Start(
 			ctx,
-			spanName,
+			unmatchedSpanName(c.Method()),
 			trace.WithSpanKind(trace.SpanKindServer),
-			trace.WithAttributes(
-				semconv.HTTPMethod(c.Method()),
-				semconv.HTTPTarget(path),
-			),
+			trace.WithAttributes(semconv.HTTPMethod(c.Method())),
 		)
-		if c.Route().Path != "" {
-			span.SetAttributes(semconv.HTTPRoute(c.Route().Path))
-		}
 		defer span.End()
 
 		// Store context in Fiber context
@@ -63,8 +53,20 @@ func TracingMiddleware(serviceName string) fiber.Handler {
 		// Process request
 		err := c.Next()
 
-		// Set span status and attributes based on response
+		// A route other than this middleware's own was matched.
+		if route := c.Route(); route != own && route.Path != "" {
+			span.SetName(c.Method() + " " + route.Path)
+			span.SetAttributes(semconv.HTTPRoute(route.Path))
+		}
+
+		// Set span status and attributes based on response. An error
+		// returned by the chain is turned into the response by the error
+		// handler after this middleware returns, so its status is taken
+		// from the error.
 		statusCode := c.Response().StatusCode()
+		if fiberErr := new(fiber.Error); errors.As(err, &fiberErr) {
+			statusCode = fiberErr.Code
+		}
 		span.SetAttributes(
 			semconv.HTTPStatusCode(statusCode),
 			attribute.Int("http.response.size", len(c.Response().Body())),
@@ -93,6 +95,12 @@ func TracingMiddleware(serviceName string) fiber.Handler {
 
 		return err
 	}
+}
+
+// unmatchedSpanName names the span of a request that no route matched. It
+// contains the method only, never the path.
+func unmatchedSpanName(method string) string {
+	return method + " unmatched_route"
 }
 
 // headerCarrier implements the TextMapCarrier interface for Fiber headers.
