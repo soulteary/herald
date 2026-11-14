@@ -78,7 +78,7 @@ other environments Herald logs a warning and uses the default.
 | `HERALD_TRUSTED_PROXY_HEADER` | Forwarded client-IP header; only read from trusted proxies | (empty) | With trusted proxies |
 | `HERALD_TRUSTED_PROXIES` | Comma-separated trusted proxy IP/CIDR allowlist | (empty) | With proxy header |
 
-These two settings also decide what `RATE_LIMIT_PER_IP` counts. Without them the limit applies to the direct peer, so a gateway that calls Herald for many end users shares one quota among them. With them, a trusted gateway can forward the end-user address (Go SDK: `WithClientIPHeader`) and the limit applies per end user.
+These two settings also decide what `RATE_LIMIT_PER_IP` counts. Without them the limit applies to the direct peer, so a gateway that calls Herald for many end users shares one quota among them. With them, a trusted gateway can forward the end-user address (Go SDK: `WithClientIPHeader`) and the limit applies per end user. A request refused by this quota answers `429/rate_limit_exceeded` with `"limit":"ip"`.
 
 Forwarded IP chains are parsed from right to left. Herald skips only explicitly trusted proxy hops and uses the first untrusted address as the client IP; a caller-controlled leftmost prefix is never trusted automatically.
 

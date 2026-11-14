@@ -172,6 +172,12 @@ See [API.md](API.md) (Create Challenge response, Get Test Code) and [DEPLOYMENT.
 
 ### Diagnostic Steps
 
+Start with the response itself: a `429/rate_limit_exceeded` body names the
+quota that refused the request in `limit` (`user`, `ip` or `destination`).
+`"limit":"ip"` on requests from many different users usually means Herald is
+counting a gateway's address: see `HERALD_TRUSTED_PROXY_HEADER` and
+`HERALD_TRUSTED_PROXIES` in the [deployment guide](DEPLOYMENT.md#configuration).
+
 1. **Check Rate Limit Configuration**
    ```bash
    # Verify rate limit settings
