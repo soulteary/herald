@@ -109,8 +109,19 @@ func (e *MissingError) Unwrap() error { return e.Err }
 // journalStorage acknowledges a record only after its file and directory entry
 // have been synced. The channel contains wake-up hints, never the only copy of
 // a record. Backend failures and shutdown leave the files available for replay.
+//
+// mu guards the accounting (entries, bytes, closed) and is not held during
+// file I/O: each writer syncs its own file, and writers that are waiting for
+// the directory at the same time share one directory sync (see groupSync).
 type journalStorage struct {
-	mu                sync.Mutex
+	mu sync.Mutex
+	// writers counts Write calls past the closed check, so Close can let
+	// them finish before the directory handle is closed.
+	writers sync.WaitGroup
+	// dirSync makes the directory entries durable. It is a field so tests
+	// can observe and fail it; it is dirFile.Sync otherwise.
+	dirSync           func() error
+	dirSyncs          groupSync
 	dir               string
 	dirFile, lockFile *os.File
 	backend           audit.Storage
@@ -155,6 +166,7 @@ func newJournalStorage(backend audit.Storage, dir string, limit int64, queue, wo
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	j := &journalStorage{dir: dir, dirFile: df, lockFile: lock, backend: backend, entries: make(map[string]*journalEntry), limit: limit, wake: make(chan struct{}, queue), ctx: ctx, cancel: cancel, done: make(chan struct{}), onFailure: onFailure}
+	j.dirSync = df.Sync
 	err = j.recoverPendingEntries()
 	if err == nil {
 		err = probeJournalDirectory(dir, df)
@@ -188,16 +200,53 @@ func (j *journalStorage) Write(ctx context.Context, record *audit.Record) error 
 	if err != nil {
 		return err
 	}
+	size := int64(len(payload))
 	j.mu.Lock()
-	defer j.mu.Unlock()
 	if j.closed {
+		j.mu.Unlock()
 		return errors.New("audit spool is closed")
 	}
-	if int64(len(payload)) > j.limit-j.bytes {
+	if size > j.limit-j.bytes {
+		j.mu.Unlock()
 		return errors.New("audit spool capacity exceeded")
 	}
+	// Reserve the bytes now, so concurrent writers cannot exceed the limit
+	// together. The reservation becomes the entry's size below.
+	j.bytes += size
+	j.writers.Add(1)
+	j.mu.Unlock()
+	defer j.writers.Done()
+
 	name := cp.EventID + ".json"
-	tmp := filepath.Join(j.dir, cp.EventID+".tmp")
+	if err = j.writeEntryFile(cp.EventID, name, payload); err != nil {
+		j.mu.Lock()
+		j.bytes -= size
+		j.mu.Unlock()
+		return err
+	}
+	// The record is acknowledged only after a directory sync that started
+	// after the rename above. Writers that reach this point while a sync is
+	// running wait for the next one and share it.
+	err = j.dirSyncs.do(j.dirSync)
+	// The delivery workers see the entry from here on, as before: after the
+	// directory sync, whether or not it succeeded.
+	j.mu.Lock()
+	j.entries[name] = &journalEntry{size: size}
+	j.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	select {
+	case j.wake <- struct{}{}:
+	default:
+	} // full hints queue does not drop records
+	return nil
+}
+
+// writeEntryFile writes the payload to a temporary file, syncs it and renames
+// it to its final name. The temporary file is removed on every path.
+func (j *journalStorage) writeEntryFile(id, name string, payload []byte) error {
+	tmp := filepath.Join(j.dir, id+".tmp")
 	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
 		return err
@@ -214,19 +263,55 @@ func (j *journalStorage) Write(ctx context.Context, record *audit.Record) error 
 	if err != nil {
 		return err
 	}
-	if err = os.Rename(tmp, filepath.Join(j.dir, name)); err != nil {
-		return err
+	return os.Rename(tmp, filepath.Join(j.dir, name))
+}
+
+// groupSync lets concurrent callers share a sync. A caller is covered only by
+// a sync that starts after it called do, so whatever it made visible before
+// the call is included. One caller of each group runs the sync; the others
+// wait for its result.
+type groupSync struct {
+	mu      sync.Mutex
+	cond    *sync.Cond
+	running bool
+	pending *syncGroup // callers waiting for the next sync to start
+}
+
+type syncGroup struct {
+	done bool
+	err  error
+}
+
+func (g *groupSync) do(syncFn func() error) error {
+	g.mu.Lock()
+	if g.cond == nil {
+		g.cond = sync.NewCond(&g.mu)
 	}
-	j.entries[name] = &journalEntry{size: int64(len(payload))}
-	j.bytes += int64(len(payload))
-	if err = j.dirFile.Sync(); err != nil {
-		return err
+	if g.pending == nil {
+		g.pending = &syncGroup{}
 	}
-	select {
-	case j.wake <- struct{}{}:
-	default:
-	} // full hints queue does not drop records
-	return nil
+	group := g.pending
+	for !group.done && g.running {
+		g.cond.Wait()
+	}
+	if group.done {
+		g.mu.Unlock()
+		return group.err
+	}
+	// No sync is running and this group has not been synced, so it is
+	// still the pending one. Callers arriving from now on form the next.
+	g.pending = nil
+	g.running = true
+	g.mu.Unlock()
+
+	err := syncFn()
+
+	g.mu.Lock()
+	group.done, group.err = true, err
+	g.running = false
+	g.cond.Broadcast()
+	g.mu.Unlock()
+	return err
 }
 
 func (j *journalStorage) run() {
@@ -278,6 +363,7 @@ func (j *journalStorage) run() {
 		ctx, cancel := context.WithTimeout(j.ctx, 5*time.Second)
 		err = j.backend.Write(ctx, &rec)
 		cancel()
+		removed := false
 		j.mu.Lock()
 		e := j.entries[name]
 		if err == nil {
@@ -289,7 +375,7 @@ func (j *journalStorage) run() {
 			if err == nil {
 				j.bytes -= e.size
 				delete(j.entries, name)
-				err = j.dirFile.Sync()
+				removed = true
 			}
 		}
 		if _, ok := j.entries[name]; ok {
@@ -297,6 +383,10 @@ func (j *journalStorage) run() {
 			e.next = time.Now().Add(time.Second)
 		}
 		j.mu.Unlock()
+		if removed {
+			// Outside mu, and shared with waiting writers.
+			err = j.dirSyncs.do(j.dirSync)
+		}
 		if err != nil && j.onFailure != nil {
 			j.onFailure(err)
 		}
@@ -413,8 +503,11 @@ func (j *journalStorage) Query(ctx context.Context, filter *audit.QueryFilter) (
 func (j *journalStorage) Close() error {
 	j.mu.Lock()
 	j.closed = true
-	j.cancel()
 	j.mu.Unlock()
+	// Writes that were accepted before the spool closed finish first; the
+	// directory handle they sync is closed once the workers have stopped.
+	j.writers.Wait()
+	j.cancel()
 	select {
 	case <-j.done:
 		return nil
