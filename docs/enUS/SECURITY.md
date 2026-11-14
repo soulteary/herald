@@ -414,6 +414,14 @@ status and exception events, and audit failure records. Unknown reason codes map
 to `send_failed`; deadline failures remain classified as `timeout`. Log consumers
 should use the `reason` field rather than the former free-text `error` field.
 
+For the built-in SMTP provider the delivery-failure log line also carries
+`failure_category` (`dns`, `connect`, `tls`, `auth`, `rejected`, `connection`,
+`timeout`, `validation`, `canceled` or `other`) and, when the server answered
+with one, the three-digit SMTP reply code as `smtp_code`. Both are derived from
+the types of the error chain, not from its text, and are written to the log
+only, not to spans or audit records. See
+[troubleshooting](TROUBLESHOOTING.md#provider-send-failures).
+
 This changes diagnostics only. Client responses, strict-policy revocation and
 idempotency `delivery_unknown` handling are unchanged. No Redis record migration
 or client update is needed. Existing logs and exported spans are not rewritten;

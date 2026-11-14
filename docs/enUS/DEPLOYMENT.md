@@ -164,6 +164,8 @@ Both `SMS_PROVIDER` and `SMS_API_BASE_URL` are needed: the provider is registere
 
 At startup Herald logs one line listing the channels that have a provider and those that do not (`channels_with_provider`, `channels_without_provider`), and a warning when no channel has one. With `PROVIDER_FAILURE_POLICY=strict`, a create request for a channel without a provider returns `503/channel_not_configured` before any quota, cooldown or idempotency key is used. With `soft` the challenge is created and the response carries `delivery_status=failed`, as before.
 
+A send that reaches the provider and fails has already passed admission: the request's per-user, per-IP and per-destination quota stays spent and both resend cooldowns have started. A retry for the same destination within `RESEND_COOLDOWN` therefore answers `429/resend_cooldown` although no message was delivered. When testing a new provider configuration, wait for the cooldown or use another destination. For the built-in SMTP provider the failure log line names where delivery stopped; see [troubleshooting](TROUBLESHOOTING.md#provider-send-failures).
+
 #### DingTalk channel (herald-dingtalk plugin)
 
 | Variable | Description | Default | Required |

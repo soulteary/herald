@@ -852,7 +852,16 @@ func (h *Handlers) deliverChallenge(c fiber.Ctx, spanCtx context.Context, req Cr
 		errorReason := providerFailureReason(sendResult, err)
 		tracing.RecordError(providerSpan, errors.New("provider send failed: "+errorReason))
 		providerSpan.End()
-		h.log.Error().Str("reason", errorReason).Msg("Failed to send verification code via provider")
+		failure := h.log.Error().Str("reason", errorReason)
+		if builtInSMTPDelivers(req.Channel) {
+			// Where the SMTP attempt stopped, from error types only.
+			category, smtpCode := smtpFailureCategory(sendResult, err)
+			failure = failure.Str("failure_category", category)
+			if smtpCode != 0 {
+				failure = failure.Int("smtp_code", smtpCode)
+			}
+		}
+		failure.Msg("Failed to send verification code via provider")
 		// Record provider timeouts distinctly for reliability dashboards.
 		if errors.Is(err, context.DeadlineExceeded) || errorReason == "timeout" {
 			metrics.RecordProviderTimeout(req.Channel)

@@ -297,6 +297,22 @@ counting a gateway's address: see `HERALD_TRUSTED_PROXY_HEADER` and
 
 2. **Review Provider Logs**
    - Check the safe `reason` field; raw provider messages are not exported
+   - For the built-in SMTP provider the error line `Failed to send verification code via provider` also carries `failure_category`, and `smtp_code` when the server answered with an SMTP reply code:
+
+     | `failure_category` | Where delivery stopped | Check |
+     |--------------------|------------------------|-------|
+     | `dns` | `SMTP_HOST` did not resolve | The host name and the resolver |
+     | `connect` | No TCP connection | `SMTP_HOST`, `SMTP_PORT`, firewall rules |
+     | `tls` | TLS handshake or certificate verification failed | The server certificate and that it matches `SMTP_HOST`; the port expects STARTTLS, not implicit TLS |
+     | `auth` | The server refused the credentials (`smtp_code` 454, 530, 534, 535 or 538) | `SMTP_USER`, `SMTP_PASSWORD` |
+     | `rejected` | The server answered a command with another error code, given in `smtp_code` | `502`/`500` right after connecting usually means STARTTLS is not offered; `550`-`554` usually concern the sender (`SMTP_FROM`) or the recipient |
+     | `connection` | The connection broke after it was established | Server logs, idle or size limits |
+     | `timeout` | A step exceeded `PROVIDER_TIMEOUT` | Network path, server load |
+     | `validation` | The message was refused before connecting | A custom template's subject line; the destination address |
+     | `canceled` | The caller abandoned the request | The caller's timeout |
+     | `other` | None of the above could be recognised | Test the SMTP server directly |
+
+     The category is derived from error types only. The reply code does not say which SMTP command was refused. The provider's error text is never logged.
    - Review audit logs for provider errors
    - Check provider API response codes
 
