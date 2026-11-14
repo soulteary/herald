@@ -159,11 +159,13 @@ Herald v1.6.0 导入 `github.com/soulteary/herald-totp/v2` v2.0.4。SMTP 和钉�
 | 变量 | 描述 | 默认值 | 必需 |
 |------|------|--------|------|
 | `SMTP_HOST` | SMTP 服务器主机 | （空） | 使用内置时 |
-| `SMTP_PORT` | SMTP 端口 | `587` | 否 |
+| `SMTP_PORT` | SMTP 端口；服务器必须在该端口上接受 STARTTLS | `587` | 否 |
 | `SMTP_USER` | SMTP 用户名 | （空） | 否 |
 | `SMTP_PASSWORD` | SMTP 密码 | （空） | 否 |
 | `SMTP_FROM` | 发件人地址 | （空） | 建议 |
 | `PROVIDER_FAILURE_POLICY` | 发送失败策略：`soft`（仍创建 challenge）或 `strict`（失败则不创建） | `soft`；`ENVIRONMENT=production` 时为 `strict` | 否 |
+
+内置 SMTP 在任何环境下都会先用 STARTTLS 升级连接，然后才进行认证或发送，并按 `SMTP_HOST` 校验服务器证书（TLS 1.2 及以上）。没有可以关闭这一行为的配置项。如果服务器不提供 STARTTLS、拒绝 STARTTLS，或出示的证书对 `SMTP_HOST` 不受信任，发送即失败（`failure_category` 为 `rejected` 或 `tls`），密码和消息都不会发出。内置 SMTP 不支持隐式 TLS（SMTPS 端口 465），也不支持不带 TLS 的明文 SMTP。
 
 生产环境禁止 `soft`。生产环境中该变量未设置或为空时，Herald 使用 `strict` 并记录日志 `Production default: PROVIDER_FAILURE_POLICY=strict`；显式设置 `soft` 仍会导致启动失败。
 
@@ -192,7 +194,12 @@ Provider 和 TOTP 的 Base URL（`HERALD_SMTP_API_URL`、`SMS_API_BASE_URL`、`H
 
 启动时 Herald 记录一行日志，列出已有 provider 的通道和没有 provider 的通道（`channels_with_provider`、`channels_without_provider`）；所有通道都没有 provider 时另记一条警告。`PROVIDER_FAILURE_POLICY=strict` 时，针对没有 provider 的通道的创建请求返回 `503/channel_not_configured`，此时尚未使用任何配额、冷却或幂等键。`soft` 时仍创建 challenge，响应带有 `delivery_status=failed`，与此前相同。
 
-已到达 provider 但发送失败的请求已经通过准入：该请求的按用户、按 IP 和按 destination 配额仍视为已消耗，两项重发冷却也已启动。因此在 `RESEND_COOLDOWN` 内对同一 destination 重试会得到 `429/resend_cooldown`，尽管没有消息送达。测试新的 provider 配置时，应等待冷却结束或换用另一个 destination。对于内置 SMTP，失败日志会指出投递停在哪一步，见[故障排查](TROUBLESHOOTING.md#提供者发送失败)。
+发送失败的请求已经通过准入：无论哪种情况，该请求的按用户、按 IP 和按 destination 配额都视为已消耗。`PROVIDER_FAILURE_POLICY=strict` 时，两项重发冷却如何处理取决于失败的类型：
+
+- 失败能够证明没有任何 provider 接受该消息时，冷却会被释放，重试不会得到 `429/resend_cooldown`。对于内置 SMTP，这对应 `failure_category` 为 `dns`、`connect`、`auth`、`validation`，以及服务器证书校验失败时的 `tls`。对于 HTTP provider（herald-smtp、herald-dingtalk、短信网关），这指无法解析或连接 provider 服务、或其证书校验失败，并且尚未向它写入任何请求。
+- 其他失败之后冷却保持不变，因为消息可能已被接受：超时或请求被取消、连接建立后中断、服务器拒绝了某条 SMTP 命令、HTTP provider 服务返回了任何响应，以及任何无法识别的错误。此时在 `RESEND_COOLDOWN` 内对同一 destination 重试会得到 `429/resend_cooldown`，尽管并未确认送达。
+
+失败日志带有 `cooldown_released`（`true` 或 `false`）。冷却释放后的重试仍计入 `RATE_LIMIT_PER_USER`、`RATE_LIMIT_PER_IP` 和 `RATE_LIMIT_PER_DESTINATION`。重复使用失败请求的 `Idempotency-Key` 进行重试，仍会得到 `409/delivery_unknown`，应换用新的键。`PROVIDER_FAILURE_POLICY=soft` 时响应为 `200` 且 `delivery_status=failed`，冷却保留。对于内置 SMTP，失败日志会指出投递停在哪一步，见[故障排查](TROUBLESHOOTING.md#提供者发送失败)。
 
 #### DingTalk 通道（herald-dingtalk 插件）
 
@@ -276,7 +283,9 @@ HTTPS。请配置最终服务地址：包括同源跳转在内的所有重定向
 `AUDIT_SPOOL_DIR` 中，不再重试，重启后也不会重新处理，并且不计入 `AUDIT_SPOOL_MAX_BYTES`；
 见[监控说明](MONITORING.md#审计投递)。无法读取的文件（I/O 错误、没有可用的文件描述符、
 权限问题）不会被隔离：它保持待投递状态并持续重试，重试间隔从 1 秒起逐次加倍，最长 5 分钟，
-直到可以读取为止。后端投递失败同样不会导致隔离，这些记录会一直重试到后端接收为止。
+直到可以读取为止。已从目录中删除的待投递文件不会重试：其记录已经丢失，Herald 只报告一次
+（一条 error 日志和 `herald_audit_spool_missing_total`），该文件也不再计入
+`AUDIT_SPOOL_MAX_BYTES`。后端投递失败同样不会导致隔离，这些记录会一直重试到后端接收为止。
 
 请将 `AUDIT_SPOOL_DIR` 挂载到持久化本地存储；容器使用 UID/GID 10001，目录建议为 0700。
 仓库 Compose 文件通过 `audit_spool` 卷挂载该目录，兼容只读根文件系统。
@@ -405,6 +414,7 @@ templates/
 - `otp:idem2:*` - 幂等记录（发送前占位和已完成响应：`IDEMPOTENCY_KEY_TTL`；不确定发送：`IDEMPOTENCY_UNRESOLVED_TTL`）
 - `otp:lock:v2:<digest>` - 用户锁定记录（TTL：锁定持续时间）。`<digest>` 是由用户 ID 结合 `HERALD_PII_PEPPER` 派生的摘要
 - `otp:lock:exhausted:<digest>` - 计入锁定的已耗尽 challenge（TTL：自第一个起计的锁定持续时间）
+- `otp:lock:failed:<digest>` - 跨 challenge 计入锁定的错误验证码（TTL：自第一次起计的 `LOCKOUT_FAILED_ATTEMPT_WINDOW`）
 
 **不确定的发送记录：**
 

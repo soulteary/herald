@@ -103,7 +103,7 @@ herald_rate_limit_hits_total{scope="resend_cooldown"} 200
 直方图，跟踪 Redis 操作延迟。
 
 **标签：**
-- `operation`: 已埋点的包装操作，并非全部 Redis 命令。创建 challenge 时各项限流和冷却在一次调用中执行，记为 `ratelimit_create`。各限流器的包装操作（`ratelimit`、`ratelimit_user`、`ratelimit_ip`、`ratelimit_dest`、`cooldown`）不再用于创建 challenge
+- `operation`: 已埋点的包装操作，并非全部 Redis 命令。创建 challenge 时各项限流和冷却在一次调用中执行，记为 `ratelimit_create`。各限流器的包装操作（`ratelimit`、`ratelimit_user`、`ratelimit_ip`、`ratelimit_dest`、`cooldown`）不再用于创建 challenge。`cooldown_release` 是在发送可以证明未到达任何 provider 之后归还重发冷却的那次调用
 
 **桶：** [0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0]
 
@@ -340,6 +340,12 @@ groups:
 一旦可以读取即被投递。为避免持续性故障刷满日志，同一文件只有第 1、2、4、8 次（依此类推）
 连续读取失败才会写入一条 error 日志并使 `herald_audit_write_failure_total` 加一；日志中指明
 该文件和下一次重试的间隔。这样的文件仍计入 `AUDIT_SPOOL_MAX_BYTES`。
+
+`herald_audit_spool_missing_total` 只要增加就应告警。它统计尝试投递时已不在
+`AUDIT_SPOOL_DIR` 中的待投递文件，例如被手动删除的文件。这样的记录已经丢失：Herald 记录
+一条指明该文件的 error 日志，停止重试，并且不再将其计入 `AUDIT_SPOOL_MAX_BYTES`。只有当
+`AUDIT_SPOOL_DIR` 仍是 Herald 启动时打开的那个目录时，文件才会按这种方式处理；如果目录本身
+被替换（例如卷在进程运行期间被卸载），其中的条目会按无法读取的文件继续重试。
 
 应对 `herald_audit_post_action_failure_total{operation}`（`create`、`verify`、`revoke`）配置
 告警：消息已发送、验证码已消费或撤销已完成后，结果记录未能被接收。请求已正常响应，因此

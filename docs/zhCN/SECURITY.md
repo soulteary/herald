@@ -241,7 +241,7 @@ Herald 维护以下操作的完整审计日志：
 
 ### 邮件 Provider 安全
 
-- 使用安全的 SMTP 连接（TLS/SSL）
+- 内置 SMTP 要求使用 STARTTLS 并校验服务器证书；服务器不提供或拒绝 STARTTLS 时不会退回到未加密连接，因此 `SMTP_PASSWORD` 和消息不会以明文发出
 - 使用安全凭据与 provider 进行认证
 - 安全存储 provider 凭据（环境变量或密钥管理）
 - 监控 provider 通信失败情况
