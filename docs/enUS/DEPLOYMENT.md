@@ -337,7 +337,10 @@ Files are Go `text/template` sources. The available fields are `{{.Code}}`,
 `{{.ExpiresIn}}` (seconds), `{{.Purpose}}` and `{{.Locale}}`; any other field
 is an error. For `email`, the first line is the subject and the rest is the
 body; a one-line template is used as the body with the subject
-`Verification Code`. A rendered message is limited to 16 KiB.
+`Verification Code`. Files may use LF or CRLF line endings. An email template
+whose subject line still contains a carriage return (one that is not part of
+the line ending) or a NUL character is not loaded, because the SMTP provider
+refuses such a subject. A rendered message is limited to 16 KiB.
 
 A file that cannot be read or parsed, sits at another depth, or names an
 unrecognized locale or channel is not loaded. Herald logs one warning per file
