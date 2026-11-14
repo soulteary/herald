@@ -24,12 +24,22 @@ import (
 	"github.com/soulteary/herald/internal/config"
 )
 
-func closedLocalAddr(t *testing.T) string {
+// refusingLocalAddr returns a loopback address that refuses connections.
+//
+// It is port 1 and not the port of a listener that was just closed: a freed
+// ephemeral port can be given to any process that asks for a free one before
+// the test dials it, and the send then reaches a stranger's server instead
+// of being refused. Port 1 lies outside every ephemeral range, so it is never
+// handed out that way. The test is skipped in the unexpected case that
+// something does listen there.
+func refusingLocalAddr(t *testing.T) string {
 	t.Helper()
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	addr := listener.Addr().String()
-	require.NoError(t, listener.Close())
+	const addr = "127.0.0.1:1"
+	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
+	if err == nil {
+		_ = conn.Close()
+		t.Skipf("something accepts connections on %s; this test needs an address that refuses them", addr)
+	}
 	return addr
 }
 
@@ -64,7 +74,7 @@ func (f *creationLimitFixture) useHTTPEmailProvider(t *testing.T, baseURL string
 // counters are not given back and stop the retries.
 func TestCreateChallenge_UndeliveredSendReleasesCooldown(t *testing.T) {
 	const user, dest = "undelivered-user", "undelivered@example.com"
-	f, logs := smtpFailureFixture(t, closedLocalAddr(t))
+	f, logs := smtpFailureFixture(t, refusingLocalAddr(t))
 	config.RateLimitPerDestination = 3
 
 	for attempt := 1; attempt <= 3; attempt++ {
@@ -142,7 +152,7 @@ func TestCreateChallenge_DeliveredSendKeepsCooldown(t *testing.T) {
 // with next_resend_in, so the cooldown is kept.
 func TestCreateChallenge_SoftPolicyKeepsCooldownAfterUndeliveredSend(t *testing.T) {
 	const user, dest = "soft-user", "soft@example.com"
-	f, _ := smtpFailureFixture(t, closedLocalAddr(t))
+	f, _ := smtpFailureFixture(t, refusingLocalAddr(t))
 	config.ProviderFailurePolicy = "soft"
 	resp := f.create(t, user, dest)
 	require.Equal(t, fiber.StatusOK, resp.status, string(resp.body))
@@ -177,7 +187,7 @@ func (dialFailingProvider) Validate() error           { return nil }
 func TestCreateChallenge_HTTPProviderUnreachableReleasesCooldown(t *testing.T) {
 	const user, dest = "http-unreachable-user", "http-unreachable@example.com"
 	f := newCreationLimitFixture(t)
-	f.useHTTPEmailProvider(t, "http://"+closedLocalAddr(t))
+	f.useHTTPEmailProvider(t, "http://"+refusingLocalAddr(t))
 	requireSendFailed(t, f.create(t, user, dest))
 	f.requireCooldown(t, user, dest, false)
 	requireSendFailed(t, f.create(t, user, dest))
