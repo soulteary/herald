@@ -93,7 +93,10 @@ Herald implements multi-dimensional rate limiting to prevent abuse:
 - **Per IP Address**: Limits challenges per caller address per time window
 
 The per-IP limit is keyed on the address Herald sees for the caller, not on the
-`client_ip` field in the request body, which is recorded for audit only. When a
+`client_ip` field in the request body. That field is accepted and not stored:
+audit records carry the address Herald sees for the caller, and a body
+`client_ip` that differs from it only produces a debug log line with a peppered
+digest. The `ua` field of a create request is accepted and ignored. When a
 gateway such as Stargate calls Herald directly, every end user arrives from the
 gateway's address and shares one `RATE_LIMIT_PER_IP` quota. To limit per end
 user:
