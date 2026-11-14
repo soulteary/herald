@@ -46,7 +46,6 @@ func TracingMiddleware(serviceName string) fiber.Handler {
 			trace.WithAttributes(
 				semconv.HTTPMethod(c.Method()),
 				semconv.HTTPTarget(path),
-				attribute.String("http.remote_addr", c.IP()),
 			),
 		)
 		if c.Route().Path != "" {
