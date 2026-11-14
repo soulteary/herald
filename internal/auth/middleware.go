@@ -271,3 +271,26 @@ var unknownKeySecret = sync.OnceValue(func() string {
 	}
 	return hex.EncodeToString(buf)
 })
+
+// LegacyKeyProvider wraps a key provider for the legacy v1 handler, which
+// answers an unknown key ID with its own reason before it looks at the
+// signature. A non-empty key ID the provider does not know resolves to the
+// same per-process secret the v2/v3 path uses for unknown keys. The handler
+// then runs its timestamp check and signature comparison as it does for a
+// configured key, and the request ends as invalid_signature: no caller can
+// hold that secret. An empty key ID is passed through unchanged, so a request
+// that names no key is still answered by the provider's default.
+func LegacyKeyProvider(next KeyProvider) KeyProvider {
+	return func(keyID string) string {
+		if next != nil {
+			if secret := next(keyID); secret != "" {
+				return secret
+			}
+		}
+		if keyID == "" {
+			return ""
+		}
+		metrics.RecordAuthFailure("invalid_key_id")
+		return unknownKeySecret()
+	}
+}

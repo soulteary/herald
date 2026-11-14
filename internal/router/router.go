@@ -327,7 +327,9 @@ func NewRouterWithClientAndHandlersE(redisClient *redis.Client, log *logger.Logg
 	if config.HMACV1Enabled {
 		v1Handler = mwfiber.HMACAuth(mwfiber.HMACConfig{
 			HMACConfig: middlewarekit.HMACConfig{
-				KeyProvider:  config.GetHMACSecret,
+				// An unknown key ID must end as invalid_signature, as it
+				// does on the v2/v3 path.
+				KeyProvider:  auth.LegacyKeyProvider(config.GetHMACSecret),
 				MaxTimeDrift: config.HMACMaxDrift,
 				Logger:       &zerologLogger,
 			},

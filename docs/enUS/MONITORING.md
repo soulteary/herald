@@ -357,7 +357,7 @@ See [security](SECURITY.md#provider-failure-diagnostics) for compatibility detai
 
 - `herald_idempotency_total{result}` emits `replay`, `conflict`, `in_flight`, `delivery_unknown`, `ownership_lost`, or `backend_error`. Both fingerprint conflicts and legacy namespace conflicts use `conflict`; distinguish them by the API reason, without adding identity labels.
 - `herald_nonce_replay_total` counts rejected replayed nonces.
-- `herald_auth_failure_total{reason}` counts HMAC requests answered `401/invalid_signature`. `reason` is `invalid_key_id` (the key ID is not configured) or `invalid_signature` (the key is known and the signature is wrong). The HTTP response is the same for both.
+- `herald_auth_failure_total{reason}` counts HMAC requests answered `401/invalid_signature`. `reason` is `invalid_key_id` (the key ID is not configured) or `invalid_signature` (the key is known and the signature is wrong). The HTTP response is the same for both. Requests on the legacy v1 scheme (`HMAC_V1_ENABLED=true`) that name an unconfigured key ID are counted as `invalid_key_id` and answered like a wrong signature as well; wrong signatures for a configured key are not counted on that scheme.
 - `herald_provider_timeout_total{channel}` counts provider timeouts.
 - `herald_verification_contention_total{result}` records `contended` or `acquired` where emitted by the verification path.
 - `herald_failed_attempt_lock_total` counts users locked because their wrong codes reached `LOCKOUT_FAILED_ATTEMPT_THRESHOLD`. Each lock also writes a warning with `user_id_digest`. A steady rate for one digest indicates code guessing against that user.
