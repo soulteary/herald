@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"sync"
 	"testing"
@@ -146,7 +147,19 @@ func TestRun_ListenerErrorReturned(t *testing.T) {
 }
 
 func TestRun_ServesRequests(t *testing.T) {
-	srv, err := New(newApp(), Config{Addr: "127.0.0.1:38251", ShutdownTimeout: 2 * time.Second})
+	// A port the system reports as free, not a fixed number: a fixed port can
+	// be in use on the machine that runs the tests, and the request then
+	// reaches whatever listens there.
+	probe, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("find a free port: %v", err)
+	}
+	addr := probe.Addr().String()
+	if err := probe.Close(); err != nil {
+		t.Fatalf("release the probed port: %v", err)
+	}
+
+	srv, err := New(newApp(), Config{Addr: addr, ShutdownTimeout: 2 * time.Second})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -154,24 +167,27 @@ func TestRun_ServesRequests(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- srv.Run(ctx) }()
 
-	// Poll until the server is accepting connections.
-	var resp *http.Response
-	deadline := time.Now().Add(2 * time.Second)
+	// Poll until this server answers. The allowance only bounds a server that
+	// never starts; a loaded machine can need more than a moment.
+	var body []byte
+	var lastErr error
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
-		resp, err = http.Get("http://127.0.0.1:38251/ping")
-		if err == nil {
-			break
+		resp, getErr := http.Get("http://" + addr + "/ping")
+		if getErr == nil {
+			body, lastErr = io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			if lastErr == nil && string(body) == "pong" {
+				break
+			}
+		} else {
+			lastErr = getErr
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if err != nil {
-		cancel()
-		t.Fatalf("request failed: %v", err)
-	}
-	body, _ := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
 	if string(body) != "pong" {
-		t.Fatalf("unexpected body: %q", body)
+		cancel()
+		t.Fatalf("the server did not answer /ping with pong: body %q, last error: %v", body, lastErr)
 	}
 
 	cancel()
