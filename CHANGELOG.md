@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add the counter `herald_audit_post_action_failure_total{operation}`
   (`create`, `verify`, `revoke`) for audit result records that could not be
   stored after the action had completed.
+- `429/rate_limit_exceeded` carries `limit` (`user`, `ip` or `destination`),
+  naming the limit that refused the request.
+- Startup warnings for the per-IP limit without trusted-proxy configuration, a
+  production listener without TLS, and `CODE_LENGTH` below 6.
 
 ### Changed
 
@@ -33,6 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   locked user who is also over a limit now gets `403/user_locked` instead of
   `429`. Redis metrics for this step use `operation="ratelimit_create"`
   instead of `ratelimit_user`, `ratelimit_ip`, `ratelimit_dest` and `cooldown`.
+- A request rejected because every hash slot is busy answers
+  `503/hash_capacity_exceeded`.
+- The Compose file accepts optional `SMTP_*` variables for the built-in email
+  provider.
 
 ### Fixed
 
@@ -51,6 +59,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   provider-failure mode the same applies to the `delivery_status=failed`
   response. Audit records required before the action still refuse the request
   with 503.
+- An audit spool file that cannot be read or decoded is renamed to
+  `<id>.json.quarantined` after 5 attempts instead of being retried every
+  second without end. `herald_audit_quarantined_total` counts such files.
+- Under the strict policy, answer `503/channel_not_configured` for a channel
+  without a provider before any quota or cooldown is used, and log provider
+  coverage at startup.
+- Production uses `PROVIDER_FAILURE_POLICY=strict` when the variable is unset;
+  an explicit `soft` is still rejected.
+- Built-in messages state a lifetime under one minute as 1 minute.
+- Custom templates in region-tagged directories are selected; template files
+  that cannot be loaded are logged at startup.
+- Join the caller's trace when a request carries a W3C `traceparent` header,
+  whatever the header's case.
 
 ### Security
 
@@ -101,6 +122,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   destination-only cooldown is complete once every instance is upgraded.
   Callers that send to one destination for several user IDs within the
   cooldown now receive `429/resend_cooldown`.
+- Refuse a `challenge_id` outside 1-64 bytes of `A-Za-z0-9_-` with
+  `400/invalid_challenge_id`, before it reaches Redis, the audit log or spans.
+- Lock a user after `LOCKOUT_FAILED_ATTEMPT_THRESHOLD` (default `15`) wrong
+  codes within `LOCKOUT_FAILED_ATTEMPT_WINDOW` (default `1h`) across all
+  challenges; `0` disables the counter. Wrong codes spread over many challenges
+  did not lead to a lock before.
+- Answer an unknown HMAC key ID with `401/invalid_signature`, the same as a
+  wrong signature. The reason `invalid_key_id` is no longer returned.
+- Stop exporting the client address and a partially masked destination on
+  spans; the creation span carries `destination_digest`.
 
 ## [1.6.0] - 2026-11-13
 
