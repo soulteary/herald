@@ -219,8 +219,8 @@ type CreateChallengeRequest struct {
 	Destination string `json:"destination"`
 	Purpose     string `json:"purpose"`
 	Locale      string `json:"locale"`
-	ClientIP    string `json:"client_ip"`
-	UA          string `json:"ua"`
+	ClientIP    string `json:"client_ip"` // advisory; not stored, see CreateChallenge
+	UA          string `json:"ua"`        // accepted for compatibility; not used
 }
 
 // IdempotencyRecord represents a cached idempotency response
@@ -282,8 +282,10 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 	//     forwarded hop, per Fiber's ProxyHeader/TrustedProxies config). This is
 	//     the ONLY value used for IP rate limiting so a caller cannot evade the
 	//     per-IP limit by rotating a self-reported field.
-	//   - reportedClientIP is advisory (supplied by the trusted upstream service
-	//     in the request body) and is only recorded in audit logs.
+	//   - the client_ip of the request body is advisory and is not stored. It
+	//     is not written to audit records, which carry peerIP; when it differs
+	//     from peerIP its peppered digest is logged at debug level. The ua
+	//     field is accepted and ignored.
 	peerIP := c.IP()
 	h.logReportedClientIP(req.ClientIP, peerIP)
 

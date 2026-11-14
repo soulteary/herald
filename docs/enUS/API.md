@@ -165,6 +165,15 @@ a new request. See the deployment guide for persistence and reconciliation.
 }
 ```
 
+**`client_ip` and `ua`:** both are optional and neither is stored. Rate limits
+and audit records use the address Herald sees for the caller: the direct peer,
+or the address in `HERALD_TRUSTED_PROXY_HEADER` when the peer is listed in
+`HERALD_TRUSTED_PROXIES`. A `client_ip` that differs from that address only
+produces a debug log line with a peppered digest, and `ua` is ignored. To have
+the end-user address counted and recorded, send it in the trusted proxy header
+(Go SDK: `WithClientIPHeader`); see [security](SECURITY.md#4-rate-limiting-configuration).
+The same applies to `client_ip` in both verification requests.
+
 **Channel:** `channel` must be `"sms"`, `"email"`, or `"dingtalk"`. When `channel` is `"email"` and `HERALD_SMTP_API_URL` is set, Herald forwards the send to [herald-smtp](https://github.com/soulteary/herald-smtp); `destination` is the email address. When `channel` is `"dingtalk"`, Herald forwards the send to [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) (configure `HERALD_DINGTALK_API_URL`); `destination` is the DingTalk userid (or 11-digit mobile when herald-dingtalk is in mobile lookup mode). Herald does not store any SMTP or DingTalk credentials.
 
 **Response:**
