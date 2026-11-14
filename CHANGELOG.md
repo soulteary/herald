@@ -50,6 +50,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Request spans are named `<METHOD> <route template>` instead of `/`, and the
   raw request path is no longer exported as `http.target`. Dashboards that
   select spans by the old name need the new one.
+- Concurrent audit records share spool syncs instead of being made durable one
+  at a time. Each record is still acknowledged only after its file and its
+  directory entry are synced, and the spool format is unchanged. Measured
+  throughput with 16 or more concurrent writers rose by about 30 to 50 percent
+  on a Linux runner and about doubled on macOS; a single writer gains nothing.
 
 ### Fixed
 
