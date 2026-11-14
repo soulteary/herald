@@ -6,6 +6,9 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/gofiber/fiber/v3"
 
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/testutil"
@@ -40,6 +43,14 @@ func sourceTreeSpoolState() string {
 	sort.Strings(names)
 	return fmt.Sprintf("modified %d, entries [%s]", info.ModTime().UnixNano(), strings.Join(names, " "))
 }
+
+// requestAllowance is passed to every App.Test call in this package. Without
+// it fiber gives a request one second and then returns "i/o timeout" while
+// the handler keeps running. A creation hashes its code with Argon2 and can
+// take longer than that on a loaded machine or under the race detector; the
+// abandoned handler then read package-level configuration while the next
+// test changed it. The minute only stops a handler that hangs.
+var requestAllowance = fiber.TestConfig{Timeout: time.Minute, FailOnTimeout: true}
 
 // TestMain points the audit spool at a temporary directory. The default,
 // "./audit-spool", is relative to the working directory, which for a test

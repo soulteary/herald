@@ -30,7 +30,7 @@ func TestVerifyV1RouteSwitch(t *testing.T) {
 		// validation, so a mounted route answers 400 and never 404.
 		req := httptest.NewRequest("POST", path, strings.NewReader(`{}`))
 		req.Header.Set("Content-Type", "application/json")
-		resp, err := app.Test(req)
+		resp, err := app.Test(req, requestAllowance)
 		if err != nil {
 			t.Fatalf("app.Test: %v", err)
 		}

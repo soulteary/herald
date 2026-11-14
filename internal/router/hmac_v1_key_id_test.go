@@ -35,7 +35,7 @@ func TestLegacyV1UnknownKeyIDAnswersLikeBadSignature(t *testing.T) {
 		req.Header.Set(auth.HeaderTimestamp, timestamp)
 		req.Header.Set(auth.HeaderService, "svc")
 		req.Header.Set(auth.HeaderKeyID, keyID)
-		resp, err := app.Test(req)
+		resp, err := app.Test(req, requestAllowance)
 		if err != nil {
 			t.Fatalf("app.Test: %v", err)
 		}

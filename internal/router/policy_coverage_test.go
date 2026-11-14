@@ -20,7 +20,7 @@ func TestSanitizeForwardedChain(t *testing.T) {
 	} {
 		req := httptest.NewRequest("GET", "/", nil)
 		req.Header.Set("X-Forwarded-For", tc.raw)
-		resp, err := app.Test(req)
+		resp, err := app.Test(req, requestAllowance)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -46,7 +46,7 @@ func TestFrameworkErrorContract(t *testing.T) {
 	} {
 		app := fiber.New(fiber.Config{ErrorHandler: jsonErrorHandler})
 		app.Get("/", func(fiber.Ctx) error { return tc.err })
-		resp, err := app.Test(httptest.NewRequest("GET", "/", nil))
+		resp, err := app.Test(httptest.NewRequest("GET", "/", nil), requestAllowance)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -70,7 +70,7 @@ func TestRouterExplicitCORSAndTracing(t *testing.T) {
 	for _, origin := range []string{"https://allowed.example", "https://attacker.example"} {
 		req := httptest.NewRequest("GET", "/livez", nil)
 		req.Header.Set("Origin", origin)
-		resp, err := app.Test(req)
+		resp, err := app.Test(req, requestAllowance)
 		if err != nil {
 			t.Fatal(err)
 		}

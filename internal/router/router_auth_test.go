@@ -72,7 +72,7 @@ func doReq(t *testing.T, app *fiber.App, headers map[string]string, body []byte)
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -278,7 +278,7 @@ func TestCreationCannotDowngradeToV2WithOrWithoutIdempotency(t *testing.T) {
 	for k, v := range map[string]string{auth.HeaderSignatureVersion: auth.SignatureVersionV2, auth.HeaderTimestamp: timestamp, auth.HeaderNonce: "verify-nonce", auth.HeaderService: "svc", auth.HeaderSignature: auth.SignV2("v2-secret", auth.CanonicalRequest{Method: "POST", Path: "/v2/otp/verifications", Timestamp: timestamp, Nonce: "verify-nonce", Service: "svc", Body: []byte(`{}`)})} {
 		req.Header.Set(k, v)
 	}
-	resp, err := rw.App.Test(req)
+	resp, err := rw.App.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -316,7 +316,7 @@ func TestAuthNonceStoreFailureRejectsInEveryEnvironment(t *testing.T) {
 			} {
 				req.Header.Set(k, v)
 			}
-			resp, err := rw.App.Test(req)
+			resp, err := rw.App.Test(req, requestAllowance)
 			if err != nil {
 				t.Fatal(err)
 			}
