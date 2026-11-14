@@ -62,12 +62,7 @@ func TestSMTPFailureLogSaysWhereDeliveryStopped(t *testing.T) {
 	const destination = "inbox-smtp-failure@example.com"
 
 	t.Run("nothing listens", func(t *testing.T) {
-		listener, err := net.Listen("tcp", "127.0.0.1:0")
-		require.NoError(t, err)
-		addr := listener.Addr().String()
-		require.NoError(t, listener.Close())
-
-		f, logs := smtpFailureFixture(t, addr)
+		f, logs := smtpFailureFixture(t, refusingLocalAddr(t))
 		f.create(t, "smtp-failure-user", destination)
 
 		line := sendFailureLine(t, logs)
