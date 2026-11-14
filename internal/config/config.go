@@ -619,6 +619,17 @@ func initializeSecretsAndPrivacy() error {
 		PIIPepper = IdempotencySecret
 	}
 
+	// Delivery default: PROVIDER_FAILURE_POLICY defaults to soft for local
+	// setups without a provider, and production forbids soft. An operator who
+	// sets only ENVIRONMENT=production therefore gets strict, instead of a
+	// startup failure about a value they never set. An explicit soft is still
+	// rejected by Validate(). The variable counts as unset when it is absent
+	// or empty, which is when env.Get applied the default.
+	if Env == EnvProduction && os.Getenv("PROVIDER_FAILURE_POLICY") == "" {
+		ProviderFailurePolicy = "strict"
+		log.Info().Msg("Production default: PROVIDER_FAILURE_POLICY=strict")
+	}
+
 	// Privacy default: in production, mask destinations in audit records unless
 	// the operator has explicitly opted out. This prevents raw phone/email from
 	// landing in the audit store by default.
@@ -738,7 +749,13 @@ func providerTransportProblems() []string {
 		{"HERALD_TOTP_BASE_URL", TOTPBaseURL},
 	} {
 		if u.url != "" && !strings.HasPrefix(strings.ToLower(u.url), "https://") {
-			problems = append(problems, u.name+" must use https:// in production")
+			if Env == EnvProduction {
+				problems = append(problems, u.name+" must use https:// in production")
+			} else {
+				// Outside production this is logged as a warning, so it must
+				// not read as if the current environment were production.
+				problems = append(problems, u.name+" does not use https://: accepted in this environment, but production refuses to start with it")
+			}
 		}
 	}
 
