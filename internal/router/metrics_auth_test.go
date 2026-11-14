@@ -39,7 +39,7 @@ func TestMetricsAuthentication(t *testing.T) {
 			if tc.header != "" {
 				req.Header.Set(tc.header, tc.value)
 			}
-			resp, err := app.Test(req)
+			resp, err := app.Test(req, requestAllowance)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -87,7 +87,7 @@ func TestRouterAppliesServicePoliciesToEveryProtectedRoute(t *testing.T) {
 			req.Header.Set(k, v)
 		}
 		req.Header.Set("Content-Type", "application/json")
-		resp, err := rw.App.Test(req)
+		resp, err := rw.App.Test(req, requestAllowance)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -127,7 +127,7 @@ func TestReaderPolicyAllowsVerificationWithoutBusinessSideEffects(t *testing.T) 
 		for k, v := range v3Sign("v2-secret", "", "reader", "POST", tc.path, "", fmt.Sprintf("reader-%d", i), time.Now().Unix(), []byte(tc.body)) {
 			req.Header.Set(k, v)
 		}
-		resp, err := rw.App.Test(req)
+		resp, err := rw.App.Test(req, requestAllowance)
 		if err != nil {
 			t.Fatal(err)
 		}

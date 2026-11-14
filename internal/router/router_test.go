@@ -82,7 +82,7 @@ func TestRouter_FrameworkErrorsAreJSON(t *testing.T) {
 	defer func() { _ = redisClient.Close() }()
 
 	app := NewRouterWithClient(redisClient, testLogger())
-	resp, err := app.Test(httptest.NewRequest("GET", "/does-not-exist", nil))
+	resp, err := app.Test(httptest.NewRequest("GET", "/does-not-exist", nil), requestAllowance)
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -104,7 +104,7 @@ func TestHealthz_Returns200(t *testing.T) {
 
 	rw := NewRouterWithClientAndHandlers(redisClient, testLogger())
 	req := httptest.NewRequest("GET", "/healthz", nil)
-	resp, err := rw.App.Test(req)
+	resp, err := rw.App.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestLivez_AlwaysReturns200(t *testing.T) {
 	defer func() { _ = redisClient.Close() }()
 
 	rw := NewRouterWithClientAndHandlers(redisClient, testLogger())
-	resp, err := rw.App.Test(httptest.NewRequest("GET", "/livez", nil))
+	resp, err := rw.App.Test(httptest.NewRequest("GET", "/livez", nil), requestAllowance)
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestReadyz_OkWhenRedisReachable(t *testing.T) {
 	defer func() { _ = redisClient.Close() }()
 
 	rw := NewRouterWithClientAndHandlers(redisClient, testLogger())
-	resp, err := rw.App.Test(httptest.NewRequest("GET", "/readyz", nil))
+	resp, err := rw.App.Test(httptest.NewRequest("GET", "/readyz", nil), requestAllowance)
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestReadyz_FailsClosedWhenRedisDown(t *testing.T) {
 	// Close the client so Ping fails; readyz must report 503, not 200.
 	_ = redisClient.Close()
 
-	resp, err := rw.App.Test(httptest.NewRequest("GET", "/readyz", nil))
+	resp, err := rw.App.Test(httptest.NewRequest("GET", "/readyz", nil), requestAllowance)
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -165,7 +165,7 @@ func TestHealthz_BodyContainsStatusOrOk(t *testing.T) {
 
 	rw := NewRouterWithClientAndHandlers(redisClient, testLogger())
 	req := httptest.NewRequest("GET", "/healthz", nil)
-	resp, err := rw.App.Test(req)
+	resp, err := rw.App.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -195,7 +195,7 @@ func TestOTPRoute_RequiresAuthWhenConfigured(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/otp/challenges", strings.NewReader(`{"user_id":"u1","channel":"email","destination":"a@b.com","purpose":"login"}`))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := rw.App.Test(req)
+	resp, err := rw.App.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -219,7 +219,7 @@ func TestRouter_OTLPEnabled(t *testing.T) {
 	}
 	// OTLP enabled branch is covered by router init; healthz still works
 	req := httptest.NewRequest("GET", "/healthz", nil)
-	resp, err := rw.App.Test(req)
+	resp, err := rw.App.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -256,7 +256,7 @@ func TestRouter_TestModeRoute(t *testing.T) {
 	}
 
 	oversizedReq := httptest.NewRequest("GET", "/livez", strings.NewReader("0123456789abcdef"))
-	oversizedResp, err := rw.TestApp.Test(oversizedReq)
+	oversizedResp, err := rw.TestApp.Test(oversizedReq, requestAllowance)
 	if err != nil {
 		t.Fatalf("oversized test app request: %v", err)
 	}
@@ -269,7 +269,7 @@ func TestRouter_TestModeRoute(t *testing.T) {
 	// The public app must never expose the test-code route.
 	publicReq := httptest.NewRequest("GET", "/v1/test/code/some-id", nil)
 	publicReq.Header.Set("X-Test-Api-Key", "test-secret-key")
-	publicResp, err := rw.App.Test(publicReq)
+	publicResp, err := rw.App.Test(publicReq, requestAllowance)
 	if err != nil {
 		t.Fatalf("public app.Test: %v", err)
 	}
@@ -279,7 +279,7 @@ func TestRouter_TestModeRoute(t *testing.T) {
 
 	// Without the test key the endpoint must reject with 401.
 	reqNoKey := httptest.NewRequest("GET", "/v1/test/code/some-id", nil)
-	respNoKey, err := rw.TestApp.Test(reqNoKey)
+	respNoKey, err := rw.TestApp.Test(reqNoKey, requestAllowance)
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -291,7 +291,7 @@ func TestRouter_TestModeRoute(t *testing.T) {
 	// With the test key it is reachable (200 or 404 depending on code presence).
 	req := httptest.NewRequest("GET", "/v1/test/code/some-id", nil)
 	req.Header.Set("X-Test-Api-Key", "test-secret-key")
-	resp, err := rw.TestApp.Test(req)
+	resp, err := rw.TestApp.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -318,7 +318,7 @@ func TestRouter_OversizedBodyRejected(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/otp/challenges", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := rw.App.Test(req)
+	resp, err := rw.App.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -341,7 +341,7 @@ func TestRouter_CORSDisabledByDefault(t *testing.T) {
 	rw := NewRouterWithClientAndHandlers(redisClient, testLogger())
 	req := httptest.NewRequest("GET", "/healthz", nil)
 	req.Header.Set("Origin", "https://evil.example.com")
-	resp, err := rw.App.Test(req)
+	resp, err := rw.App.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -372,7 +372,7 @@ func TestRouter_TestCodeRoute_NotMountedInDevOrProd(t *testing.T) {
 	}
 	req := httptest.NewRequest("GET", "/v1/test/code/some-id", nil)
 	req.Header.Set("X-Test-Api-Key", "test-secret-key")
-	resp, err := rw.App.Test(req)
+	resp, err := rw.App.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -414,7 +414,7 @@ func TestRouter_OversizedBodyReturnsStableJSON(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/", strings.NewReader("0123456789abcdef"))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}

@@ -25,13 +25,13 @@ func TestProductionRouterRejectsWildcardInCORSOriginList(t *testing.T) {
 			req.Header.Set("Origin", "https://untrusted.example")
 			req.Header.Set("Access-Control-Request-Method", "POST")
 			req.Header.Set("Access-Control-Request-Headers", "Content-Type,X-Signature")
-			resp, requestErr := rw.App.Test(req)
+			resp, requestErr := rw.App.Test(req, requestAllowance)
 			require.NoError(t, requestErr)
 			t.Logf("origins=%q untrusted preflight status=%d allow-origin=%q", origins, resp.StatusCode, resp.Header.Get("Access-Control-Allow-Origin"))
 			require.NoError(t, resp.Body.Close())
 			unsigned := httptest.NewRequest("POST", "/v1/otp/challenges", strings.NewReader(`{}`))
 			unsigned.Header.Set("Content-Type", "application/json")
-			resp, requestErr = rw.App.Test(unsigned)
+			resp, requestErr = rw.App.Test(unsigned, requestAllowance)
 			require.NoError(t, requestErr)
 			t.Logf("unsigned business request status=%d", resp.StatusCode)
 			require.Equal(t, 401, resp.StatusCode, "CORS does not replace request authentication")
@@ -70,7 +70,7 @@ func TestRouterCORSOriginListCompatibility(t *testing.T) {
 					if method == "OPTIONS" {
 						req.Header.Set("Access-Control-Request-Method", "GET")
 					}
-					resp, err := rw.App.Test(req)
+					resp, err := rw.App.Test(req, requestAllowance)
 					require.NoError(t, err)
 					want := ""
 					if tc.wildcard {
@@ -85,7 +85,7 @@ func TestRouterCORSOriginListCompatibility(t *testing.T) {
 			req := httptest.NewRequest("POST", "/v1/otp/challenges", strings.NewReader(`{}`))
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("Origin", "https://untrusted.example")
-			resp, err := rw.App.Test(req)
+			resp, err := rw.App.Test(req, requestAllowance)
 			require.NoError(t, err)
 			require.Equal(t, 401, resp.StatusCode)
 			require.NoError(t, resp.Body.Close())
