@@ -93,7 +93,7 @@ func TestRouterLegacyConstructorAndInitializationFailure(t *testing.T) {
 		config.HeraldSMTPAPIURL, config.RedisAddr, config.RedisPassword, config.HMACV1Enabled = oldURL, oldRedis, oldPassword, oldV1
 	}()
 	config.RedisAddr, config.RedisPassword, config.HMACV1Enabled = rc.Options().Addr, "", true
-	app := NewRouter(testLogger())
+	app := NewRouterWithClient(rc, testLogger())
 	if app == nil {
 		t.Fatal("legacy constructor returned nil")
 	}

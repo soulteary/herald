@@ -22,7 +22,6 @@ import (
 	metricsfiber "github.com/soulteary/metrics-kit/v3/fiberadapter"
 	middlewarekit "github.com/soulteary/middleware-kit/v3"
 	mwfiber "github.com/soulteary/middleware-kit/v3/fiberadapter"
-	rediskit "github.com/soulteary/redis-kit/client"
 
 	"github.com/soulteary/herald/internal/auth"
 	"github.com/soulteary/herald/internal/config"
@@ -157,24 +156,6 @@ func testAuthMiddleware(testKey string) fiber.Handler {
 		}
 		return c.Next()
 	}
-}
-
-// NewRouter creates and configures a new Fiber router
-// It initializes Redis client from config
-// Deprecated: Use NewRouterWithClientAndHandlers for graceful shutdown support
-func NewRouter(log *logger.Logger) *fiber.App {
-	// Initialize Redis client using redis-kit
-	cfg := rediskit.DefaultConfig().
-		WithAddr(config.RedisAddr).
-		WithPassword(config.RedisPassword).
-		WithDB(config.RedisDB)
-
-	redisClient, err := rediskit.NewClient(cfg)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to connect to Redis")
-	}
-
-	return NewRouterWithClient(redisClient, log)
 }
 
 // RouterWithHandlers wraps the router and handlers for graceful shutdown
