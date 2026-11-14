@@ -90,6 +90,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Custom email templates saved with CRLF line endings are sent. A subject line
   that still contains a carriage return or NUL is reported at startup and the
   template is not loaded.
+- A pending audit spool file that was deleted from `AUDIT_SPOOL_DIR` is
+  dropped, logged once and counted in the new
+  `herald_audit_spool_missing_total`. It was retried without end and counted
+  towards `AUDIT_SPOOL_MAX_BYTES` until restart.
+- Under the strict provider policy, a create answered `500/send_failed` no
+  longer leaves the resend cooldown in place when the failure proves that no
+  provider accepted the message: the SMTP host did not resolve or was not
+  reachable, its certificate was not trusted, the credentials were refused, or
+  an HTTP provider was not reachable. Other failures keep the cooldown, and the
+  per-user, per-IP and per-destination quotas stay spent in every case.
 
 ### Security
 
