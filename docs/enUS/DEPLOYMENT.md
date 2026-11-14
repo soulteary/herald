@@ -223,6 +223,9 @@ each at startup and keeps starting. The `check` field names the warning.
 | `config.rate_limit_ip` | `HERALD_TRUSTED_PROXY_HEADER` and `HERALD_TRUSTED_PROXIES` are unset | `RATE_LIMIT_PER_IP` counts the direct peer, so a gateway that calls Herald for many end users shares one quota among all of them |
 | `config.listener_tls` | `ENVIRONMENT=production` and `TLS_CERT_FILE`/`TLS_KEY_FILE` are unset | Verification requests carry the code in their body, and with `REQUEST_AUTH_MODE=api_key` every request also carries the static key, which can be replayed if captured. If TLS is terminated by a proxy in front of Herald, keep the hop to Herald on a trusted local network |
 | `config.code_length` | `CODE_LENGTH` is below `6` | Lengths `4` and `5` are accepted, but each digit removed makes a single guess ten times more likely to succeed while the attempt and rate limits stay the same |
+| `config.test_mode` | `HERALD_TEST_MODE=true` while `ENVIRONMENT` is not `test` (production refuses to start instead) | The flag has no effect on its own: no `debug_code` is returned and the test-code endpoint is not started |
+| `config.totp` | `HERALD_TOTP_ENABLED=true` and `HERALD_TOTP_BASE_URL` is empty | The TOTP proxy is not configured; every `/v1/totp` request answers `503/totp_not_configured` |
+| `config.otlp` | `OTLP_ENABLED=true` and `OTLP_ENDPOINT` is empty | No trace exporter is configured, so no spans are exported |
 
 #### Audit logging
 

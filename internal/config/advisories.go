@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/soulteary/herald/internal/serviceauth"
 )
@@ -23,7 +24,47 @@ func startupAdvisories() []advisory {
 	if message := shortCodeAdvisory(); message != "" {
 		advisories = append(advisories, advisory{"config.code_length", message})
 	}
+	if message := testModeAdvisory(); message != "" {
+		advisories = append(advisories, advisory{"config.test_mode", message})
+	}
+	if message := totpBaseURLAdvisory(); message != "" {
+		advisories = append(advisories, advisory{"config.totp", message})
+	}
+	if message := otlpEndpointAdvisory(); message != "" {
+		advisories = append(advisories, advisory{"config.otlp", message})
+	}
 	return advisories
+}
+
+// testModeAdvisory warns when HERALD_TEST_MODE=true is set outside the test
+// environment. Code exposure needs ENVIRONMENT=test as well, so the flag then
+// changes nothing, and an operator who set it to see debug_code gets no hint
+// why it is missing. Production is not covered here: Validate() refuses the
+// flag there.
+func testModeAdvisory() string {
+	if !TestMode || Env == EnvTest || Env == EnvProduction {
+		return ""
+	}
+	return "HERALD_TEST_MODE=true has no effect because ENVIRONMENT is not test: challenge responses carry no debug_code and the test-code endpoint is not started; set ENVIRONMENT=test as well to expose codes for testing, or remove HERALD_TEST_MODE"
+}
+
+// totpBaseURLAdvisory warns when the TOTP proxy is switched on without the
+// address of the service it forwards to. The routes are registered either
+// way and answer 503/totp_not_configured.
+func totpBaseURLAdvisory() string {
+	if !TOTPEnabled || strings.TrimSpace(TOTPBaseURL) != "" {
+		return ""
+	}
+	return "HERALD_TOTP_ENABLED=true but HERALD_TOTP_BASE_URL is empty: the TOTP proxy is not configured and every /v1/totp request answers 503/totp_not_configured; set HERALD_TOTP_BASE_URL to the herald-totp service"
+}
+
+// otlpEndpointAdvisory warns when tracing is switched on without a collector
+// to export to. Spans are then created and discarded.
+func otlpEndpointAdvisory() string {
+	if !OTLPEnabled || strings.TrimSpace(OTLPEndpoint) != "" {
+		return ""
+	}
+	return "OTLP_ENABLED=true but OTLP_ENDPOINT is empty: no trace exporter is configured and no spans are exported; set OTLP_ENDPOINT to the collector"
 }
 
 // plaintextListenerAdvisory warns when a production listener has no TLS.
