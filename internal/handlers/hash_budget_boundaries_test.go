@@ -100,13 +100,14 @@ func TestHashBudgetSharesRoutesWithoutConsumingRejectedRequests(t *testing.T) {
 	for _, path := range []string{"/v1/otp/verifications", "/v2/otp/verifications"} {
 		status, body, retry := budgetVerifyRequest(t, app, path, victim.ID, code)
 		require.Equal(t, 503, status)
-		require.Contains(t, string(body), "backend_unavailable")
+		require.JSONEq(t, `{"ok":false,"reason":"hash_capacity_exceeded"}`, string(body))
 		require.Equal(t, "1", retry)
 	}
 	body := `{"user_id":"overload","channel":"email","destination":"overload@example.com","purpose":"login"}`
 	rejected, err := idemRequest(app, "overload", body)
 	require.NoError(t, err)
 	require.Equal(t, 503, rejected.status)
+	require.JSONEq(t, `{"ok":false,"reason":"hash_capacity_exceeded"}`, string(rejected.body))
 	require.ElementsMatch(t, before, rc.Keys(context.Background(), "*").Val(), "overload must not retain an idempotency claim or reserve a cooldown")
 	stored, err := blocking.Get(context.Background(), victim.ID)
 	require.NoError(t, err)
