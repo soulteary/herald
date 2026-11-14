@@ -298,7 +298,7 @@ groups:
 
 ## OpenTelemetry 支持
 
-当设置 `OTLP_ENABLED=true` 且配置 `OTLP_ENDPOINT` 时，Herald 会启用 OpenTelemetry 追踪中间件。追踪上下文通过 `traceparent` 与 `tracestate` 请求头传播。核心 span 包括 challenge 创建、provider 发送与验码；span 标签包括 `channel`、`purpose`、`provider`、`result`、`reason`。span 上以 `user_id_digest` 标识用户，这是以 `HERALD_PII_PEPPER` 为密钥的加 pepper 摘要；原始 `user_id` 不会被导出。同一 pepper 下摘要保持稳定，仍可用于关联同一用户的 span。创建 span 以同样的方式用 `destination_digest` 标识 destination，任何 span 都不携带客户端地址。`OTLP_ENDPOINT` 可写为 `host:port`（例如 `localhost:4318`），也可写为 `http://` 或 `https://` URL（例如 `http://localhost:4318`），详见 [DEPLOYMENT.md](DEPLOYMENT.md)；span 通过 OTLP over HTTP 发送。只有导出器建立成功时，Herald 才会记录 `OpenTelemetry tracing initialized` 及解析后的端点。端点为空或无法解析时，日志会说明不导出任何 span。
+当设置 `OTLP_ENABLED=true` 且配置 `OTLP_ENDPOINT` 时，Herald 会启用 OpenTelemetry 追踪中间件。追踪上下文通过 `traceparent` 与 `tracestate` 请求头传播。核心 span 包括 challenge 创建、provider 发送与验码；span 标签包括 `channel`、`purpose`、`provider`、`result`、`reason`。span 上以 `user_id_digest` 标识用户，这是以 `HERALD_PII_PEPPER` 为密钥的加 pepper 摘要；原始 `user_id` 不会被导出。同一 pepper 下摘要保持稳定，仍可用于关联同一用户的 span。创建 span 以同样的方式用 `destination_digest` 标识 destination，任何 span 都不携带客户端地址。`OTLP_ENDPOINT` 可写为 `host:port`（例如 `localhost:4318`），也可写为 `http://` 或 `https://` URL（例如 `http://localhost:4318`），详见 [DEPLOYMENT.md](DEPLOYMENT.md)；span 通过 OTLP over HTTP 发送。`https://` 端点默认以系统根证书校验；设置 `OTEL_EXPORTER_OTLP_CERTIFICATE` 指定 CA 文件后，该文件会替换系统根证书。这个变量以及导出器支持的其他 `OTEL_EXPORTER_OTLP_*` 变量（客户端证书、请求头、超时、压缩）见 [OTLP 导出器环境变量](DEPLOYMENT.md#otlp-导出器环境变量)。只有导出器建立成功时，Herald 才会记录 `OpenTelemetry tracing initialized` 及解析后的端点。端点为空或无法解析时，日志会说明不导出任何 span。
 
 每个 HTTP 请求的请求 span 命名为 `<METHOD> <路由模板>`，例如
 `POST /v1/otp/challenges/:id/revoke`，并以 `http.route` 携带该模板。没有匹配路由的请求命名为
