@@ -21,31 +21,60 @@ type journalEntry struct {
 	size int64
 	busy bool
 	next time.Time
-	// unreadable counts consecutive attempts that could not read or decode
-	// the file. Backend delivery failures do not count: they are retried
-	// for as long as the backend is down.
-	unreadable int
+	// undecodable counts consecutive attempts that read the file and could
+	// not decode it. A successful decode resets it. Read errors and backend
+	// delivery failures do not count: both are retried for as long as they
+	// last.
+	undecodable int
+	// readFailures counts consecutive attempts that could not read the
+	// file. It sets the retry delay and is reset by a successful read.
+	readFailures int
 }
 
-// quarantineSuffix is appended to the name of a spool file that could not be
-// read or decoded. A quarantined file is kept for inspection, is not retried,
+// quarantineSuffix is appended to the name of a spool file that was read and
+// could not be decoded. A quarantined file is kept for inspection, is not retried,
 // is not picked up again after a restart and does not count towards the spool
 // size limit. Renaming it back to its ".json" name makes the next start retry
 // it.
 const quarantineSuffix = ".quarantined"
 
-// maxUnreadableAttempts is how often an unreadable spool file is tried before
-// it is quarantined. More than one, so a transient read error does not set a
-// good record aside.
+// maxUnreadableAttempts is how often an undecodable spool file is tried
+// before it is quarantined.
 const maxUnreadableAttempts = 5
 
-// unreadableRetryDelay and quarantineRetryDelay are variables so tests need
-// not wait for them. The second applies when the rename into quarantine
-// itself fails and the entry has to stay in place.
+// unreadableRetryDelay, readRetryMaxDelay and quarantineRetryDelay are
+// variables so tests need not wait for them. The first is the delay between
+// attempts on an undecodable file and the first delay after a read error; the
+// delay after further read errors doubles up to the second. The third applies
+// when the rename into quarantine itself fails and the entry has to stay in
+// place.
 var (
 	unreadableRetryDelay = time.Second
+	readRetryMaxDelay    = 5 * time.Minute
 	quarantineRetryDelay = time.Hour
 )
+
+// readRetryDelay is the wait before the next attempt on a file that could not
+// be read `failures` times in a row: the base delay, doubled per failure, at
+// most readRetryMaxDelay.
+func readRetryDelay(failures int) time.Duration {
+	delay := unreadableRetryDelay
+	for i := 1; i < failures && delay < readRetryMaxDelay; i++ {
+		delay *= 2
+	}
+	if delay > readRetryMaxDelay {
+		delay = readRetryMaxDelay
+	}
+	return delay
+}
+
+// reportsReadFailure says whether the nth consecutive read failure of an
+// entry is reported: the 1st, 2nd, 4th, 8th and so on. A file that stays
+// unreadable is retried indefinitely, and reporting every attempt would log
+// an error and count a failure each time.
+func reportsReadFailure(failures int) bool {
+	return failures > 0 && failures&(failures-1) == 0
+}
 
 // QuarantinedError is passed to the failure callback when a spool file is set
 // aside. Name is the quarantined file's base name.
@@ -55,7 +84,7 @@ type QuarantinedError struct {
 }
 
 func (e *QuarantinedError) Error() string {
-	return fmt.Sprintf("audit spool entry quarantined as %s after %d failed reads: %v", e.Name, maxUnreadableAttempts, e.Err)
+	return fmt.Sprintf("audit spool entry quarantined as %s after %d failed attempts to decode it: %v", e.Name, maxUnreadableAttempts, e.Err)
 }
 
 func (e *QuarantinedError) Unwrap() error { return e.Err }
@@ -201,18 +230,27 @@ func (j *journalStorage) run() {
 			continue
 		}
 		payload, err := os.ReadFile(filepath.Join(j.dir, name))
-		var rec audit.Record
-		if err == nil {
-			err = json.Unmarshal(payload, &rec)
-		}
 		if err != nil {
-			// Not a delivery failure: retrying forever cannot succeed.
-			err = j.recordUnreadable(name, err)
+			// The content is unknown, so nothing says the record is bad.
+			// A read can fail for reasons that pass (no free descriptor,
+			// an I/O error, a permission change), and the record must
+			// still be delivered afterwards.
+			if err = j.recordReadFailure(name, err); err != nil && j.onFailure != nil {
+				j.onFailure(err)
+			}
+			continue
+		}
+		var rec audit.Record
+		if err = json.Unmarshal(payload, &rec); err != nil {
+			// Not a delivery failure: the bytes were read and are not a
+			// record, so retrying forever cannot succeed.
+			err = j.recordUndecodable(name, err)
 			if j.onFailure != nil {
 				j.onFailure(err)
 			}
 			continue
 		}
+		j.recordDecoded(name)
 		ctx, cancel := context.WithTimeout(j.ctx, 5*time.Second)
 		err = j.backend.Write(ctx, &rec)
 		cancel()
@@ -237,11 +275,12 @@ func (j *journalStorage) run() {
 	}
 }
 
-// recordUnreadable notes one failed attempt to read or decode a spool file
-// and returns the error to report. After maxUnreadableAttempts the file is
-// renamed into quarantine and dropped from the retry set; the returned error
-// is then a *QuarantinedError.
-func (j *journalStorage) recordUnreadable(name string, cause error) error {
+// recordReadFailure notes one failed attempt to read a spool file and
+// schedules the next one. The entry is never quarantined for this: it stays
+// in the spool, counts towards the size limit and is retried with a growing
+// delay until it can be read. The returned error is nil when this failure is
+// not one of those reported; see reportsReadFailure.
+func (j *journalStorage) recordReadFailure(name string, cause error) error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	e, ok := j.entries[name]
@@ -249,16 +288,48 @@ func (j *journalStorage) recordUnreadable(name string, cause error) error {
 		return cause
 	}
 	e.busy = false
-	e.unreadable++
-	if e.unreadable < maxUnreadableAttempts {
+	e.readFailures++
+	delay := readRetryDelay(e.readFailures)
+	e.next = time.Now().Add(delay)
+	if !reportsReadFailure(e.readFailures) {
+		return nil
+	}
+	return fmt.Errorf("audit spool entry %s could not be read (attempt %d, next in %s); it stays in the spool and is retried: %w", name, e.readFailures, delay, cause)
+}
+
+// recordDecoded clears the failure counts of an entry that was read and
+// decoded, so earlier failures do not add up with later ones.
+func (j *journalStorage) recordDecoded(name string) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if e, ok := j.entries[name]; ok {
+		e.readFailures, e.undecodable = 0, 0
+	}
+}
+
+// recordUndecodable notes one attempt that read a spool file and could not
+// decode it, and returns the error to report. After maxUnreadableAttempts
+// consecutive such attempts the file is renamed into quarantine and dropped
+// from the retry set; the returned error is then a *QuarantinedError.
+func (j *journalStorage) recordUndecodable(name string, cause error) error {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	e, ok := j.entries[name]
+	if !ok {
+		return cause
+	}
+	e.busy = false
+	e.readFailures = 0
+	e.undecodable++
+	if e.undecodable < maxUnreadableAttempts {
 		e.next = time.Now().Add(unreadableRetryDelay)
-		return fmt.Errorf("audit spool entry %s is unreadable (attempt %d of %d): %w", name, e.unreadable, maxUnreadableAttempts, cause)
+		return fmt.Errorf("audit spool entry %s cannot be decoded (attempt %d of %d): %w", name, e.undecodable, maxUnreadableAttempts, cause)
 	}
 	quarantined := name + quarantineSuffix
 	if err := os.Rename(filepath.Join(j.dir, name), filepath.Join(j.dir, quarantined)); err != nil {
 		// Leave the entry where it is, but stop trying it every second.
 		e.next = time.Now().Add(quarantineRetryDelay)
-		return fmt.Errorf("audit spool entry %s is unreadable and could not be quarantined: %w", name, errors.Join(cause, err))
+		return fmt.Errorf("audit spool entry %s cannot be decoded and could not be quarantined: %w", name, errors.Join(cause, err))
 	}
 	j.bytes -= e.size
 	delete(j.entries, name)
