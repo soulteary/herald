@@ -206,10 +206,51 @@ func (m *Manager) loadTemplates() {
 			m.loadProblem("%s: not loaded, %v", relPath, err)
 			return nil
 		}
+		if channel == "email" {
+			if problem := emailSubjectProblem(tmpl); problem != "" {
+				m.loadProblem("%s: not loaded, %s", relPath, problem)
+				return nil
+			}
+		}
 		m.templates[key] = tmpl
 
 		return nil
 	})
+}
+
+// splitEmailTemplate separates rendered email template output into the
+// subject (the first line) and the body (the rest). A file saved with CRLF
+// line endings ends its first line with a carriage return, which is not part
+// of the subject. ok is false when the output is a single line, which has no
+// subject.
+func splitEmailTemplate(content string) (subject, body string, ok bool) {
+	lines := strings.SplitN(content, "\n", 2)
+	if len(lines) < 2 {
+		return "", content, false
+	}
+	return strings.TrimSuffix(lines[0], "\r"), lines[1], true
+}
+
+// emailSubjectProblem renders an email template once with sample values and
+// describes a subject line the SMTP provider refuses: one that contains a
+// carriage return inside the line or a NUL. Such a template would fail on
+// every send, so it is reported at startup and not loaded. A template that fails to render is not judged here; it falls back
+// to the built-in text at request time, as before.
+func emailSubjectProblem(tmpl *template.Template) string {
+	content, err := boundedExecute(tmpl, TemplateData{Code: "000000", ExpiresIn: 300, Purpose: "login", Locale: "en"})
+	if err != nil {
+		return ""
+	}
+	subject, _, ok := splitEmailTemplate(content)
+	if !ok {
+		return ""
+	}
+	for _, r := range subject {
+		if r == '\r' || r == 0 {
+			return fmt.Sprintf("the subject (first line) contains the control character %U", r)
+		}
+	}
+	return ""
 }
 
 // Render renders a template with the given data
@@ -248,9 +289,8 @@ func (m *Manager) RenderEmail(locale, purpose string, data TemplateData) (subjec
 		if content, rerr := boundedExecute(tmpl, data); rerr == nil {
 			// For email, we expect the template to contain both subject and body
 			// For simplicity, we'll use the full content as body and extract subject if possible
-			lines := strings.SplitN(content, "\n", 2)
-			if len(lines) >= 2 {
-				return lines[0], lines[1], nil
+			if subject, body, ok := splitEmailTemplate(content); ok {
+				return subject, body, nil
 			}
 			return "Verification Code", content, nil
 		} else if rerr == errRenderTooLarge {
