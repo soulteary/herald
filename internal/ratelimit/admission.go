@@ -35,7 +35,9 @@ const DestinationCooldownPrefix = "dest:"
 //
 // KEYS[1..3] are the user, IP and destination counters; KEYS[4..] are cooldown
 // keys. ARGV[1..6] are limit and window (ms) per counter; ARGV[7] is the
-// cooldown (ms). The reply is {denying gate, ms until it resets}; gate 0 means
+// cooldown (ms); ARGV[8] is the value stored in the cooldown keys. Only the
+// existence and TTL of a cooldown key are ever checked, so any value is valid
+// for every reader. The reply is {denying gate, ms until it resets}; gate 0 means
 // admitted, 1-3 a counter, 4 a cooldown.
 const creationAdmissionScript = `
 -- herald:creation-admission
@@ -86,7 +88,7 @@ for i = 1, 3 do
 	end
 end
 for i = 4, #KEYS do
-	redis.call("set", KEYS[i], "1", "px", cooldown)
+	redis.call("set", KEYS[i], ARGV[8], "px", cooldown)
 end
 return {0, 0}
 `
@@ -100,6 +102,55 @@ type CreationAdmission struct {
 	// CooldownKeys are checked together and all set on admission.
 	CooldownKeys []string
 	Cooldown     time.Duration
+	// CooldownToken is stored as the value of the cooldown keys this
+	// admission sets, so that ReleaseCooldowns can later remove exactly
+	// these and no cooldown started by another request. Empty stores the
+	// plain marker, which cannot be released.
+	CooldownToken string
+}
+
+// plainCooldownMarker is the cooldown value written when no token is given,
+// and by releases before cooldowns could be released.
+const plainCooldownMarker = "1"
+
+// releaseCooldownsScript deletes each cooldown key that still holds the
+// caller's token and returns how many it deleted. A key that expired, or that
+// a later admission has set again, holds another value and is left alone.
+const releaseCooldownsScript = `
+-- herald:cooldown-release
+local released = 0
+for i = 1, #KEYS do
+	if redis.call("get", KEYS[i]) == ARGV[1] then
+		redis.call("del", KEYS[i])
+		released = released + 1
+	end
+end
+return released
+`
+
+// ReleaseCooldowns removes the cooldown keys that an admission set with the
+// given token, and returns how many were removed. It never touches the user,
+// IP or destination counters, and it removes nothing when the token is empty
+// or the plain marker.
+func (m *Manager) ReleaseCooldowns(ctx context.Context, cooldownKeys []string, token string) (int, error) {
+	if token == "" || token == plainCooldownMarker || len(cooldownKeys) == 0 {
+		return 0, nil
+	}
+	if m.client == nil {
+		return 0, fmt.Errorf("redis client is nil")
+	}
+	keys := make([]string, 0, len(cooldownKeys))
+	for _, key := range cooldownKeys {
+		keys = append(keys, rediskitratelimit.DefaultCooldownPrefix+key)
+	}
+	start := time.Now()
+	released, err := m.client.Eval(ctx, releaseCooldownsScript, keys, token).Int()
+	if err != nil {
+		metrics.RecordRedisFailure("cooldown_release", time.Since(start))
+		return 0, fmt.Errorf("failed to release cooldowns: %w", err)
+	}
+	metrics.RecordRedisSuccess("cooldown_release", time.Since(start))
+	return released, nil
 }
 
 // AdmitCreation applies the user, IP and destination limits and the resend
@@ -123,7 +174,7 @@ func (m *Manager) admitCreation(ctx context.Context, a CreationAdmission) (strin
 	}
 	windows := []time.Duration{a.UserWindow, a.IPWindow, a.DestinationWindow}
 	limits := []int{a.UserLimit, a.IPLimit, a.DestinationLimit}
-	args := make([]interface{}, 0, 7)
+	args := make([]interface{}, 0, 8)
 	for i, window := range windows {
 		if window.Milliseconds() <= 0 {
 			return "", time.Time{}, fmt.Errorf("window must be positive")
@@ -133,7 +184,11 @@ func (m *Manager) admitCreation(ctx context.Context, a CreationAdmission) (strin
 	if a.Cooldown.Milliseconds() <= 0 {
 		return "", time.Time{}, fmt.Errorf("cooldown must be positive")
 	}
-	args = append(args, a.Cooldown.Milliseconds())
+	token := a.CooldownToken
+	if token == "" {
+		token = plainCooldownMarker
+	}
+	args = append(args, a.Cooldown.Milliseconds(), token)
 
 	keys := []string{
 		rediskitratelimit.DefaultKeyPrefix + "user:" + a.UserID,

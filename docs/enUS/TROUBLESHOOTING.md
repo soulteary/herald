@@ -313,6 +313,7 @@ counting a gateway's address: see `HERALD_TRUSTED_PROXY_HEADER` and
      | `other` | None of the above could be recognised | Test the SMTP server directly |
 
      The category is derived from error types only. The reply code does not say which SMTP command was refused. The provider's error text is never logged.
+   - The same line carries `cooldown_released`. `true` means the failure proved that nothing was accepted and the request can be repeated at once; `false` means the resend cooldown is still running (see [deployment](DEPLOYMENT.md#channels-without-a-provider))
    - Review audit logs for provider errors
    - Check provider API response codes
 

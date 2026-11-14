@@ -47,7 +47,7 @@ func (b *hashBudget) acquire(ctx context.Context) (func(), error) {
 // after capacity returns. Completed idempotency responses bypass this stage.
 // Order: hash budget, user lock (read-only), then limits and cooldowns as one
 // all-or-nothing step, then challenge creation.
-func (h *Handlers) prepareChallenge(c fiber.Ctx, ctx context.Context, req CreateChallengeRequest, peerIP string, failIdem func()) (*challengekit.Challenge, string, bool, error) {
+func (h *Handlers) prepareChallenge(c fiber.Ctx, ctx context.Context, req CreateChallengeRequest, peerIP string, failIdem func(), hold *cooldownHold) (*challengekit.Challenge, string, bool, error) {
 	release, err := h.hashBudget.acquire(ctx)
 	if err != nil {
 		failIdem()
@@ -71,7 +71,7 @@ func (h *Handlers) prepareChallenge(c fiber.Ctx, ctx context.Context, req Create
 		failIdem()
 		return nil, "", true, c.Status(fiber.StatusForbidden).JSON(fiber.Map{"ok": false, "reason": "user_locked"})
 	}
-	if allowed, err := h.checkCreationLimits(c, ctx, req, peerIP, failIdem); !allowed {
+	if allowed, err := h.checkCreationLimits(c, ctx, req, peerIP, failIdem, hold); !allowed {
 		return nil, "", true, err
 	}
 	ch, code, err := h.challengeManager.Create(ctx, challengekit.CreateRequest{

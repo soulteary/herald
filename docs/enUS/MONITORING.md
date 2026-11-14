@@ -104,7 +104,7 @@ herald_rate_limit_hits_total{scope="resend_cooldown"} 200
 Histogram tracking Redis operation latency.
 
 **Labels:**
-- `operation`: Instrumented wrapper; not every Redis command is instrumented. Challenge creation applies its limits and cooldowns in one call reported as `ratelimit_create`. The per-limiter wrappers (`ratelimit`, `ratelimit_user`, `ratelimit_ip`, `ratelimit_dest`, `cooldown`) are no longer used by challenge creation
+- `operation`: Instrumented wrapper; not every Redis command is instrumented. Challenge creation applies its limits and cooldowns in one call reported as `ratelimit_create`. The per-limiter wrappers (`ratelimit`, `ratelimit_user`, `ratelimit_ip`, `ratelimit_dest`, `cooldown`) are no longer used by challenge creation. `cooldown_release` is the call that gives back the resend cooldowns after a send that provably reached no provider
 
 **Buckets:** [0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0]
 
