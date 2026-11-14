@@ -172,6 +172,11 @@
 
 ### 诊断步骤
 
+先看响应本身：`429/rate_limit_exceeded` 的响应正文在 `limit` 字段中指明拒绝请求的配额
+（`user`、`ip` 或 `destination`）。如果来自许多不同用户的请求都得到 `"limit":"ip"`，通常
+说明 Herald 是在按网关的地址计数：见[部署指南](DEPLOYMENT.md#配置)中的
+`HERALD_TRUSTED_PROXY_HEADER` 和 `HERALD_TRUSTED_PROXIES`。
+
 1. **检查速率限制配置**
    ```bash
    # 验证速率限制设置
@@ -291,6 +296,22 @@
 
 2. **查看提供者日志**
    - 检查受控渠道失败 `reason`，不包含原始错误文本
+   - 对于内置 SMTP，error 日志 `Failed to send verification code via provider` 还带有 `failure_category`；服务器返回了 SMTP 应答码时，还带有 `smtp_code`：
+
+     | `failure_category` | 投递停在哪一步 | 检查项 |
+     |--------------------|----------------|--------|
+     | `dns` | `SMTP_HOST` 无法解析 | 主机名和 DNS 解析器 |
+     | `connect` | 未能建立 TCP 连接 | `SMTP_HOST`、`SMTP_PORT`、防火墙规则 |
+     | `tls` | TLS 握手或证书校验失败 | 服务器证书及其是否与 `SMTP_HOST` 匹配；该端口应使用 STARTTLS，而不是隐式 TLS |
+     | `auth` | 服务器拒绝了凭据（`smtp_code` 为 454、530、534、535 或 538） | `SMTP_USER`、`SMTP_PASSWORD` |
+     | `rejected` | 服务器以其他错误码拒绝了某条命令，错误码见 `smtp_code` | 连接后立即出现 `502`/`500` 通常表示服务器不提供 STARTTLS；`550`-`554` 通常与发件人（`SMTP_FROM`）或收件人有关 |
+     | `connection` | 连接建立后中断 | 服务器日志、空闲超时或大小限制 |
+     | `timeout` | 某一步超过了 `PROVIDER_TIMEOUT` | 网络路径、服务器负载 |
+     | `validation` | 消息在连接之前即被拒绝 | 自定义模板的主题行；目标地址 |
+     | `canceled` | 调用方放弃了请求 | 调用方的超时设置 |
+     | `other` | 无法归入以上任何一类 | 直接测试 SMTP 服务器 |
+
+     类别只根据错误类型推导。应答码不能说明被拒绝的是哪一条 SMTP 命令。提供者返回的错误文本不会写入日志。
    - 查看提供者错误的审计日志
    - 检查提供者 API 响应代码
 
@@ -389,7 +410,7 @@
 
 ## HMAC 身份与 CORS 升级排查
 
-- `401/invalid_key_id`：仅使用 `HMAC_SECRET` 时省略 ID 或精确填写 `default`。已知自定义 ID 需显式加入 `HERALD_HMAC_KEYS` 并保持调用方身份不变，不能换 ID 重试不确定发送。
+- 返回 `401/invalid_signature`，同时 `herald_auth_failure_total{reason="invalid_key_id"}` 增加：请求指向未配置的密钥 ID（早期版本返回 `401/invalid_key_id`）。仅使用 `HMAC_SECRET` 时省略 ID 或精确填写 `default`。已知自定义 ID 需显式加入 `HERALD_HMAC_KEYS` 并保持调用方身份不变，不能换 ID 重试不确定发送。
 - `409/idempotency_namespace_conflict`：存在身份不明的旧空 Key ID 记录。保留原内容和 TTL，结合渠道及审计证据核对；它不是可直接重试的发送失败。
 - `409/delivery_unknown`：消息可能已经发送。保持身份和客户端键，不得删除尚未确认的发送记录来强制补发。该记录在 `IDEMPOTENCY_UNRESOLVED_TTL`（默认 `24h`）后过期。
 - 生产 CORS 启动报错时，应移除列表中所有独立 `*` 项或关闭 CORS。未列出的来源不应得到通配响应，API Key/HMAC 认证仍独立执行。

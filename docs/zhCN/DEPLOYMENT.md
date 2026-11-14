@@ -13,7 +13,7 @@ export HERALD_API_KEY="$(openssl rand -hex 32)"
 docker compose up -d
 ```
 
-仓库中的 Compose 服务已设置生产启动所必需的 `PROVIDER_FAILURE_POLICY=strict`。
+仓库中的 Compose 服务已设置 `PROVIDER_FAILURE_POLICY=strict`。生产环境要求 `strict`；未设置该变量时，生产环境也使用 `strict`。
 
 ### Linux 手动部署
 
@@ -93,7 +93,7 @@ Herald 不读取任何 `HERALD_REDIS_*` 变量，本仓库的 `docker-compose.ym
 | `HERALD_TRUSTED_PROXY_HEADER` | 转发客户端 IP 的请求头；仅信任允许列表中的代理 | （空） | 配置可信代理时 |
 | `HERALD_TRUSTED_PROXIES` | 可信代理 IP/CIDR 允许列表，逗号分隔 | （空） | 配置代理请求头时 |
 
-这两项设置还决定 `RATE_LIMIT_PER_IP` 的计数对象。未配置时，限额按直连对端计算，因此代表众多终端用户调用 Herald 的网关会让这些用户共用一份配额。配置后，可信网关可以转发终端用户地址（Go SDK：`WithClientIPHeader`），限额按终端用户计算。
+这两项设置还决定 `RATE_LIMIT_PER_IP` 的计数对象。未配置时，限额按直连对端计算，因此代表众多终端用户调用 Herald 的网关会让这些用户共用一份配额。配置后，可信网关可以转发终端用户地址（Go SDK：`WithClientIPHeader`），限额按终端用户计算。被该配额拒绝的请求返回 `429/rate_limit_exceeded`，并带有 `"limit":"ip"`。
 
 Herald 从右向左解析转发 IP 链，仅跳过明确配置为可信的代理节点，并将遇到的第一个不可信地址作为客户端 IP；不会自动信任调用方可控的最左侧前缀。
 
@@ -118,10 +118,12 @@ Herald 从右向左解析转发 IP 链，仅跳过明确配置为可信的代理
 | 变量 | 描述 | 默认值 | 必需 |
 |------|------|--------|------|
 | `HERALD_MAX_CONCURRENT_HASH_OPERATIONS` | 每个 handler 实例中创建与 v1/v2 验证共享的并发预算，必须为正整数 | `4` | 否 |
-| `CHALLENGE_EXPIRY` | Challenge 过期时间（如 `5m`、`300s`） | `5m` | 否 |
+| `CHALLENGE_EXPIRY` | Challenge 过期时间（如 `5m`、`300s`）。内置消息以整分钟表示该时间，向下取整；不足一分钟时显示为 1 分钟 | `5m` | 否 |
 | `MAX_ATTEMPTS` | 单个 challenge 可接受的错误验证码次数，达到后该 challenge 耗尽并返回 `locked` | `5` | 否 |
 | `LOCKOUT_DURATION` | 被锁定用户保持锁定的时长，也是统计已耗尽 challenge 的时间窗口（如 `10m`） | `10m` | 否 |
 | `LOCKOUT_CHALLENGE_THRESHOLD` | 用户在 `LOCKOUT_DURATION` 内（自第一个耗尽的 challenge 起计）须耗尽多少个 challenge（每个 `MAX_ATTEMPTS` 次错误验证码）才会被锁定。`1` 表示第一个 challenge 耗尽即锁定，与 v1.6.0 的行为相同。最小值 `1` | `3` | 否 |
+| `LOCKOUT_FAILED_ATTEMPT_THRESHOLD` | 用户在 `LOCKOUT_FAILED_ATTEMPT_WINDOW` 内可提交的错误验证码次数，跨该用户的所有 challenge 累计，不论是否有 challenge 耗尽；达到后用户被锁定 `LOCKOUT_DURATION`。`0` 表示关闭此计数。见[安全说明](SECURITY.md#用户锁定) | `15` | 否 |
+| `LOCKOUT_FAILED_ATTEMPT_WINDOW` | `LOCKOUT_FAILED_ATTEMPT_THRESHOLD` 的统计窗口，自第一次错误验证码起计，不因后续错误而延长；除非阈值为 `0`，否则必须为正值 | `1h` | 否 |
 | `RESEND_COOLDOWN` | 同一用户与 destination 两次创建 challenge 的最小间隔，同一 destination 不论用户也适用该间隔；必须为正值 | `60s` | 否 |
 | `CODE_LENGTH` | 验证码位数（最小 `4`；还须在扣除紧凑的上下文绑定 V2 请求封装后不超过 `HERALD_MAX_BODY_BYTES`，当前封装为 136 字节） | `6` | 否 |
 | `IDEMPOTENCY_KEY_TTL` | 发送前占位和已完成响应的 TTL；不确定发送使用 `IDEMPOTENCY_UNRESOLVED_TTL`；`0` 表示使用 `CHALLENGE_EXPIRY` | `0` | 否 |
@@ -161,13 +163,17 @@ Herald v1.6.0 导入 `github.com/soulteary/herald-totp/v2` v2.0.4。SMTP 和钉�
 | `SMTP_USER` | SMTP 用户名 | （空） | 否 |
 | `SMTP_PASSWORD` | SMTP 密码 | （空） | 否 |
 | `SMTP_FROM` | 发件人地址 | （空） | 建议 |
-| `PROVIDER_FAILURE_POLICY` | 发送失败策略：`soft`（仍创建 challenge）或 `strict`（失败则不创建） | `soft` | 否 |
+| `PROVIDER_FAILURE_POLICY` | 发送失败策略：`soft`（仍创建 challenge）或 `strict`（失败则不创建） | `soft`；`ENVIRONMENT=production` 时为 `strict` | 否 |
+
+生产环境禁止 `soft`。生产环境中该变量未设置或为空时，Herald 使用 `strict` 并记录日志 `Production default: PROVIDER_FAILURE_POLICY=strict`；显式设置 `soft` 仍会导致启动失败。
+
+Provider 和 TOTP 的 Base URL（`HERALD_SMTP_API_URL`、`SMS_API_BASE_URL`、`HERALD_DINGTALK_API_URL`、`HERALD_TOTP_BASE_URL`）在生产环境必须使用 `https://`，使用明文 `http://` 会导致启动失败。其他环境接受 `http://` 并记录警告。
 
 **herald-smtp 插件**（设置后不再使用内置 SMTP）：
 
 | 变量 | 描述 | 默认值 | 必需 |
 |------|------|--------|------|
-| `HERALD_SMTP_API_URL` | [herald-smtp](https://github.com/soulteary/herald-smtp) 服务 Base URL（如 `http://herald-smtp:8084`） | （空） | 使用插件时 |
+| `HERALD_SMTP_API_URL` | [herald-smtp](https://github.com/soulteary/herald-smtp) 服务 Base URL（如 `https://herald-smtp.internal:8084`） | （空） | 使用插件时 |
 | `HERALD_SMTP_API_KEY` | 若 herald-smtp 启用 `API_KEY`，需与此一致 | （空） | 否 |
 
 #### 短信通道（HTTP API 模式）
@@ -180,11 +186,19 @@ Herald v1.6.0 导入 `github.com/soulteary/herald-totp/v2` v2.0.4。SMTP 和钉�
 | `SMS_API_BASE_URL` | SMS HTTP API 的 Base URL | （空） | 使用 SMS 时 |
 | `SMS_API_KEY` | SMS API 认证密钥（若需要） | （空） | 视网关要求 |
 
+`SMS_PROVIDER` 和 `SMS_API_BASE_URL` 必须同时设置：只有设置了 `SMS_PROVIDER` 才会注册 provider；设置了它却没有可用的 Base URL 时启动失败。只设置 Base URL 而不设置 `SMS_PROVIDER` 时，该通道仍处于未配置状态，并记录一条警告。
+
+#### 没有 provider 的通道
+
+启动时 Herald 记录一行日志，列出已有 provider 的通道和没有 provider 的通道（`channels_with_provider`、`channels_without_provider`）；所有通道都没有 provider 时另记一条警告。`PROVIDER_FAILURE_POLICY=strict` 时，针对没有 provider 的通道的创建请求返回 `503/channel_not_configured`，此时尚未使用任何配额、冷却或幂等键。`soft` 时仍创建 challenge，响应带有 `delivery_status=failed`，与此前相同。
+
+已到达 provider 但发送失败的请求已经通过准入：该请求的按用户、按 IP 和按 destination 配额仍视为已消耗，两项重发冷却也已启动。因此在 `RESEND_COOLDOWN` 内对同一 destination 重试会得到 `429/resend_cooldown`，尽管没有消息送达。测试新的 provider 配置时，应等待冷却结束或换用另一个 destination。对于内置 SMTP，失败日志会指出投递停在哪一步，见[故障排查](TROUBLESHOOTING.md#提供者发送失败)。
+
 #### DingTalk 通道（herald-dingtalk 插件）
 
 | 变量 | 描述 | 默认值 | 必需 |
 |------|------|--------|------|
-| `HERALD_DINGTALK_API_URL` | [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) 服务 Base URL（如 `http://herald-dingtalk:8083`） | （空） | 使用 DingTalk 时 |
+| `HERALD_DINGTALK_API_URL` | [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) 服务 Base URL（如 `https://herald-dingtalk.internal:8083`） | （空） | 使用 DingTalk 时 |
 | `HERALD_DINGTALK_API_KEY` | 若 herald-dingtalk 启用 `API_KEY`，需与此一致 | （空） | 否 |
 
 #### TOTP（herald-totp 代理）
@@ -204,7 +218,7 @@ HTTPS。请配置最终服务地址：包括同源跳转在内的所有重定向
 | 变量 | 描述 | 默认值 | 必需 |
 |------|------|--------|------|
 | `HERALD_TOTP_ENABLED` | 是否启用 TOTP 代理 | `false` | 否 |
-| `HERALD_TOTP_BASE_URL` | herald-totp 服务 Base URL（如 `http://herald-totp:8085`） | （空） | 启用 TOTP 时 |
+| `HERALD_TOTP_BASE_URL` | herald-totp 服务 Base URL（如 `https://herald-totp.internal:8085`） | （空） | 启用 TOTP 时 |
 | `HERALD_TOTP_API_KEY` | Herald 调用 herald-totp 时使用的 API Key（若 herald-totp 需要） | （空） | 否 |
 | `HERALD_TOTP_HMAC_SECRET` | Herald 调用 herald-totp 时使用的 HMAC 密钥（若 herald-totp 使用 HMAC） | （空） | 否 |
 | `HERALD_TOTP_HMAC_KEY_ID` | TOTP 签名 key ID；后端配置多个密钥时需要显式指定 | （空，省略 ID） | 否 |
@@ -223,6 +237,20 @@ HTTPS。请配置最终服务地址：包括同源跳转在内的所有重定向
 | `HERALD_HEALTHCHECK_TLS_SERVER_NAME` | 回环 HTTPS 探针校验的服务端名称 | `localhost` | 否 |
 | `HERALD_HEALTHCHECK_TLS_CLIENT_CERT_FILE` | 回环探针使用的客户端证书 | （空） | 要求客户端证书时 |
 | `HERALD_HEALTHCHECK_TLS_CLIENT_KEY_FILE` | 回环探针客户端私钥，必须与证书同时配置 | （空） | 要求客户端证书时 |
+
+#### 启动警告
+
+有些配置虽然有效，但很可能不是本意。Herald 在启动时为每一项记录一条警告，并继续启动。
+日志中的 `check` 字段标明是哪一项警告。
+
+| `check` | 触发条件 | 影响 |
+|---------|----------|------|
+| `config.rate_limit_ip` | 未设置 `HERALD_TRUSTED_PROXY_HEADER` 和 `HERALD_TRUSTED_PROXIES` | `RATE_LIMIT_PER_IP` 按直连对端计数，因此代表众多终端用户调用 Herald 的网关会让所有用户共用一份配额 |
+| `config.listener_tls` | `ENVIRONMENT=production` 且未设置 `TLS_CERT_FILE`/`TLS_KEY_FILE` | 验证请求的正文中带有验证码；`REQUEST_AUTH_MODE=api_key` 时每个请求还带有静态密钥，被截获后可以重放。如果 TLS 在 Herald 前面的代理处终止，应确保代理到 Herald 的这一段位于可信的本地网络内 |
+| `config.code_length` | `CODE_LENGTH` 小于 `6` | 长度 `4` 和 `5` 可以使用，但每减少一位，单次猜中的概率就提高十倍，而尝试次数和限流保持不变 |
+| `config.test_mode` | `HERALD_TEST_MODE=true` 而 `ENVIRONMENT` 不是 `test`（生产环境会直接拒绝启动） | 该开关单独设置不起作用：不会返回 `debug_code`，也不会启动测试码端点 |
+| `config.totp` | `HERALD_TOTP_ENABLED=true` 且 `HERALD_TOTP_BASE_URL` 为空 | TOTP 代理未配置；所有 `/v1/totp` 请求返回 `503/totp_not_configured` |
+| `config.otlp` | `OTLP_ENABLED=true` 且 `OTLP_ENDPOINT` 为空 | 没有配置 trace 导出器，不会导出任何 span |
 
 #### 审计日志
 
@@ -243,6 +271,12 @@ HTTPS。请配置最终服务地址：包括同源跳转在内的所有重定向
 审计记录写入私有文件并完成 fsync 后，接口才确认接收；唤醒通知队列满不会丢弃记录。
 存储写入失败会保留文件并重试，正常关闭后剩余文件将在下次启动时回放。
 查询接口只包含已投递到后端的记录，不包含本地积压。
+
+能够读取但无法解码的待投递文件会尝试 5 次，之后被重命名为 `<id>.json.quarantined`。它仍留在
+`AUDIT_SPOOL_DIR` 中，不再重试，重启后也不会重新处理，并且不计入 `AUDIT_SPOOL_MAX_BYTES`；
+见[监控说明](MONITORING.md#审计投递)。无法读取的文件（I/O 错误、没有可用的文件描述符、
+权限问题）不会被隔离：它保持待投递状态并持续重试，重试间隔从 1 秒起逐次加倍，最长 5 分钟，
+直到可以读取为止。后端投递失败同样不会导致隔离，这些记录会一直重试到后端接收为止。
 
 请将 `AUDIT_SPOOL_DIR` 挂载到持久化本地存储；容器使用 UID/GID 10001，目录建议为 0700。
 仓库 Compose 文件通过 `audit_spool` 卷挂载该目录，兼容只读根文件系统。
@@ -269,9 +303,9 @@ fsync 和原子 rename。
 
 | 变量 | 描述 | 默认值 | 必需 |
 |------|------|--------|------|
-| `TEMPLATE_DIR` | 邮件/短信模板目录（可选） | （空） | 否 |
+| `TEMPLATE_DIR` | 邮件/短信模板目录（可选）；见[消息模板](#消息模板) | （空） | 否 |
 | `OTLP_ENABLED` | 是否启用 OpenTelemetry | `false` | 否 |
-| `OTLP_ENDPOINT` | OTLP 端点（如 `http://localhost:4318`） | （空） | 启用 OTLP 时 |
+| `OTLP_ENDPOINT` | OTLP/HTTP collector 地址：`host:port`（明文 HTTP，路径为 `/v1/traces`），或 `http://host:port[/path]` / `https://host:port[/path]`。`https` 使用 TLS 并以系统根证书校验。`/` 以外的路径按原样用作请求路径；未给出路径时 span 发送到 `/v1/traces`。其他形式的取值会在启动时报告，并且不导出任何 span | （空） | 启用 OTLP 时 |
 
 #### 测试与调试
 
@@ -290,11 +324,46 @@ fsync 和原子 rename。
 
 **安全：** 生产环境必须设置 `HERALD_TEST_MODE=false`。测试模式会暴露验证码，不得在生产环境使用。
 
+### 消息模板
+
+未设置 `TEMPLATE_DIR` 时，Herald 发送内置文本。设置后，Herald 在启动时按以下目录结构一次性
+加载自定义模板：
+
+```text
+{TEMPLATE_DIR}/{locale}/{channel}/{purpose}.txt
+
+templates/
+├── en/
+│   ├── email/login.txt
+│   └── sms/login.txt
+└── zh-CN/
+    ├── email/login.txt
+    └── sms/reset.txt
+```
+
+- `{locale}` 是语言或区域标签，例如 `en`、`zh`、`zh-CN` 或 `pt_BR`；不区分大小写，`-` 与
+  `_` 等价。模板只按语言选择：`zh-CN`、`zh_TW` 和 `zh` 是同一种语言，请求中的 `locale`
+  为其中任何一个时也是如此。如果两个目录对应同一种语言，使用按名称排序的第一个，另一个在
+  启动时报告。`locale` 未知或为空的请求使用 `en`。
+- `{channel}` 为 `email` 或 `sms`。DingTalk 消息使用 `sms` 模板。
+- `{purpose}` 是 `ALLOWED_PURPOSES` 中的值，例如 `login`。文件扩展名会被忽略。
+
+模板文件是 Go `text/template` 源文件。可用字段为 `{{.Code}}`、`{{.ExpiresIn}}`（秒）、
+`{{.Purpose}}` 和 `{{.Locale}}`；使用其他字段会出错。对于 `email`，第一行是主题，其余为
+正文；只有一行的模板用作正文，主题为 `Verification Code`。文件可以使用 LF 或 CRLF 换行。
+如果邮件模板的主题行中仍含有回车符（不属于行尾换行的回车符）或 NUL 字符，该模板不会被
+加载，因为 SMTP provider 会拒绝这样的主题。渲染后的消息不得超过 16 KiB。
+
+无法读取或解析的文件、位于其他目录层级的文件，以及 locale 或 channel 无法识别的文件不会被
+加载。Herald 为每个这样的文件记录一条警告（`check=templates`，消息为
+`template not loaded: ...`），并继续启动。模板缺失或渲染失败时回退到内置文本，因此模板
+出错只会改变消息的措辞，不会中断发送。修改模板后需重启 Herald。
+
 ### Email 通道（herald-smtp）
 
 当设置 `HERALD_SMTP_API_URL` 时，Herald 不再使用内置 SMTP，而是通过 HTTP 将邮件发送请求转发给 [herald-smtp](https://github.com/soulteary/herald-smtp)。所有 SMTP 凭证与发送逻辑均在 herald-smtp 中；此模式下 Herald 不保存任何 email 通道的 SMTP 凭证。
 
-- 将 `HERALD_SMTP_API_URL` 设置为 herald-smtp 服务的基础 URL（例如 `http://herald-smtp:8084`）。
+- 将 `HERALD_SMTP_API_URL` 设置为 herald-smtp 服务的基础 URL（例如 `https://herald-smtp.internal:8084`）。
 - 若 herald-smtp 配置了 `API_KEY`，请将 `HERALD_SMTP_API_KEY` 设为相同值，以便 Herald 调用 herald-smtp 时通过认证。
 - 设置 `HERALD_SMTP_API_URL` 后，Herald 会忽略 `SMTP_HOST` 等内置 SMTP 配置（email 通道不再使用它们）。
 
@@ -302,14 +371,14 @@ fsync 和原子 rename。
 
 当 `channel` 为 `dingtalk` 时，Herald 不直接发送消息，而是通过 HTTP 将发送请求转发给 [herald-dingtalk](https://github.com/soulteary/herald-dingtalk)。所有钉钉凭证与业务逻辑均在 herald-dingtalk 中；Herald 不保存任何钉钉凭证。
 
-- 将 `HERALD_DINGTALK_API_URL` 设置为 herald-dingtalk 服务的基础 URL（例如 `http://herald-dingtalk:8083`）。
+- 将 `HERALD_DINGTALK_API_URL` 设置为 herald-dingtalk 服务的基础 URL（例如 `https://herald-dingtalk.internal:8083`）。
 - 若 herald-dingtalk 配置了 `API_KEY`，请将 `HERALD_DINGTALK_API_KEY` 设为相同值，以便 Herald 调用 herald-dingtalk 时通过认证。
 
 ### TOTP（herald-totp）
 
 当 `HERALD_TOTP_ENABLED=true` 且设置了 `HERALD_TOTP_BASE_URL` 时，Herald 会将 TOTP（Authenticator）请求代理到 [herald-totp](https://github.com/soulteary/herald-totp)。Stargate 等调用方可使用同一 Herald 地址同时完成 OTP（短信/邮件/钉钉）与 TOTP 流程。
 
-- 将 `HERALD_TOTP_BASE_URL` 设置为 herald-totp 服务的基础 URL（例如 `http://herald-totp:8085`）。
+- 将 `HERALD_TOTP_BASE_URL` 设置为 herald-totp 服务的基础 URL（例如 `https://herald-totp.internal:8085`）。
 - 若 herald-totp 需要 API Key 或 HMAC 认证，请相应设置 `HERALD_TOTP_API_KEY` 或 `HERALD_TOTP_HMAC_SECRET`。
 - TOTP 端点（status、verify、enroll/start、enroll/confirm、revoke）见 [API.md](API.md#totp-代理可选)。
 
@@ -440,7 +509,7 @@ scrape_configs:
 它不改变 Argon2 参数，也不影响 TOTP 代理。
 
 当前单次 Argon2 约需 64 MiB。应结合内存、CPU、垃圾回收和进程其他开销配置预算，不能将它
-视作进程 RSS 的硬上限。超额请求不排队，返回 `503/backend_unavailable` 和 `Retry-After: 1`。
+视作进程 RSS 的硬上限。超额请求不排队，返回 `503/hash_capacity_exceeded` 和 `Retry-After: 1`（v1.6.0 及更早版本返回 `503/backend_unavailable`）。该原因码持续出现说明预算相对负载偏小，与 Redis 健康状况无关。
 创建准入先于用户锁定检查以及限流和冷却步骤；Redis 可用时会释放该请求的发送前幂等占位。即使预算已满，
 已完成幂等响应仍可重放。被拒绝的验证不会消费验证码或增加尝试次数。
 
@@ -464,7 +533,7 @@ HMAC 部署先暂停创建流量、排空在途创建请求，再替换全部旧
 ### 单密钥 Key ID 白名单
 
 `HMAC_SECRET` 只授权隐式身份 `default`。此前任意显式 ID 都会选中同一密钥，却建立
-独立 nonce/幂等命名空间；现在未配置 ID 返回 `401/invalid_key_id`。
+独立 nonce/幂等命名空间；现在未配置 ID 返回 `401/invalid_signature`，与签名错误相同（v1.6.0 及更早版本返回 `401/invalid_key_id`）。
 
 恢复创建前，清点历史显式 ID，并结合渠道及审计证据核对不确定发送。Redis 幂等键是不透明
 摘要，不能自动重新分配身份。保留全部记录、幂等派生密钥及 nonce 前缀；不能删除发送记录

@@ -91,8 +91,10 @@ Herald 实现多维度限流以防止滥用：
 - **按目标地址**: 限制每个邮箱/手机号在时间窗口内的 challenge 数量
 - **按 IP 地址**: 限制每个调用方地址在时间窗口内的 challenge 数量
 
-按 IP 的限流以 Herald 看到的调用方地址为键，而不是请求正文中的 `client_ip` 字段；该字段仅
-用于审计记录。当 Stargate 等网关直接调用 Herald 时，所有终端用户都来自网关的地址，并共用
+按 IP 的限流以 Herald 看到的调用方地址为键，而不是请求正文中的 `client_ip` 字段。该字段
+可以传入，但不会被保存：审计记录使用 Herald 看到的调用方地址，正文中的 `client_ip` 与之
+不同时，只会产生一条 debug 日志，其中仅含加 pepper 的摘要。创建请求中的 `ua` 字段可以
+传入，但会被忽略。当 Stargate 等网关直接调用 Herald 时，所有终端用户都来自网关的地址，并共用
 一份 `RATE_LIMIT_PER_IP` 配额。如需按终端用户限流：
 
 1. 设置 `HERALD_TRUSTED_PROXY_HEADER`（例如 `X-Forwarded-For`），并在
@@ -294,6 +296,35 @@ export RESEND_COOLDOWN=60s
 升级后，此前以 `+` 或 `00` 发送的号码会使用新的按目标地址计数键和冷却键；旧键按原有 TTL
 过期。
 
+## 用户锁定
+
+用户会因两种相互独立的情况被锁定 `LOCKOUT_DURATION`（默认 `10m`）。锁定期间，验证请求
+返回 `user_locked` 且不比对验证码，创建 challenge 返回 `403/user_locked`。
+
+1. **challenge 耗尽。** 在 `LOCKOUT_DURATION` 内有 `LOCKOUT_CHALLENGE_THRESHOLD`（默认
+   `3`）个 challenge 各自用尽了全部 `MAX_ATTEMPTS` 次尝试。
+2. **错误验证码。** 在 `LOCKOUT_FAILED_ATTEMPT_WINDOW`（默认 `1h`）内提交了
+   `LOCKOUT_FAILED_ATTEMPT_THRESHOLD`（默认 `15`）次错误验证码，该用户的任何 challenge、
+   任一验证路由上的错误都计入。
+
+增加第二条规则，是因为第一条可以被绕开：调用方提交 `MAX_ATTEMPTS - 1` 次错误验证码后申请
+新的 challenge，就永远不会耗尽任何一个 challenge，此前这种情况不留任何记录，无论错多少次
+都不会锁定用户。现在错误验证码按用户计数。只有消耗了一次尝试的错误验证码才计入；challenge
+已过期或不存在、上下文不匹配、用户锁定期间被拒绝，以及对已耗尽 challenge 的重复试探都不
+计入。验证成功不会清零计数。达到阈值时用户被锁定，计数从零重新开始。已经生效的锁定不会被
+延长。计数无法保存时，验证返回 `503/backend_unavailable`。
+
+以默认值为例，这条规则的实际约束如下：用户可获得的验证码数量（`RATE_LIMIT_PER_USER`，
+每小时 10 个）乘以 `MAX_ATTEMPTS`（5），本身已将每个用户每小时的错误验证码限制在约 50 次；
+每 15 次错误锁定 10 分钟，只会让这个数字略微下降。这项计数的作用在于：这类猜测会使用户
+被锁定，并体现在 `herald_failed_attempt_lock_total` 中；同时它让锁定参数真正起作用：一次
+锁定之后，到下一次锁定之前最多还能提交 `LOCKOUT_FAILED_ATTEMPT_THRESHOLD` 次错误验证码，
+因此延长 `LOCKOUT_DURATION` 或降低阈值都能降低猜测速率，仅靠 challenge 耗尽规则做不到
+这一点。取值越低，能够触发验证请求的人也越容易把某个用户锁在外面，选择时应考虑这一点。
+设置 `LOCKOUT_FAILED_ATTEMPT_THRESHOLD=0` 可关闭此计数。
+
+计数保存在 `otp:lock:failed:<digest>` 下，与其他锁定键一样，以用户 ID 的加 pepper 摘要为键。
+
 ## 错误处理
 
 ### 生产模式
@@ -354,6 +385,12 @@ API Key 认证适用于开发环境，但不推荐用于生产环境服务间通
 exception 事件、审计失败记录只保留已知原因码。未知原因码归为 `send_failed`，截止时间超时
 仍归为 `timeout`。日志使用方应读取 `reason` 字段，不再依赖原先的自由文本 `error` 字段。
 
+对于内置 SMTP，发送失败的日志行还带有 `failure_category`（`dns`、`connect`、`tls`、`auth`、
+`rejected`、`connection`、`timeout`、`validation`、`canceled` 或 `other`）；服务器返回了
+SMTP 应答码时，还以 `smtp_code` 记录这个三位数字。两者都由错误链中的错误类型推导，而不是
+取自错误文本，并且只写入日志，不写入 span 或审计记录。见
+[故障排查](TROUBLESHOOTING.md#提供者发送失败)。
+
 本次只调整诊断数据；客户端响应、严格策略撤销和幂等 `delivery_unknown` 处理保持不变，
 无需迁移 Redis 记录或更新客户端。既有日志和已导出的 span 不会被改写；若渠道曾回显敏感数据，
 应核查历史诊断数据的访问范围和保留期限，并轮换其中已暴露的凭据。
@@ -375,6 +412,11 @@ exception 事件、审计失败记录只保留已知原因码。未知原因码�
 原始 `user_id`。追踪后端的共享范围往往比审计存储更广，因此导出的 span 中不保留原始标识。
 审计记录不变，仍包含用户 ID。按 span 属性 `user_id` 过滤的追踪查询或看板必须改用
 `user_id_digest`。升级前导出的 span 不会被改写。
+
+创建 span 以同样的方式标识目标地址，属性名为 `destination_digest`，即按目标地址限流所用的
+加 pepper 摘要。它取代了原先的 `destination` 属性，后者保存的是部分脱敏的值（邮箱地址的
+开头几个字符及其完整域名）。请求 span 不再带有 `http.remote_addr` 属性；客户端地址仍保留在
+审计记录中。依赖这两个已移除属性的查询需要更新。
 
 ## 相关文档
 
