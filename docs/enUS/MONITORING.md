@@ -352,6 +352,15 @@ line and increments `herald_audit_write_failure_total`; the line names the
 file and the next retry delay. Such a file still counts towards
 `AUDIT_SPOOL_MAX_BYTES`.
 
+Alert on any increase of `herald_audit_spool_missing_total`. It counts pending
+files that no longer existed in `AUDIT_SPOOL_DIR` when delivery was attempted,
+for example because they were deleted by hand. Such a record is lost: Herald
+logs one error naming the file, stops retrying it and no longer counts it
+towards `AUDIT_SPOOL_MAX_BYTES`. A file is treated this way only while
+`AUDIT_SPOOL_DIR` is still the directory Herald opened at startup; if the
+directory itself was replaced (a volume unmounted under the running process),
+its entries are retried as unreadable files instead.
+
 Alert on `herald_audit_post_action_failure_total{operation}` (`create`,
 `verify`, `revoke`): a result record could not be accepted after the message
 was sent, the code was consumed or the revoke completed. The request was

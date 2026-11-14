@@ -33,6 +33,7 @@ var (
 	auditDroppedTotal      prometheus.Counter
 	auditWriteFailureTotal prometheus.Counter
 	auditQuarantinedTotal  prometheus.Counter
+	auditSpoolMissingTotal prometheus.Counter
 	auditPostActionFailure *prometheus.CounterVec // label: operation
 )
 
@@ -68,6 +69,8 @@ func Init() {
 	auditWriteFailureTotal = Registry.Counter("audit_write_failure_total").Help("Audit delivery or cleanup failures; undelivered records retained for retry").Build()
 	auditQuarantinedTotal = Registry.Counter("audit_quarantined_total").
 		Help("Audit spool entries set aside because they could not be read or decoded; never delivered").Build()
+	auditSpoolMissingTotal = Registry.Counter("audit_spool_missing_total").
+		Help("Pending audit spool files that no longer existed when delivery was attempted; dropped, never delivered").Build()
 	auditPostActionFailure = Registry.Counter("audit_post_action_failure_total").
 		Help("Audit records lost after the action had completed; the request still succeeded").Labels("operation").BuildVec()
 }
@@ -146,6 +149,14 @@ func RecordAuditWriteFailure() {
 func RecordAuditQuarantined() {
 	if auditQuarantinedTotal != nil {
 		auditQuarantinedTotal.Inc()
+	}
+}
+
+// RecordAuditSpoolMissing records a pending spool entry that was dropped
+// because its file no longer existed on disk.
+func RecordAuditSpoolMissing() {
+	if auditSpoolMissingTotal != nil {
+		auditSpoolMissingTotal.Inc()
 	}
 }
 

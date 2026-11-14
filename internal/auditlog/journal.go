@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -88,6 +89,22 @@ func (e *QuarantinedError) Error() string {
 }
 
 func (e *QuarantinedError) Unwrap() error { return e.Err }
+
+// MissingError is passed to the failure callback when a pending spool file no
+// longer exists on disk, for example because it was deleted by hand. The
+// record cannot be delivered and nothing is left to retry, so the entry is
+// dropped from the retry set and stops counting towards the spool size limit.
+// Name is the missing file's base name.
+type MissingError struct {
+	Name string
+	Err  error
+}
+
+func (e *MissingError) Error() string {
+	return fmt.Sprintf("audit spool entry %s no longer exists on disk; it was dropped from the spool without being delivered: %v", e.Name, e.Err)
+}
+
+func (e *MissingError) Unwrap() error { return e.Err }
 
 // journalStorage acknowledges a record only after its file and directory entry
 // have been synced. The channel contains wake-up hints, never the only copy of
@@ -230,6 +247,13 @@ func (j *journalStorage) run() {
 			continue
 		}
 		payload, err := os.ReadFile(filepath.Join(j.dir, name))
+		if err != nil && j.entryFileIsGone(name, err) {
+			// Nothing is left to read, so retrying cannot succeed.
+			if err = j.recordMissing(name, err); err != nil && j.onFailure != nil {
+				j.onFailure(err)
+			}
+			continue
+		}
 		if err != nil {
 			// The content is unknown, so nothing says the record is bad.
 			// A read can fail for reasons that pass (no free descriptor,
@@ -258,6 +282,10 @@ func (j *journalStorage) run() {
 		e := j.entries[name]
 		if err == nil {
 			err = os.Remove(filepath.Join(j.dir, name))
+			if errors.Is(err, fs.ErrNotExist) {
+				// The record was delivered and its file is already gone.
+				err = nil
+			}
 			if err == nil {
 				j.bytes -= e.size
 				delete(j.entries, name)
@@ -295,6 +323,43 @@ func (j *journalStorage) recordReadFailure(name string, cause error) error {
 		return nil
 	}
 	return fmt.Errorf("audit spool entry %s could not be read (attempt %d, next in %s); it stays in the spool and is retried: %w", name, e.readFailures, delay, cause)
+}
+
+// entryFileIsGone reports whether a failed read means the entry's file no
+// longer exists in the spool directory this journal opened. A "does not
+// exist" error alone is not enough: when the directory itself was replaced
+// (a volume unmounted from under the process, the directory renamed away)
+// every file appears to be missing although the records may come back, and
+// those entries keep the read-failure retry.
+func (j *journalStorage) entryFileIsGone(name string, readErr error) bool {
+	if !errors.Is(readErr, fs.ErrNotExist) {
+		return false
+	}
+	opened, err := j.dirFile.Stat()
+	if err != nil {
+		return false
+	}
+	current, err := os.Stat(j.dir)
+	if err != nil || !os.SameFile(opened, current) {
+		return false
+	}
+	_, err = os.Lstat(filepath.Join(j.dir, name))
+	return errors.Is(err, fs.ErrNotExist)
+}
+
+// recordMissing drops an entry whose file no longer exists and releases its
+// bytes. It returns the *MissingError to report, once: the entry is gone
+// afterwards, so no later attempt can report it again.
+func (j *journalStorage) recordMissing(name string, cause error) error {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	e, ok := j.entries[name]
+	if !ok {
+		return nil
+	}
+	j.bytes -= e.size
+	delete(j.entries, name)
+	return &MissingError{Name: name, Err: cause}
 }
 
 // recordDecoded clears the failure counts of an entry that was read and
