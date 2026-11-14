@@ -284,17 +284,24 @@ Possible error codes:
 - `challenge_id_required`: Missing required field `challenge_id`
 - `code_required`: Missing required field `code`
 - `invalid_code_format`: Verification code format is invalid
-- `expired`: Challenge has expired
+- `expired`: Challenge has expired, was already used or does not exist
 - `invalid`: Invalid verification code
 - `locked`: Challenge locked due to too many attempts
+- `user_locked`: The challenge's user is temporarily locked; the code was not compared
+- `not_active`: The challenge was created but its delivery step has not completed; no attempt is consumed
 - `verification_failed`: General verification failure
-- `internal_error`: Internal server error
+- `lock_contention`: Another verification of the same challenge is in progress; no attempt is consumed
+- `backend_unavailable`: Verification could not be carried out, for example because Redis is unavailable; no attempt is consumed
+- `audit_unavailable`: An audit record this request requires could not be stored
+
+A response for a wrong code also carries `remaining_attempts`.
 
 HTTP Status Codes:
 - `400 Bad Request`: Invalid request parameters
-- `401 Unauthorized`: Verification failed
-- `403 Forbidden`: User locked
-- `500 Internal Server Error`: Internal server error
+- `401 Unauthorized`: Verification failed: `expired`, `invalid`, `locked`, `user_locked`, `not_active` or `verification_failed`. A locked user is reported with 401 here; only challenge creation answers `403/user_locked`
+- `409 Conflict`: `lock_contention`, with `Retry-After: 1`
+- `415 Unsupported Media Type`: `Content-Type` is not `application/json` (`unsupported_media_type`)
+- `503 Service Unavailable`: `backend_unavailable` (with `Retry-After: 1`) or `audit_unavailable`. This route does not answer 500 for a backend failure
 
 ### Verify Challenge with Context (v2)
 
