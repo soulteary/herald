@@ -23,6 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   naming the limit that refused the request.
 - Startup warnings for the per-IP limit without trusted-proxy configuration, a
   production listener without TLS, and `CODE_LENGTH` below 6.
+- The delivery-failure log line for the built-in SMTP provider carries
+  `failure_category` and, when the server answered with one, `smtp_code`. Both
+  are derived from error types; provider text is not logged.
+- Startup warnings for `HERALD_TEST_MODE=true` outside the test environment,
+  `HERALD_TOTP_ENABLED=true` without `HERALD_TOTP_BASE_URL`, and
+  `OTLP_ENABLED=true` without `OTLP_ENDPOINT`.
 
 ### Changed
 
@@ -41,6 +47,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `503/hash_capacity_exceeded`.
 - The Compose file accepts optional `SMTP_*` variables for the built-in email
   provider.
+- Request spans are named `<METHOD> <route template>` instead of `/`, and the
+  raw request path is no longer exported as `http.target`. Dashboards that
+  select spans by the old name need the new one.
 
 ### Fixed
 
@@ -59,9 +68,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   provider-failure mode the same applies to the `delivery_status=failed`
   response. Audit records required before the action still refuse the request
   with 503.
-- An audit spool file that cannot be read or decoded is renamed to
-  `<id>.json.quarantined` after 5 attempts instead of being retried every
-  second without end. `herald_audit_quarantined_total` counts such files.
+- An audit spool file that is read and cannot be decoded 5 times in a row is
+  renamed to `<id>.json.quarantined` instead of being retried every second
+  without end; `herald_audit_quarantined_total` counts such files. A file that
+  cannot be read stays in the spool and is retried with a delay of up to 5
+  minutes.
 - Under the strict policy, answer `503/channel_not_configured` for a channel
   without a provider before any quota or cooldown is used, and log provider
   coverage at startup.
@@ -72,6 +83,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that cannot be loaded are logged at startup.
 - Join the caller's trace when a request carries a W3C `traceparent` header,
   whatever the header's case.
+- `OTLP_ENDPOINT` accepts `http://` and `https://` URLs as documented, in
+  addition to `host:port`. The URL form exported nothing. An unusable value is
+  reported at startup, and `OpenTelemetry tracing initialized` is logged only
+  when an exporter was set up.
+- Custom email templates saved with CRLF line endings are sent. A subject line
+  that still contains a carriage return or NUL is reported at startup and the
+  template is not loaded.
 
 ### Security
 
@@ -129,7 +147,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   challenges; `0` disables the counter. Wrong codes spread over many challenges
   did not lead to a lock before.
 - Answer an unknown HMAC key ID with `401/invalid_signature`, the same as a
-  wrong signature. The reason `invalid_key_id` is no longer returned.
+  wrong signature, on the v2/v3 schemes and on the legacy v1 scheme
+  (`HMAC_V1_ENABLED=true`). The reason `invalid_key_id` is no longer returned.
 - Stop exporting the client address and a partially masked destination on
   spans; the creation span carries `destination_digest`.
 
