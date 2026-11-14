@@ -23,6 +23,16 @@ func TestVersionWriterReturnsOriginalError(t *testing.T) {
 	}
 }
 
+// versionFixtureBuildTimeout and versionFixtureRunTimeout only stop a build or
+// a child process that hangs; the assertions are on exit status and output.
+// The first start of a freshly linked executable can take several seconds on
+// a loaded machine (on macOS the system checks a new binary before it runs),
+// which the earlier 5-second limit did not allow for.
+const (
+	versionFixtureBuildTimeout = 5 * time.Minute
+	versionFixtureRunTimeout   = time.Minute
+)
+
 func TestVersionCLIActualMain(t *testing.T) {
 	// Build a NEW host executable with synthetic linker values. This never runs
 	// a downloaded release asset or a normal service. Package initialization can
@@ -40,7 +50,7 @@ func TestVersionCLIActualMain(t *testing.T) {
 	const injectedDate = "2026-11-09T00:00:00Z"
 	const prefix = "github.com/soulteary/version-kit/v4."
 	flags := "-s -w -X " + prefix + "Version=" + injectedVersion + " -X " + prefix + "Commit=" + injectedCommit + " -X " + prefix + "BuildDate=" + injectedDate
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), versionFixtureBuildTimeout)
 	defer cancel()
 	goBinary, err := exec.LookPath("go")
 	if err != nil {
@@ -59,7 +69,7 @@ func TestVersionCLIActualMain(t *testing.T) {
 	expected := "{\"version\":\"" + injectedVersion + "\",\"commit\":\"" + injectedCommit + "\",\"build_date\":\"" + injectedDate + "\"}\n"
 	for _, args := range [][]string{{"-version"}, {"-version=true"}} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), versionFixtureRunTimeout)
 			defer cancel()
 			cmd := exec.CommandContext(ctx, binary, args...)
 			cmd.Env = childEnv
@@ -75,7 +85,7 @@ func TestVersionCLIActualMain(t *testing.T) {
 	}
 	for _, args := range [][]string{{"-version", "-healthcheck"}, {"-version", "unexpected-position"}} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), versionFixtureRunTimeout)
 			defer cancel()
 			cmd := exec.CommandContext(ctx, binary, args...)
 			cmd.Env = childEnv
@@ -98,7 +108,7 @@ func TestVersionCLIActualMain(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { _ = output.Close() })
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), versionFixtureRunTimeout)
 		defer cancel()
 		cmd := exec.CommandContext(ctx, binary, "-version")
 		cmd.Env, cmd.Stdout = childEnv, output
