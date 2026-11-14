@@ -118,7 +118,11 @@ With a working SMTP provider the code is sent and the response is:
 Without a provider for the channel, or when the SMTP server rejects the
 message, no code is sent and the response is an error with `"ok": false` and a
 `reason`. The Compose stack uses the strict provider policy, so a failed
-delivery is never reported as success. For SMS, DingTalk and the HTTP email
+delivery is never reported as success. A failed send still starts the resend
+cooldown (60 seconds by default), so repeating the request at once answers
+`429/resend_cooldown`; the Herald log line `Failed to send verification code
+via provider` carries a `failure_category` that says where the SMTP delivery
+stopped (see [troubleshooting](docs/enUS/TROUBLESHOOTING.md#provider-send-failures)). For SMS, DingTalk and the HTTP email
 plugin see the [Deployment Guide](docs/enUS/DEPLOYMENT.md#configuration).
 
 ### View Logs
