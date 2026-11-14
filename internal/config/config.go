@@ -266,7 +266,7 @@ var (
 
 	// OpenTelemetry config
 	OTLPEnabled  = env.GetBool("OTLP_ENABLED", false)
-	OTLPEndpoint = env.Get("OTLP_ENDPOINT", "") // e.g., "http://localhost:4318" for OTLP HTTP
+	OTLPEndpoint = env.Get("OTLP_ENDPOINT", "") // OTLP/HTTP collector: "localhost:4318" or "http(s)://host:port[/path]"
 )
 
 // Initialize validates and initializes configuration

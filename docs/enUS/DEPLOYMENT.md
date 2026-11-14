@@ -285,7 +285,7 @@ these checks and audit recording.
 |----------|-------------|---------|----------|
 | `TEMPLATE_DIR` | Optional path to email/SMS template directory; see [message templates](#message-templates) | (empty) | No |
 | `OTLP_ENABLED` | Enable OpenTelemetry | `false` | No |
-| `OTLP_ENDPOINT` | OTLP endpoint (e.g. `http://localhost:4318`) | (empty) | When OTLP enabled |
+| `OTLP_ENDPOINT` | OTLP/HTTP collector: `host:port` (plain HTTP, path `/v1/traces`), or `http://host:port[/path]` / `https://host:port[/path]`. `https` uses TLS with the system roots. A path other than `/` is used as the request path as given; without one spans are posted to `/v1/traces`. A value in any other form is reported at startup and nothing is exported | (empty) | When OTLP enabled |
 
 #### Test and debug
 
