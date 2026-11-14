@@ -75,6 +75,20 @@ type Manager struct {
 	dir       string
 	bundle    *i18n.Bundle
 	formatter *i18n.Formatter
+	// loadProblems describes template files that were not loaded.
+	loadProblems []string
+}
+
+// LoadProblems returns one description for every file or directory under the
+// template directory that could not be loaded or can never be selected. The
+// manager still works without them (it falls back to the built-in text), so
+// the caller is expected to log these.
+func (m *Manager) LoadProblems() []string {
+	return append([]string(nil), m.loadProblems...)
+}
+
+func (m *Manager) loadProblem(format string, args ...interface{}) {
+	m.loadProblems = append(m.loadProblems, fmt.Sprintf(format, args...))
 }
 
 // NewManager creates a new template manager
@@ -145,10 +159,15 @@ func (m *Manager) loadTemplates() {
 	}
 
 	// Load templates from directory
-	// Expected structure: templates/{locale}/{channel}/{purpose}.txt
+	// Expected structure: {TEMPLATE_DIR}/{locale}/{channel}/{purpose}.txt
 	// Example: templates/zh-CN/email/login.txt
+	//
+	// The locale directory may be any spelling a request locale may use
+	// ("zh", "zh-CN", "zh_cn"). It is stored under the canonical language,
+	// the same form lookups use, so a region-tagged directory is found.
 	_ = filepath.Walk(m.dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
+			m.loadProblem("%s: %v", path, err)
 			return nil
 		}
 		if info.IsDir() {
@@ -159,20 +178,35 @@ func (m *Manager) loadTemplates() {
 		relPath, _ := filepath.Rel(m.dir, path)
 		parts := strings.Split(relPath, string(filepath.Separator))
 		if len(parts) != 3 {
+			m.loadProblem("%s: ignored, expected {locale}/{channel}/{purpose}.txt", relPath)
 			return nil
 		}
 
-		locale := parts[0]
+		lang, ok := i18n.ParseLanguage(parts[0])
+		if !ok {
+			m.loadProblem("%s: ignored, %q is not a recognized locale", relPath, parts[0])
+			return nil
+		}
 		channel := parts[1]
+		if channel != "email" && channel != "sms" {
+			m.loadProblem("%s: ignored, channel directory must be email or sms (dingtalk messages use the sms templates)", relPath)
+			return nil
+		}
 		purpose := strings.TrimSuffix(parts[2], filepath.Ext(parts[2]))
 
-		key := locale + ":" + channel + ":" + purpose
+		key := string(lang) + ":" + channel + ":" + purpose
+		if _, exists := m.templates[key]; exists {
+			m.loadProblem("%s: ignored, another directory already provides the %s template for language %q", relPath, channel+"/"+purpose, lang)
+			return nil
+		}
 		// Strict mode: undefined fields error instead of silently emitting
 		// "<no value>", surfacing template mistakes at render time.
 		tmpl, err := template.New(filepath.Base(path)).Option("missingkey=error").ParseFiles(path)
-		if err == nil {
-			m.templates[key] = tmpl
+		if err != nil {
+			m.loadProblem("%s: not loaded, %v", relPath, err)
+			return nil
 		}
+		m.templates[key] = tmpl
 
 		return nil
 	})

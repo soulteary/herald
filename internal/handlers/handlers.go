@@ -125,6 +125,9 @@ func NewHandlersWithError(redisClient *redis.Client, log *logger.Logger) (*Handl
 
 	// Initialize template manager
 	templateMgr := template.NewManager(config.TemplateDir)
+	for _, problem := range templateMgr.LoadProblems() {
+		log.Warn().Str("check", "templates").Str("template_dir", config.TemplateDir).Msg("template not loaded: " + problem)
+	}
 
 	// Initialize provider registry (using provider-kit)
 	registry := provider.NewRegistry()
