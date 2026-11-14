@@ -43,6 +43,13 @@ func (r *reportLog) add(err error) {
 	r.mu.Unlock()
 }
 
+// all returns a copy of the reports received so far.
+func (r *reportLog) all() []error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]error(nil), r.reports...)
+}
+
 func (r *reportLog) missing() []*MissingError {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -110,9 +117,14 @@ func TestJournalDropsEntryWhoseFileWasDeleted(t *testing.T) {
 
 	// Long enough for further attempts on the dropped entry, if there were any.
 	time.Sleep(300 * time.Millisecond)
+	// The second record is still pending and its delivery keeps failing, so
+	// the worker keeps reporting. Stop it before looking at the reports.
+	if err := j.Close(); err != nil {
+		t.Fatal(err)
+	}
 	missing := reports.missing()
 	if len(missing) != 1 {
-		t.Fatalf("%d reports of a missing file, want exactly 1: %v", len(missing), reports.reports)
+		t.Fatalf("%d reports of a missing file, want exactly 1: %v", len(missing), reports.all())
 	}
 	if missing[0].Name != filepath.Base(files[0]) || !errors.Is(missing[0], fs.ErrNotExist) {
 		t.Fatalf("unexpected report: %v", missing[0])
@@ -205,6 +217,12 @@ func TestJournalDeliveredRecordWhoseFileVanishedIsNotReported(t *testing.T) {
 	})
 	if _, pending := pendingState(j); pending != 0 {
 		t.Fatalf("%d bytes still pending", pending)
+	}
+	// The worker reports a failure after it has released the journal's lock,
+	// so an empty retry set does not yet mean it has nothing left to report.
+	// Close returns when the worker has finished.
+	if err := j.Close(); err != nil {
+		t.Fatal(err)
 	}
 	sink.mu.Lock()
 	delivered := sink.records["vanished-during-delivery"]
