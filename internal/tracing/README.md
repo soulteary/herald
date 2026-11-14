@@ -22,6 +22,8 @@ OTLP_ENABLED=true
 OTLP_ENDPOINT=http://localhost:4318
 ```
 
+`https://` 端点默认以系统根证书校验 collector。collector 使用私有 CA 时，用 `OTEL_EXPORTER_OTLP_CERTIFICATE` 指定 PEM 格式的 CA 文件，该文件会替换系统根证书，而不是追加。导出器还支持客户端证书、请求头、超时、压缩等 `OTEL_EXPORTER_OTLP_*` 变量，其中请求头会发送给 collector，可能带有凭据；`OTEL_EXPORTER_OTLP_ENDPOINT` 不会改变发送目标。完整列表和限制见[部署文档](../../docs/zhCN/DEPLOYMENT.md#otlp-导出器环境变量)。
+
 ## 核心 Span
 
 ### `otp.challenge.create`

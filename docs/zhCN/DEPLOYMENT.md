@@ -314,7 +314,28 @@ fsync 和原子 rename。
 |------|------|--------|------|
 | `TEMPLATE_DIR` | 邮件/短信模板目录（可选）；见[消息模板](#消息模板) | （空） | 否 |
 | `OTLP_ENABLED` | 是否启用 OpenTelemetry | `false` | 否 |
-| `OTLP_ENDPOINT` | OTLP/HTTP collector 地址：`host:port`（明文 HTTP，路径为 `/v1/traces`），或 `http://host:port[/path]` / `https://host:port[/path]`。`https` 使用 TLS 并以系统根证书校验。`/` 以外的路径按原样用作请求路径；未给出路径时 span 发送到 `/v1/traces`。其他形式的取值会在启动时报告，并且不导出任何 span | （空） | 启用 OTLP 时 |
+| `OTLP_ENDPOINT` | OTLP/HTTP collector 地址：`host:port`（明文 HTTP，路径为 `/v1/traces`），或 `http://host:port[/path]` / `https://host:port[/path]`。`https` 使用 TLS，并以系统根证书校验 collector；设置了 `OTEL_EXPORTER_OTLP_CERTIFICATE` 时改用该变量指定的文件，见 [OTLP 导出器环境变量](#otlp-导出器环境变量)。`/` 以外的路径按原样用作请求路径；未给出路径时 span 发送到 `/v1/traces`。其他形式的取值会在启动时报告，并且不导出任何 span | （空） | 启用 OTLP 时 |
+
+#### OTLP 导出器环境变量
+
+Herald 创建 OTLP/HTTP 导出器时，只传入 `OTLP_ENDPOINT` 中的主机、路径和协议。除此之外，导出器库还会从 Herald 的环境中读取下列标准 `OTEL_EXPORTER_OTLP_*` 变量。每个变量都有一个只对 trace 生效的形式，即在 `OTLP_` 之后加上 `TRACES_`（例如 `OTEL_EXPORTER_OTLP_TRACES_CERTIFICATE`）；两者都设置为可用的值时，以 trace 专用的为准。空值视为未设置。
+
+| 变量 | 作用 |
+|------|------|
+| `OTEL_EXPORTER_OTLP_CERTIFICATE` | PEM 文件路径，其中的 CA 证书用于校验 collector。该文件会替换系统根证书，而不是在其基础上追加：证书只能链到公共 CA 的 collector 会被拒绝，除非该 CA 也在文件中。collector 使用私有 CA 时，就通过这个变量让导出器信任它。文件无法读取或不含证书时，导出器会在标准错误输出中报告，并继续使用系统根证书 |
+| `OTEL_EXPORTER_OTLP_CLIENT_CERTIFICATE`、`OTEL_EXPORTER_OTLP_CLIENT_KEY` | 向 collector 出示的 PEM 客户端证书和私钥（双向 TLS）。两者必须同时设置，只设置其中一个会被忽略 |
+| `OTEL_EXPORTER_OTLP_HEADERS` | 以逗号分隔的 `name=value` 列表，附加到每个导出请求上；值会做 URL 解码。trace 专用变量会替换整个列表。这些请求头会发送给 collector，通常带有凭据（例如 `Authorization=Bearer%20<token>`）：请把该变量当作密钥保管；另外，`OTLP_ENDPOINT` 为 `host:port` 或 `http://` 形式时，这些请求头以明文在网络上传输 |
+| `OTEL_EXPORTER_OTLP_TIMEOUT` | 单次导出请求的时间上限，单位为毫秒。默认 10000 |
+| `OTEL_EXPORTER_OTLP_COMPRESSION` | 取值 `gzip` 时压缩请求体；其他取值表示不压缩（默认） |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | 取值 `http/json` 时以 JSON 代替 protobuf 发送。`grpc` 不会切换传输方式：Herald 只通过 HTTP 导出 |
+
+有三点限制：
+
+- `OTEL_EXPORTER_OTLP_ENDPOINT` 和 `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` 不会改变 span 的发送目标。主机和路径始终取自 `OTLP_ENDPOINT`。
+- 证书和客户端证书变量要求 `OTLP_ENDPOINT` 为 `https://` 形式。如果端点是 `host:port` 或 `http://` 形式，而其中某个变量指向了可用的文件，导出器不会被创建：Herald 记录 `Failed to initialize OpenTelemetry tracing`，不导出任何 span。
+- 当 `OTLP_ENDPOINT` 为 `https://` 时，不要在 Herald 的环境中把 `OTEL_EXPORTER_OTLP_INSECURE` 或 `OTEL_EXPORTER_OTLP_TRACES_INSECURE` 设为 `true`，也不要把上述两个 `..._ENDPOINT` 变量设为 `http://` URL。这种情况下导出器会按这些变量决定协议，把 span 连同已配置的请求头以明文 HTTP 发送到 `OTLP_ENDPOINT` 的主机，而启动日志中显示的仍是 `https://` 端点。
+
+导出器同样遵循 `HTTP_PROXY`、`HTTPS_PROXY` 和 `NO_PROXY`。
 
 #### 测试与调试
 

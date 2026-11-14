@@ -304,7 +304,28 @@ these checks and audit recording.
 |----------|-------------|---------|----------|
 | `TEMPLATE_DIR` | Optional path to email/SMS template directory; see [message templates](#message-templates) | (empty) | No |
 | `OTLP_ENABLED` | Enable OpenTelemetry | `false` | No |
-| `OTLP_ENDPOINT` | OTLP/HTTP collector: `host:port` (plain HTTP, path `/v1/traces`), or `http://host:port[/path]` / `https://host:port[/path]`. `https` uses TLS with the system roots. A path other than `/` is used as the request path as given; without one spans are posted to `/v1/traces`. A value in any other form is reported at startup and nothing is exported | (empty) | When OTLP enabled |
+| `OTLP_ENDPOINT` | OTLP/HTTP collector: `host:port` (plain HTTP, path `/v1/traces`), or `http://host:port[/path]` / `https://host:port[/path]`. `https` uses TLS and verifies the collector against the system roots, or against the file named by `OTEL_EXPORTER_OTLP_CERTIFICATE` when that is set; see [OTLP exporter environment variables](#otlp-exporter-environment-variables). A path other than `/` is used as the request path as given; without one spans are posted to `/v1/traces`. A value in any other form is reported at startup and nothing is exported | (empty) | When OTLP enabled |
+
+#### OTLP exporter environment variables
+
+Herald builds the OTLP/HTTP exporter with the host, path and scheme of `OTLP_ENDPOINT` and nothing else. The exporter library additionally reads the standard `OTEL_EXPORTER_OTLP_*` variables below from Herald's environment. Each has a trace-specific form with `TRACES_` after `OTLP_` (for example `OTEL_EXPORTER_OTLP_TRACES_CERTIFICATE`); when both are set to a usable value, the trace-specific one is used. An empty value counts as unset.
+
+| Variable | Effect |
+|----------|--------|
+| `OTEL_EXPORTER_OTLP_CERTIFICATE` | Path of a PEM file with the CA certificates used to verify the collector. The file replaces the system roots, it does not add to them: a collector whose certificate chains only to a public CA is refused unless that CA is in the file. This is how a collector behind a private CA is trusted. A file that cannot be read or holds no certificate is reported on standard error by the exporter and the system roots stay in use |
+| `OTEL_EXPORTER_OTLP_CLIENT_CERTIFICATE`, `OTEL_EXPORTER_OTLP_CLIENT_KEY` | PEM client certificate and private key presented to the collector (mutual TLS). Both must be set; one without the other is ignored |
+| `OTEL_EXPORTER_OTLP_HEADERS` | Comma-separated `name=value` pairs added to every export request; values are URL-decoded. The trace-specific variable replaces the whole list. These headers are sent to the collector and usually carry a credential (for example `Authorization=Bearer%20<token>`): treat the variable as a secret, and note that with a `host:port` or `http://` `OTLP_ENDPOINT` they cross the network in clear text |
+| `OTEL_EXPORTER_OTLP_TIMEOUT` | Time limit for one export request, in milliseconds. Default 10000 |
+| `OTEL_EXPORTER_OTLP_COMPRESSION` | `gzip` compresses request bodies; any other value means no compression (the default) |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/json` sends JSON instead of protobuf. `grpc` does not switch the transport: Herald exports over HTTP only |
+
+Three limits apply:
+
+- `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` do not change where spans go. The host and path always come from `OTLP_ENDPOINT`.
+- The certificate and client-certificate variables require an `https://` `OTLP_ENDPOINT`. With a `host:port` or `http://` endpoint and one of them set to a usable file, the exporter is not created: Herald logs `Failed to initialize OpenTelemetry tracing` and exports nothing.
+- Do not set `OTEL_EXPORTER_OTLP_INSECURE` or `OTEL_EXPORTER_OTLP_TRACES_INSECURE` to `true`, and do not set either `..._ENDPOINT` variable to an `http://` URL, in the environment of a Herald whose `OTLP_ENDPOINT` is `https://`. The exporter takes its scheme from these variables in that case and posts spans, and any configured headers, to the `OTLP_ENDPOINT` host in plain HTTP, while the startup log still shows the `https://` endpoint.
+
+The exporter also follows `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY`.
 
 #### Test and debug
 
