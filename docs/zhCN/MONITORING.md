@@ -298,7 +298,12 @@ groups:
 
 ## OpenTelemetry 支持
 
-当设置 `OTLP_ENABLED=true` 且配置 `OTLP_ENDPOINT` 时，Herald 会启用 OpenTelemetry 追踪中间件。追踪上下文通过 `traceparent` 与 `tracestate` 请求头传播。核心 span 包括 challenge 创建、provider 发送与验码；span 标签包括 `channel`、`purpose`、`provider`、`result`、`reason`。span 上以 `user_id_digest` 标识用户，这是以 `HERALD_PII_PEPPER` 为密钥的加 pepper 摘要；原始 `user_id` 不会被导出。同一 pepper 下摘要保持稳定，仍可用于关联同一用户的 span。配置方式见 [DEPLOYMENT.md](DEPLOYMENT.md) 中的 `OTLP_ENDPOINT`（如 OTLP HTTP 使用 `http://localhost:4318`）。
+当设置 `OTLP_ENABLED=true` 且配置 `OTLP_ENDPOINT` 时，Herald 会启用 OpenTelemetry 追踪中间件。追踪上下文通过 `traceparent` 与 `tracestate` 请求头传播。核心 span 包括 challenge 创建、provider 发送与验码；span 标签包括 `channel`、`purpose`、`provider`、`result`、`reason`。span 上以 `user_id_digest` 标识用户，这是以 `HERALD_PII_PEPPER` 为密钥的加 pepper 摘要；原始 `user_id` 不会被导出。同一 pepper 下摘要保持稳定，仍可用于关联同一用户的 span。创建 span 以同样的方式用 `destination_digest` 标识 destination，任何 span 都不携带客户端地址。`OTLP_ENDPOINT` 可写为 `host:port`（例如 `localhost:4318`），也可写为 `http://` 或 `https://` URL（例如 `http://localhost:4318`），详见 [DEPLOYMENT.md](DEPLOYMENT.md)；span 通过 OTLP over HTTP 发送。只有导出器建立成功时，Herald 才会记录 `OpenTelemetry tracing initialized` 及解析后的端点。端点为空或无法解析时，日志会说明不导出任何 span。
+
+每个 HTTP 请求的请求 span 命名为 `<METHOD> <路由模板>`，例如
+`POST /v1/otp/challenges/:id/revoke`，并以 `http.route` 携带该模板。没有匹配路由的请求命名为
+`<METHOD> unmatched_route`，不带 `http.route`。请求路径本身不会被导出，既不出现在 span
+名称中，也不作为 `http.target`，因为其中含有调用方提供的片段，例如 challenge ID。
 
 ## 最佳实践
 
@@ -324,6 +329,18 @@ groups:
 失败外，对应接口返回 `503/audit_unavailable`。该指标不再统计可恢复的后端投递失败。存储恢复后应确认缓冲逐步清空，
 不要通过删除待投递文件来消除告警。
 
+`herald_audit_quarantined_total` 只要增加就应告警。它统计能够读取、但连续 5 次都无法解码的
+待投递文件，例如因磁盘损坏而被截断的文件。这样的记录无法投递。Herald 将其从 `<id>.json`
+重命名为 `AUDIT_SPOOL_DIR` 中的 `<id>.json.quarantined`，记录一条指明该文件的 error 日志，并
+停止重试；该文件不再计入 `AUDIT_SPOOL_MAX_BYTES`。计数器随进程重启归零，因此启动时还会有
+一条警告报告目录中已有多少个被隔离的文件。请检查并归档这些文件，它们是相应审计事件的唯一
+副本。
+
+完全无法读取的待投递文件不会被隔离。它会持续重试，间隔从 1 秒起逐次加倍，最长 5 分钟，
+一旦可以读取即被投递。为避免持续性故障刷满日志，同一文件只有第 1、2、4、8 次（依此类推）
+连续读取失败才会写入一条 error 日志并使 `herald_audit_write_failure_total` 加一；日志中指明
+该文件和下一次重试的间隔。这样的文件仍计入 `AUDIT_SPOOL_MAX_BYTES`。
+
 应对 `herald_audit_post_action_failure_total{operation}`（`create`、`verify`、`revoke`）配置
 告警：消息已发送、验证码已消费或撤销已完成后，结果记录未能被接收。请求已正常响应，因此
 审计记录中缺少该事件。每次发生还会使 `herald_audit_dropped_total` 加一，并写入一条 error
@@ -340,12 +357,14 @@ groups:
 
 - `herald_idempotency_total{result}` 使用 `replay`、`conflict`、`in_flight`、`delivery_unknown`、`ownership_lost` 或 `backend_error`。指纹冲突和旧命名空间冲突均计入 `conflict`，需按 API reason 区分，不能增加身份标签。
 - `herald_nonce_replay_total` 统计已拒绝的 nonce 重放。
+- `herald_auth_failure_total{reason}` 统计以 `401/invalid_signature` 响应的 HMAC 请求。`reason` 为 `invalid_key_id`（密钥 ID 未配置）或 `invalid_signature`（密钥已知但签名错误）。两者的 HTTP 响应相同。旧版 v1 方案（`HMAC_V1_ENABLED=true`）下指向未配置密钥 ID 的请求同样计为 `invalid_key_id`，并按签名错误响应；该方案下，已配置密钥的签名错误不计入此指标。
 - `herald_provider_timeout_total{channel}` 统计渠道超时。
 - `herald_verification_contention_total{result}` 在验证路径埋点处记录 `contended` 或 `acquired`。
+- `herald_failed_attempt_lock_total` 统计因错误验证码次数达到 `LOCKOUT_FAILED_ATTEMPT_THRESHOLD` 而被锁定的用户。每次锁定还会写入一条带 `user_id_digest` 的警告日志。同一摘要持续出现，说明有人在针对该用户猜测验证码。
 - `herald_challenge_state_total{state}` 记录实际埋点的 `activated`、`superseded`、`revoked` 等状态。
 - `herald_redis_operations_total{operation,result}` 的结果为 `success` 或 `failure`；延迟直方图 count 包含两种结果，不是错误计数。
 
-没有独立哈希预算占用指标。结合 `503/backend_unavailable`、重试头、运行时内存和请求结果
+没有独立哈希预算占用指标。结合 `503/hash_capacity_exceeded`、重试头、运行时内存和请求结果
 观察过载，不得将原始服务/密钥 ID、目标地址或客户端键加入指标标签。
 
 ### 指标认证

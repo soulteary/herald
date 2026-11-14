@@ -141,6 +141,13 @@ Herald 在调用发送渠道前保存发送记录，该记录在 `IDEMPOTENCY_UN
 }
 ```
 
+**`client_ip` 和 `ua`：** 两者均为可选字段，都不会被保存。限流和审计记录使用 Herald 看到的
+调用方地址：直连对端的地址；当对端在 `HERALD_TRUSTED_PROXIES` 中时，使用
+`HERALD_TRUSTED_PROXY_HEADER` 请求头中的地址。`client_ip` 与该地址不同时，只会产生一条
+debug 日志，其中仅含加 pepper 的摘要；`ua` 会被忽略。如需让终端用户地址参与限流并写入审计，
+应通过可信代理请求头发送（Go SDK：`WithClientIPHeader`），见
+[安全说明](SECURITY.md#4-限流配置)。两个验证请求中的 `client_ip` 同样如此。
+
 **通道：** `channel` 可为 `"sms"`、`"email"` 或 `"dingtalk"`。当为 `"email"` 且配置了 `HERALD_SMTP_API_URL` 时，Herald 将发送请求转发给 [herald-smtp](https://github.com/soulteary/herald-smtp)，`destination` 为邮箱地址。当为 `"dingtalk"` 时，Herald 将发送请求转发给 [herald-dingtalk](https://github.com/soulteary/herald-dingtalk)（需配置 `HERALD_DINGTALK_API_URL`）；`destination` 为钉钉 userid（或在 herald-dingtalk 启用手机号查询时为 11 位手机号）。Herald 不保存任何 SMTP 或钉钉凭证。
 
 **响应：**
@@ -170,6 +177,20 @@ Herald 在调用发送渠道前保存发送记录，该记录在 `IDEMPOTENCY_UN
 拒绝请求的限流项给出的等待提示，稍后的请求仍可能被其他配额拒绝。被拒绝的
 请求不消耗配额，也不启动冷却；客户端不能自动重试。
 
+`429/rate_limit_exceeded` 响应还带有 `limit` 字段，指明拒绝请求的是哪一项配额：`user`
+（`RATE_LIMIT_PER_USER`）、`ip`（`RATE_LIMIT_PER_IP`）或 `destination`
+（`RATE_LIMIT_PER_DESTINATION`）。`429/resend_cooldown` 响应没有 `limit` 字段。v1.6.0
+及更早的服务端不发送该字段，客户端应将其视为可选。
+
+```json
+{
+  "ok": false,
+  "reason": "rate_limit_exceeded",
+  "limit": "ip",
+  "next_resend_in": 42
+}
+```
+
 Go SDK 新增 `CreateChallengeWithMetadata`，返回原响应、`CreateChallengeMetadata`
 及原错误。时间缺失、格式错误、相互冲突、超出 1–86400 秒或状态不是 429 时，
 `RetryAfterSeconds` 为 nil。原 `CreateChallenge` 签名及 `*HeraldError` 行为不变；
@@ -183,8 +204,9 @@ Go SDK 新增 `CreateChallengeWithMetadata`，返回原响应、`CreateChallenge
 - `destination_required`：缺少必需字段 `destination`
 - `rate_limit_exceeded`：超过速率限制
 - `resend_cooldown`：重发冷却期未过期
-- `user_locked`：用户暂时被锁定：在 `LOCKOUT_DURATION` 内耗尽了 `LOCKOUT_CHALLENGE_THRESHOLD` 个挑战。单个挑战耗尽只返回 `locked`
+- `user_locked`：用户暂时被锁定：在 `LOCKOUT_DURATION` 内耗尽了 `LOCKOUT_CHALLENGE_THRESHOLD` 个挑战，或在 `LOCKOUT_FAILED_ATTEMPT_WINDOW` 内提交了 `LOCKOUT_FAILED_ATTEMPT_THRESHOLD` 次错误验证码。单个挑战耗尽只返回 `locked`
 - `send_failed`：通过提供者发送验证码失败
+- `channel_not_configured`：请求的通道没有配置提供者，且 `PROVIDER_FAILURE_POLICY=strict`。请求在幂等占位、限流和冷却之前被拒绝，不消耗任何配额；在运维人员配置提供者之前，重试没有意义
 - `internal_error`：内部服务器错误
 
 HTTP 状态代码：
@@ -192,6 +214,7 @@ HTTP 状态代码：
 - `401 Unauthorized`：认证失败
 - `403 Forbidden`：用户被锁定
 - `429 Too Many Requests`：超过速率限制
+- `503 Service Unavailable`：通道未配置提供者（`channel_not_configured`），或后端不可用
 - `500 Internal Server Error`：内部服务器错误
 
 ### 获取测试验证码（仅测试模式）
@@ -252,19 +275,27 @@ HTTP 状态代码：
 可能的错误代码：
 - `invalid_request`：请求体解析失败
 - `challenge_id_required`：缺少必需字段 `challenge_id`
+- `invalid_challenge_id`：`challenge_id` 长度超过 64 字节，或包含 `A-Z`、`a-z`、`0-9`、`-`、`_` 以外的字符。创建挑战返回的 ID（`ch_` 加 22 个上述字符）总能通过此检查
 - `code_required`：缺少必需字段 `code`
 - `invalid_code_format`：验证码格式无效
-- `expired`：挑战已过期
+- `expired`：挑战已过期、已被使用或不存在
 - `invalid`：无效的验证码
 - `locked`：由于尝试次数过多，挑战被锁定
+- `user_locked`：挑战所属用户暂时被锁定；不会比对验证码
+- `not_active`：挑战已创建，但发送步骤尚未完成；不消耗尝试次数
 - `verification_failed`：一般验证失败
-- `internal_error`：内部服务器错误
+- `lock_contention`：同一挑战的另一次验证正在进行；不消耗尝试次数
+- `backend_unavailable`：验证无法执行，例如 Redis 不可用；不消耗尝试次数
+- `audit_unavailable`：本次请求必需的审计记录无法保存
+
+验证码错误的响应还带有 `remaining_attempts`。
 
 HTTP 状态代码：
 - `400 Bad Request`：无效的请求参数
-- `401 Unauthorized`：验证失败
-- `403 Forbidden`：用户被锁定
-- `500 Internal Server Error`：内部服务器错误
+- `401 Unauthorized`：验证失败：`expired`、`invalid`、`locked`、`user_locked`、`not_active` 或 `verification_failed`。此接口对被锁定的用户返回 401；只有创建挑战返回 `403/user_locked`
+- `409 Conflict`：`lock_contention`，带 `Retry-After: 1`
+- `415 Unsupported Media Type`：`Content-Type` 不是 `application/json`（`unsupported_media_type`）
+- `503 Service Unavailable`：`backend_unavailable`（带 `Retry-After: 1`）或 `audit_unavailable`。此路由不会因后端故障返回 500
 
 ### 带上下文验证挑战（v2）
 
@@ -293,6 +324,9 @@ HTTP 状态代码：
 兼容性：v2 不再接受无绑定或部分绑定的请求，现有 v2 调用方需要补齐三个字段。
 v1 验证接口保留原有行为，不要求传入预期上下文字段。
 
+`challenge_id` 不符合挑战 ID 的格式时，两个验证路由和撤销路由均返回
+`400/invalid_challenge_id`；此时它尚未被用作 Redis 键、写入审计日志或附加到 span。
+
 ### 撤销挑战
 
 **POST /v1/otp/challenges/{id}/revoke**
@@ -318,6 +352,7 @@ v1 验证接口保留原有行为，不要求传入预期上下文字段。
 
 可能的错误代码：
 - `challenge_id_required`：URL 参数中缺少挑战 ID
+- `invalid_challenge_id`：URL 中的挑战 ID 长度超过 64 字节，或包含 `A-Z`、`a-z`、`0-9`、`-`、`_` 以外的字符。创建挑战返回的 ID（`ch_` 加 22 个上述字符）总能通过此检查
 - `internal_error`：内部服务器错误
 
 HTTP 状态代码：
@@ -441,6 +476,7 @@ Herald 实现多维速率限制：
 - `invalid_purpose`：无效的 purpose 值（必须是允许的 purpose 之一）
 - `destination_required`：缺少必需字段 `destination`
 - `challenge_id_required`：缺少必需字段 `challenge_id`
+- `invalid_challenge_id`：`challenge_id` 长度超过 64 字节，或包含 `A-Z`、`a-z`、`0-9`、`-`、`_` 以外的字符。创建挑战返回的 ID（`ch_` 加 22 个上述字符）总能通过此检查
 - `code_required`：缺少必需字段 `code`
 - `invalid_code_format`：验证码格式无效
 
@@ -448,9 +484,9 @@ Herald 实现多维速率限制：
 HMAC/API Key 失败会返回 JSON `reason`：
 - `signature_version_required`：创建接口要求 `X-Signature-Version: v3`；其他 HMAC 接口接受 v2/v3
 - `missing_auth_headers`：缺少一个或多个 HMAC 请求头
-- `key_id_required` / `invalid_key_id`：未提供可用的 HMAC 密钥 ID
+- `key_id_required`：在必须提供 `X-Key-Id` 请求头的场合缺少该请求头
 - `timestamp_out_of_range`：时间戳超出配置的偏差窗口
-- `invalid_signature`：HMAC 签名验证失败
+- `invalid_signature`：HMAC 签名验证失败，或 `X-Key-Id` 指向未配置的密钥。两种情况的响应相同，以免暴露哪些密钥 ID 存在；可通过 `herald_auth_failure_total{reason}` 区分
 - `replayed_nonce`：nonce 已被消费
 - `nonce_store_unavailable`：Redis nonce 存储失败。所有环境下均拒绝该请求
 - `unauthorized`：认证失败
@@ -462,7 +498,8 @@ HMAC/API Key 失败会返回 JSON `reason`：
 - `idempotency_namespace_conflict`（409）：旧空 Key ID 记录需要人工核对。
 - `context_required`（400）/ `context_mismatch`（409）：缺少 v2 必需上下文或上下文不匹配。
 - `lock_contention`（409）：验证锁竞争，重试需新 nonce。
-- `backend_unavailable` / `audit_unavailable`（503）：后端、哈希容量或持久化审计接收不可用；副作用发生后的失败不会撤销该副作用。
+- `backend_unavailable` / `audit_unavailable`（503）：后端或持久化审计接收不可用；副作用发生后的失败不会撤销该副作用。
+- `hash_capacity_exceeded`（503，`Retry-After: 1`）：本实例的全部哈希槽位（`HERALD_MAX_CONCURRENT_HASH_OPERATIONS`）均被占用。未消耗任何配额或尝试次数，可稍后重试。它表示本实例负载过高，不是后端故障。
 
 ### 挑战错误
 - `expired`：挑战已过期
@@ -470,13 +507,14 @@ HMAC/API Key 失败会返回 JSON `reason`：
 - `locked`：由于尝试次数过多，挑战被锁定
 - `verification_failed`：一般验证失败
 - `send_failed`：通过提供者发送验证码失败（仅在挑战创建时）
+- `channel_not_configured`（503）：请求的通道没有配置提供者（strict 提供者失败策略，仅在挑战创建时）
 
 ### 速率限制错误
 - `rate_limit_exceeded`：超过速率限制
 - `resend_cooldown`：重发冷却期未过期
 
 ### 用户状态错误
-- `user_locked`：用户暂时被锁定：在 `LOCKOUT_DURATION` 内耗尽了 `LOCKOUT_CHALLENGE_THRESHOLD` 个挑战。单个挑战耗尽只返回 `locked`
+- `user_locked`：用户暂时被锁定：在 `LOCKOUT_DURATION` 内耗尽了 `LOCKOUT_CHALLENGE_THRESHOLD` 个挑战，或在 `LOCKOUT_FAILED_ATTEMPT_WINDOW` 内提交了 `LOCKOUT_FAILED_ATTEMPT_THRESHOLD` 次错误验证码。单个挑战耗尽只返回 `locked`
 
 ### 其他传输与存储原因
 - `invalid_destination`：目标地址校验失败。
@@ -525,14 +563,15 @@ HMAC/API Key 失败会返回 JSON `reason`：
 ## 哈希容量过载
 
 创建与 v1/v2 OTP 验证共享本实例的哈希工作预算（默认 4）。预算已满时，在哈希前返回
-`503/backend_unavailable` 和 `Retry-After: 1`。过载创建不占用限流或冷却额度，被拒绝的验证
+`503/hash_capacity_exceeded` 和 `Retry-After: 1`。v1.6.0 及更早版本在此返回
+`503/backend_unavailable`，与 Redis 故障的原因码相同；状态码和响应头不变。过载创建不占用限流或冷却额度，被拒绝的验证
 不消耗尝试次数或验证码；已完成幂等响应仍可重放。锁竞争立即返回现有的 `409/lock_contention`
 及 `Retry-After: 1`。容量规划和重试要求见 [部署说明](DEPLOYMENT.md#otp-哈希工作准入)。
 
 ## HMAC 身份与旧幂等记录
 
 仅配置 `HMAC_SECRET` 时，省略 `X-Key-Id` 或精确填写 `default`。其他 ID 在消费 nonce
-及进入 handler 前返回 `401/invalid_key_id`，单密钥不再隐式授权任意 ID。HMAC v2/v3
+及进入 handler 前返回 `401/invalid_signature`，与签名错误的响应相同；单密钥不再隐式授权任意 ID。HMAC v2/v3
 签名格式不变。自定义 ID 必须显式配置于 `HERALD_HMAC_KEYS`；迁移时不能直接改名或
 将不确定的发送换身份重试，详见部署升级要求。
 

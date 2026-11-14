@@ -43,6 +43,13 @@ v1.3.13 恢复创建流量前需遵循 [HMAC 身份升级](docs/zhCN/DEPLOYMENT.
 export REDIS_PASSWORD="$(openssl rand -hex 32)"
 export HERALD_API_KEY="$(openssl rand -hex 32)"
 
+# 发送邮件验证码时需要以下变量（见“测试 API”）。SMTP 服务器须支持 STARTTLS。
+# 不设置这些变量时，Herald 启动后没有可用的发送提供者。
+export SMTP_HOST="smtp.example.com"
+export SMTP_USER="herald@example.com"
+export SMTP_PASSWORD="your-smtp-password"
+export SMTP_FROM="herald@example.com"
+
 # 以 API Key 模式启动 Herald 和 Redis
 docker compose up -d
 
@@ -60,7 +67,10 @@ curl http://localhost:8082/healthz
 
 ### 测试 API
 
-创建测试挑战（需要身份验证 - 请参阅 [API 文档](docs/zhCN/API.md)）：
+创建测试挑战（需要身份验证 - 请参阅 [API 文档](docs/zhCN/API.md)）。
+Herald 只能在配置了提供者的通道上发送验证码。在 `docker compose up` 之前设置了上述
+`SMTP_*` 变量时，Compose 文件会为 `email` 通道注册内置 SMTP 提供者；请将 `user@example.com`
+替换为你能收信的地址。
 
 ```bash
 # 复用启动 Compose 前设置的 API Key
@@ -77,6 +87,24 @@ curl -X POST http://localhost:8082/v1/otp/challenges \
     "purpose": "login"
   }'
 ```
+
+SMTP 提供者工作正常时，验证码会被发送，响应为：
+
+```json
+{
+  "challenge_id": "ch_...",
+  "expires_in": 300,
+  "next_resend_in": 60
+}
+```
+
+通道没有配置提供者，或 SMTP 服务器拒绝该邮件时，验证码不会发送，响应是包含
+`"ok": false` 和 `reason` 的错误。Compose 使用 strict 提供者失败策略，因此发送失败不会被
+报告为成功。发送失败仍会启动重发冷却（默认 60 秒），立即重复请求会得到
+`429/resend_cooldown`。Herald 日志中的 `Failed to send verification code via provider`
+一行带有 `failure_category`，说明 SMTP 投递停在哪一步（见
+[故障排查](docs/zhCN/TROUBLESHOOTING.md#提供者发送失败)）。短信、DingTalk 和 HTTP 邮件插件的配置见
+[部署指南](docs/zhCN/DEPLOYMENT.md#配置)。
 
 ### 查看日志
 
