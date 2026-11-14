@@ -254,7 +254,10 @@ retried or picked up again after a restart, and is excluded from
 `AUDIT_SPOOL_MAX_BYTES`; see [monitoring](MONITORING.md#audit-delivery).
 A file that cannot be read (an I/O error, no free file descriptor, a permission
 problem) is not quarantined: it stays pending and is retried with a delay that
-doubles from 1 second up to 5 minutes, until it can be read. Backend delivery
+doubles from 1 second up to 5 minutes, until it can be read. A pending file
+that was deleted from the directory is not retried: its record is lost, it is
+reported once (an error log line and `herald_audit_spool_missing_total`) and it
+stops counting towards `AUDIT_SPOOL_MAX_BYTES`. Backend delivery
 failures are not quarantined either: those records are retried until the
 backend accepts them.
 

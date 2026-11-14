@@ -118,8 +118,8 @@ func InitWithError(redisClient *redis.Client) error {
 }
 
 // journalFailureReporter returns the callback the journal reports to. A
-// quarantined entry is a lost audit record, not a retry, so it has its own
-// counter and message.
+// quarantined entry and an entry whose file is gone are lost audit records,
+// not retries, so each has its own counter and message.
 func journalFailureReporter(log *logger.Logger) func(error) {
 	return func(err error) {
 		var quarantined *QuarantinedError
@@ -128,6 +128,15 @@ func journalFailureReporter(log *logger.Logger) func(error) {
 			if log != nil {
 				log.Error().Err(quarantined.Err).Str("file", quarantined.Name).Str("spool_dir", config.AuditSpoolDir).
 					Msg("audit spool entry could not be decoded and was quarantined; it will not be delivered or retried")
+			}
+			return
+		}
+		var missing *MissingError
+		if errors.As(err, &missing) {
+			metrics.RecordAuditSpoolMissing()
+			if log != nil {
+				log.Error().Err(missing.Err).Str("file", missing.Name).Str("spool_dir", config.AuditSpoolDir).
+					Msg("audit spool entry no longer exists on disk and was dropped; it was not delivered and is not retried")
 			}
 			return
 		}
