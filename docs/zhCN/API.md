@@ -205,7 +205,7 @@ Go SDK 新增 `CreateChallengeWithMetadata`，返回原响应、`CreateChallenge
 - `rate_limit_exceeded`：超过速率限制
 - `resend_cooldown`：重发冷却期未过期
 - `user_locked`：用户暂时被锁定：在 `LOCKOUT_DURATION` 内耗尽了 `LOCKOUT_CHALLENGE_THRESHOLD` 个挑战，或在 `LOCKOUT_FAILED_ATTEMPT_WINDOW` 内提交了 `LOCKOUT_FAILED_ATTEMPT_THRESHOLD` 次错误验证码。单个挑战耗尽只返回 `locked`
-- `send_failed`：通过提供者发送验证码失败
+- `send_failed`：通过提供者发送验证码失败。该请求的配额仍视为已消耗。立即重试会得到 `429/resend_cooldown`，除非此次失败能够证明没有任何消息被接受；见[速率限制](#速率限制)
 - `channel_not_configured`：请求的通道没有配置提供者，且 `PROVIDER_FAILURE_POLICY=strict`。请求在幂等占位、限流和冷却之前被拒绝，不消耗任何配额；在运维人员配置提供者之前，重试没有意义
 - `internal_error`：内部服务器错误
 
@@ -463,7 +463,9 @@ Herald 实现多维速率限制：
 作为一个原子步骤执行。其中任何一项拒绝请求时，所有计数都不会增加，也不会启动冷却；
 响应报告拒绝请求的那一项（限制返回 `rate_limit_exceeded`，冷却返回 `resend_cooldown`；
 用户、IP 和目标限制按此顺序优先）。通过此步骤的请求即使随后渠道发送失败，其配额仍视为
-已消耗。
+已消耗。该步骤启动的冷却只在响应为 `500/send_failed`、且此次失败能够证明没有任何提供者
+接受该消息（例如无法连接到提供者）时才会释放；其他发送失败之后冷却保持不变。见
+[没有 provider 的通道](DEPLOYMENT.md#没有-provider-的通道)。
 
 ## 错误代码
 
@@ -502,7 +504,7 @@ HMAC/API Key 失败会返回 JSON `reason`：
 - `hash_capacity_exceeded`（503，`Retry-After: 1`）：本实例的全部哈希槽位（`HERALD_MAX_CONCURRENT_HASH_OPERATIONS`）均被占用。未消耗任何配额或尝试次数，可稍后重试。它表示本实例负载过高，不是后端故障。
 
 ### 挑战错误
-- `expired`：挑战已过期
+- `expired`：挑战已过期、已被使用或不存在
 - `invalid`：无效的验证码
 - `locked`：由于尝试次数过多，挑战被锁定
 - `verification_failed`：一般验证失败

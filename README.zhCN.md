@@ -100,8 +100,10 @@ SMTP 提供者工作正常时，验证码会被发送，响应为：
 
 通道没有配置提供者，或 SMTP 服务器拒绝该邮件时，验证码不会发送，响应是包含
 `"ok": false` 和 `reason` 的错误。Compose 使用 strict 提供者失败策略，因此发送失败不会被
-报告为成功。发送失败仍会启动重发冷却（默认 60 秒），立即重复请求会得到
-`429/resend_cooldown`。Herald 日志中的 `Failed to send verification code via provider`
+报告为成功。如果失败表明不可能有任何邮件被接受（SMTP 主机无法解析、端口无人监听、证书
+不受信任、凭据被拒绝），可以立即重复请求。其他发送失败（超时、连接中断、服务器拒绝了某条
+命令）之后，重发冷却（默认 60 秒）保持不变，重复请求会得到 `429/resend_cooldown`。
+Herald 日志中的 `Failed to send verification code via provider`
 一行带有 `failure_category`，说明 SMTP 投递停在哪一步（见
 [故障排查](docs/zhCN/TROUBLESHOOTING.md#提供者发送失败)）。短信、DingTalk 和 HTTP 邮件插件的配置见
 [部署指南](docs/zhCN/DEPLOYMENT.md#配置)。
