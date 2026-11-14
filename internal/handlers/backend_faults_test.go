@@ -58,6 +58,7 @@ func TestCreateChallengeRateLimitFailures(t *testing.T) {
 			rc := testRedisClient(t)
 			defer func() { _ = rc.Close() }()
 			h := newIdemHandlers(t, rc)
+			registerEmailTestProvider(t, h)
 			if tc.prefix != "" {
 				rc.AddHook(&rejectRateKey{prefix: tc.prefix})
 			}

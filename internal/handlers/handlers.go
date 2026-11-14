@@ -157,6 +157,8 @@ func NewHandlersWithError(redisClient *redis.Client, log *logger.Logger) (*Handl
 		log.Info().Msg("DingTalk HTTP provider registered (herald-dingtalk)")
 	}
 
+	logProviderCoverage(registry, log)
+
 	// Create test code cache for test mode
 	testCodeCache := rediskitcache.NewCache(redisClient, "otp:test:code:")
 
@@ -259,6 +261,13 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 	)
 
 	if valid, err := h.validateCreateRequest(c, &req); !valid {
+		return err
+	}
+
+	// Refuse a channel that cannot deliver before anything is spent on it: no
+	// idempotency claim, hash, quota or cooldown. Without this the request
+	// would pass admission and only then fail in the provider registry.
+	if handled, err := h.refuseUnconfiguredChannel(c, req); handled {
 		return err
 	}
 

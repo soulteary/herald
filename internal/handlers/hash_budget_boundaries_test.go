@@ -72,6 +72,7 @@ func TestHashBudgetSharesRoutesWithoutConsumingRejectedRequests(t *testing.T) {
 	rc := testRedisClient(t)
 	t.Cleanup(func() { _ = rc.Close() })
 	h := newIdemHandlers(t, rc)
+	registerEmailTestProvider(t, h)
 	budget, err := newHashBudget(1)
 	require.NoError(t, err)
 	h.hashBudget = budget
@@ -150,6 +151,7 @@ func TestHashBudgetReleasedBeforeProviderDelivery(t *testing.T) {
 	rc := testRedisClient(t)
 	t.Cleanup(func() { _ = rc.Close() })
 	h := newIdemHandlers(t, rc)
+	registerEmailTestProvider(t, h)
 	budget, err := newHashBudget(1)
 	require.NoError(t, err)
 	h.hashBudget = budget
