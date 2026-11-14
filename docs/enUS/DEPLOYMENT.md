@@ -231,6 +231,12 @@ them. A full hint queue does not discard records. Backend writes are retried
 from disk; graceful shutdown keeps pending files for replay on the next start.
 Queries show delivered backend records, not the local backlog.
 
+A pending file that cannot be read or decoded is tried 5 times and then renamed
+to `<id>.json.quarantined`. It stays in `AUDIT_SPOOL_DIR`, is not retried or
+picked up again after a restart, and is excluded from `AUDIT_SPOOL_MAX_BYTES`;
+see [monitoring](MONITORING.md#audit-delivery). Backend delivery failures are
+not quarantined: those records are retried until the backend accepts them.
+
 Mount `AUDIT_SPOOL_DIR` on persistent local storage, owned by UID/GID 10001 for
 the container and preferably mode 0700. The checked-in Compose file mounts the
 `audit_spool` volume there, including when the root filesystem is read-only.

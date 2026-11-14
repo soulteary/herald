@@ -2,6 +2,7 @@ package auditlog
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -96,16 +97,15 @@ func InitWithError(redisClient *redis.Client) error {
 		}
 
 		if cfg.Enabled {
-			journal, err := newJournalStorage(storage, config.AuditSpoolDir, int64(config.AuditSpoolMaxBytes), config.AuditWriterQueueSize, config.AuditWriterWorkers, func(err error) {
-				metrics.RecordAuditWriteFailure()
-				if currentLog != nil {
-					currentLog.Error().Err(err).Msg("audit delivery or cleanup failed; undelivered records remain in spool")
-				}
-			})
+			journal, err := newJournalStorage(storage, config.AuditSpoolDir, int64(config.AuditSpoolMaxBytes), config.AuditWriterQueueSize, config.AuditWriterWorkers, journalFailureReporter(currentLog))
 			if err != nil {
 				_ = storage.Close()
 				auditInitErr = fmt.Errorf("initialize audit spool: %w", err)
 				return
+			}
+			if n := journal.QuarantinedAtStart(); n > 0 && currentLog != nil {
+				currentLog.Warn().Int("quarantined_files", n).Str("spool_dir", config.AuditSpoolDir).
+					Msg("audit spool holds quarantined records that were never delivered; inspect the *" + quarantineSuffix + " files")
 			}
 			storage = journal
 		}
@@ -115,6 +115,27 @@ func InitWithError(redisClient *redis.Client) error {
 		auditLogger = audit.NewLogger(storage, cfg)
 	})
 	return auditInitErr
+}
+
+// journalFailureReporter returns the callback the journal reports to. A
+// quarantined entry is a lost audit record, not a retry, so it has its own
+// counter and message.
+func journalFailureReporter(log *logger.Logger) func(error) {
+	return func(err error) {
+		var quarantined *QuarantinedError
+		if errors.As(err, &quarantined) {
+			metrics.RecordAuditQuarantined()
+			if log != nil {
+				log.Error().Err(quarantined.Err).Str("file", quarantined.Name).Str("spool_dir", config.AuditSpoolDir).
+					Msg("audit spool entry could not be read or decoded and was quarantined; it will not be delivered or retried")
+			}
+			return
+		}
+		metrics.RecordAuditWriteFailure()
+		if log != nil {
+			log.Error().Err(err).Msg("audit delivery or cleanup failed; undelivered records remain in spool")
+		}
+	}
 }
 
 // GetLogger returns the audit logger instance

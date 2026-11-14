@@ -20,6 +20,7 @@ func TestSecurityAndAuditCountersRecordOneEvent(t *testing.T) {
 		{"state", func() { RecordChallengeState("revoked") }, func() float64 { return counterValue(t, challengeStateTotal.WithLabelValues("revoked")) }},
 		{"audit rejected", RecordAuditDropped, func() float64 { return counterValue(t, auditDroppedTotal) }},
 		{"audit retry", RecordAuditWriteFailure, func() float64 { return counterValue(t, auditWriteFailureTotal) }},
+		{"audit quarantine", RecordAuditQuarantined, func() float64 { return counterValue(t, auditQuarantinedTotal) }},
 		{"audit post-action", func() { RecordAuditPostActionFailure("verify") }, func() float64 {
 			return counterValue(t, auditPostActionFailure.WithLabelValues("verify"))
 		}},

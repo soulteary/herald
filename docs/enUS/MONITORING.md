@@ -328,6 +328,15 @@ post-action failures described below; it no longer counts
 recoverable backend delivery failures. Verify that retries drain the buffer
 after storage recovery. Never delete pending files to silence an alert.
 
+Alert on any increase of `herald_audit_quarantined_total`. It counts pending
+files that could not be read or decoded after 5 attempts, for example a file
+truncated by disk corruption. Such a record cannot be delivered. Herald renames
+it from `<id>.json` to `<id>.json.quarantined` in `AUDIT_SPOOL_DIR`, logs an
+error naming the file, and stops retrying it; the file no longer counts towards
+`AUDIT_SPOOL_MAX_BYTES`. The counter restarts at zero with the process, so a
+startup warning also reports how many quarantined files the directory holds.
+Inspect and archive these files; they are the only copy of those audit events.
+
 Alert on `herald_audit_post_action_failure_total{operation}` (`create`,
 `verify`, `revoke`): a result record could not be accepted after the message
 was sent, the code was consumed or the revoke completed. The request was

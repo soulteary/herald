@@ -30,6 +30,7 @@ var (
 	challengeStateTotal    *prometheus.CounterVec // label: state
 	auditDroppedTotal      prometheus.Counter
 	auditWriteFailureTotal prometheus.Counter
+	auditQuarantinedTotal  prometheus.Counter
 	auditPostActionFailure *prometheus.CounterVec // label: operation
 )
 
@@ -59,6 +60,8 @@ func Init() {
 	auditDroppedTotal = Registry.Counter("audit_dropped_total").
 		Help("Audit records rejected before durable acceptance").Build()
 	auditWriteFailureTotal = Registry.Counter("audit_write_failure_total").Help("Audit delivery or cleanup failures; undelivered records retained for retry").Build()
+	auditQuarantinedTotal = Registry.Counter("audit_quarantined_total").
+		Help("Audit spool entries set aside because they could not be read or decoded; never delivered").Build()
 	auditPostActionFailure = Registry.Counter("audit_post_action_failure_total").
 		Help("Audit records lost after the action had completed; the request still succeeded").Labels("operation").BuildVec()
 }
@@ -112,6 +115,14 @@ func RecordAuditDropped() {
 func RecordAuditWriteFailure() {
 	if auditWriteFailureTotal != nil {
 		auditWriteFailureTotal.Inc()
+	}
+}
+
+// RecordAuditQuarantined records a spool entry that was set aside because it
+// could not be read or decoded.
+func RecordAuditQuarantined() {
+	if auditQuarantinedTotal != nil {
+		auditQuarantinedTotal.Inc()
 	}
 }
 
