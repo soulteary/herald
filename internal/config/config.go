@@ -308,6 +308,10 @@ func Initialize(l *logger.Logger) error {
 		log.Warn().Str("request_auth_mode", string(authMode)).Msg(msg)
 	}
 
+	for _, advisory := range startupAdvisories() {
+		log.Warn().Str("check", advisory.check).Msg(advisory.message)
+	}
+
 	// Handle TLS_CA_CERT_FILE alias
 	if TLSCACertFile == "" && TLSClientCAFile != "" {
 		TLSCACertFile = TLSClientCAFile
