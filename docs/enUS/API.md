@@ -297,6 +297,7 @@ binding; prefer `POST /v2/otp/verifications`. When the server sets
 Possible error codes:
 - `invalid_request`: Request body parsing failed
 - `challenge_id_required`: Missing required field `challenge_id`
+- `invalid_challenge_id`: `challenge_id` is longer than 64 bytes or contains a character other than `A-Z`, `a-z`, `0-9`, `-` and `_`. IDs returned by challenge creation (`ch_` and 22 such characters) always pass
 - `code_required`: Missing required field `code`
 - `invalid_code_format`: Verification code format is invalid
 - `expired`: Challenge has expired, was already used or does not exist
@@ -350,6 +351,10 @@ Compatibility: v2 no longer accepts unbound or partially bound requests. Update
 existing v2 callers to supply all three fields. The v1 verification endpoint
 retains its existing behavior and does not require expected context fields.
 
+A `challenge_id` that is not a possible challenge ID returns
+`400/invalid_challenge_id` on both verification routes and on revoke, before
+it is used as a Redis key, written to the audit log or attached to a span.
+
 ### Revoke Challenge
 
 **POST /v1/otp/challenges/{id}/revoke**
@@ -375,6 +380,7 @@ Revoke a challenge (optional).
 
 Possible error codes:
 - `challenge_id_required`: Missing challenge ID in URL parameter
+- `invalid_challenge_id`: The challenge ID in the URL is longer than 64 bytes or contains a character other than `A-Z`, `a-z`, `0-9`, `-` and `_`. IDs returned by challenge creation (`ch_` and 22 such characters) always pass
 - `internal_error`: Internal server error
 
 HTTP Status Codes:
@@ -502,6 +508,7 @@ This section lists all possible error codes returned by the API.
 - `invalid_purpose`: Invalid purpose value (must be one of the allowed purposes)
 - `destination_required`: Missing required field `destination`
 - `challenge_id_required`: Missing required field `challenge_id`
+- `invalid_challenge_id`: `challenge_id` is longer than 64 bytes or contains a character other than `A-Z`, `a-z`, `0-9`, `-` and `_`. IDs returned by challenge creation (`ch_` and 22 such characters) always pass
 - `code_required`: Missing required field `code`
 - `invalid_code_format`: Verification code format is invalid
 
