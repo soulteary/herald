@@ -127,7 +127,7 @@ func journalFailureReporter(log *logger.Logger) func(error) {
 			metrics.RecordAuditQuarantined()
 			if log != nil {
 				log.Error().Err(quarantined.Err).Str("file", quarantined.Name).Str("spool_dir", config.AuditSpoolDir).
-					Msg("audit spool entry could not be read or decoded and was quarantined; it will not be delivered or retried")
+					Msg("audit spool entry could not be decoded and was quarantined; it will not be delivered or retried")
 			}
 			return
 		}
