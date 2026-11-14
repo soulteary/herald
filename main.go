@@ -275,7 +275,8 @@ func runWithContext(parent context.Context) error {
 // initTracing sets up span export for OTLP_ENABLED=true. It reports whether
 // an exporter was installed. "OpenTelemetry tracing initialized" is logged
 // only in that case: with an empty or unusable OTLP_ENDPOINT no span leaves
-// the process, and the log must not say otherwise.
+// the process, and the log must not say otherwise. An empty endpoint is
+// reported once, by the startup advisory in internal/config.
 func initTracing(log *logger.Logger) bool {
 	if strings.TrimSpace(config.OTLPEndpoint) == "" {
 		// Install the provider that records nothing, as before, so shutdown
@@ -283,7 +284,8 @@ func initTracing(log *logger.Logger) bool {
 		if _, err := otlp.InitTracer(config.ServiceName, version.Version, ""); err != nil {
 			log.Warn().Err(err).Msg("Failed to initialize OpenTelemetry tracing")
 		}
-		log.Info().Msg("OTLP_ENDPOINT is empty: no trace exporter is configured and no spans are exported")
+		// Nothing is logged here: config.Initialize has already warned
+		// about this case (check "config.otlp").
 		return false
 	}
 	endpoint, err := heraldtracing.ParseEndpoint(config.OTLPEndpoint)
