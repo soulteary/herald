@@ -420,6 +420,7 @@ For production deployments, it is **strongly recommended** to use a dedicated Re
 - `otp:idem2:*` - Idempotency records (pending/completed: `IDEMPOTENCY_KEY_TTL`; unresolved sending: `IDEMPOTENCY_UNRESOLVED_TTL`)
 - `otp:lock:v2:<digest>` - User lockout records (TTL: lockout duration). The digest is derived from the user ID with `HERALD_PII_PEPPER`
 - `otp:lock:exhausted:<digest>` - Exhausted challenges counted towards a lockout (TTL: lockout duration from the first one)
+- `otp:lock:failed:<digest>` - Wrong codes counted towards a lockout across challenges (TTL: `LOCKOUT_FAILED_ATTEMPT_WINDOW` from the first one)
 
 **Unresolved sends:**
 

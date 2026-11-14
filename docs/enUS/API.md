@@ -549,7 +549,7 @@ HMAC/API-key failures use a JSON `reason` value:
 - `hash_capacity_exceeded` (503, `Retry-After: 1`): Every hash slot of this instance (`HERALD_MAX_CONCURRENT_HASH_OPERATIONS`) is in use. Nothing was consumed; retry shortly. It indicates load on this instance, not a backend failure.
 
 ### Challenge Errors
-- `expired`: Challenge has expired
+- `expired`: Challenge has expired, was already used or does not exist
 - `invalid`: Invalid verification code
 - `locked`: Challenge locked due to too many attempts
 - `verification_failed`: General verification failure

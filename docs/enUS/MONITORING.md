@@ -389,7 +389,7 @@ See [security](SECURITY.md#provider-failure-diagnostics) for compatibility detai
 - `herald_redis_operations_total{operation,result}` uses `success` or `failure`; the duration histogram's count includes both outcomes and is not an error counter.
 
 There is no separate hash-budget occupancy metric. Observe overload through
-`503/backend_unavailable`, retry headers, runtime memory and request outcomes.
+`503/hash_capacity_exceeded`, retry headers, runtime memory and request outcomes.
 Do not add raw service/key IDs, destinations or client keys as metric labels.
 
 ### Metrics authentication
