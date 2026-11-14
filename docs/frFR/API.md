@@ -112,6 +112,7 @@ Codes de Statut HTTP :
 - `401 Unauthorized` : Échec de l'authentification
 - `403 Forbidden` : Utilisateur verrouillé
 - `429 Too Many Requests` : Limite de débit dépassée
+- `503 Service Unavailable` : `channel_not_configured`
 - `500 Internal Server Error` : Erreur interne du serveur
 
 ### Vérifier un Défi
@@ -158,13 +159,13 @@ Codes d'erreur possibles :
 - `invalid` : Code de vérification invalide
 - `locked` : Défi verrouillé en raison de trop de tentatives
 - `verification_failed` : Échec général de la vérification
-- `internal_error` : Erreur interne du serveur
 
 Codes de Statut HTTP :
 - `400 Bad Request` : Paramètres de requête invalides
-- `401 Unauthorized` : Échec de la vérification
-- `403 Forbidden` : Utilisateur verrouillé
-- `500 Internal Server Error` : Erreur interne du serveur
+- `401 Unauthorized` : Échec de la vérification (`expired`, `invalid`, `locked`, `user_locked`, `not_active`, `verification_failed`)
+- `409 Conflict` : `lock_contention` (`Retry-After: 1`)
+- `415 Unsupported Media Type` : `unsupported_media_type`
+- `503 Service Unavailable` : `backend_unavailable` (`Retry-After: 1`), `audit_unavailable`
 
 ### Révoquer un Défi
 

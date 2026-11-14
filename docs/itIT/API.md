@@ -112,6 +112,7 @@ Codici di Stato HTTP :
 - `401 Unauthorized` : Autenticazione fallita
 - `403 Forbidden` : Utente bloccato
 - `429 Too Many Requests` : Limite di velocità superato
+- `503 Service Unavailable` : `channel_not_configured`
 - `500 Internal Server Error` : Errore interno del server
 
 ### Verificare una Sfida
@@ -158,13 +159,13 @@ Codici di errore possibili :
 - `invalid` : Codice di verifica non valido
 - `locked` : Sfida bloccata a causa di troppi tentativi
 - `verification_failed` : Fallimento generale della verifica
-- `internal_error` : Errore interno del server
 
 Codici di Stato HTTP :
 - `400 Bad Request` : Parametri della richiesta non validi
-- `401 Unauthorized` : Verifica fallita
-- `403 Forbidden` : Utente bloccato
-- `500 Internal Server Error` : Errore interno del server
+- `401 Unauthorized` : Verifica fallita (`expired`, `invalid`, `locked`, `user_locked`, `not_active`, `verification_failed`)
+- `409 Conflict` : `lock_contention` (`Retry-After: 1`)
+- `415 Unsupported Media Type` : `unsupported_media_type`
+- `503 Service Unavailable` : `backend_unavailable` (`Retry-After: 1`), `audit_unavailable`
 
 ### Revocare una Sfida
 

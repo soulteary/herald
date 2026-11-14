@@ -112,6 +112,7 @@ HTTP-Statuscodes :
 - `401 Unauthorized` : Authentifizierung fehlgeschlagen
 - `403 Forbidden` : Benutzer gesperrt
 - `429 Too Many Requests` : Rate-Limit überschritten
+- `503 Service Unavailable` : `channel_not_configured`
 - `500 Internal Server Error` : Interner Serverfehler
 
 ### Challenge Verifizieren
@@ -158,13 +159,13 @@ Mögliche Fehlercodes :
 - `invalid` : Ungültiger Verifizierungscode
 - `locked` : Challenge aufgrund zu vieler Versuche gesperrt
 - `verification_failed` : Allgemeiner Verifizierungsfehler
-- `internal_error` : Interner Serverfehler
 
 HTTP-Statuscodes :
 - `400 Bad Request` : Ungültige Anfrageparameter
-- `401 Unauthorized` : Verifizierung fehlgeschlagen
-- `403 Forbidden` : Benutzer gesperrt
-- `500 Internal Server Error` : Interner Serverfehler
+- `401 Unauthorized` : Verifizierung fehlgeschlagen (`expired`, `invalid`, `locked`, `user_locked`, `not_active`, `verification_failed`)
+- `409 Conflict` : `lock_contention` (`Retry-After: 1`)
+- `415 Unsupported Media Type` : `unsupported_media_type`
+- `503 Service Unavailable` : `backend_unavailable` (`Retry-After: 1`), `audit_unavailable`
 
 ### Challenge Widerrufen
 

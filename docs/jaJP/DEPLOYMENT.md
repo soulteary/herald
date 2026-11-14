@@ -48,6 +48,8 @@ go build -o herald main.go
 | `RATE_LIMIT_PER_IP` | IP あたり/分のレート制限 | `5` | いいえ |
 | `RATE_LIMIT_PER_DESTINATION` | 宛先あたり/時間のレート制限 | `10` | いいえ |
 | `LOCKOUT_DURATION` | 最大試行回数後のユーザーロックアウト期間 | `10m` | いいえ |
+| `LOCKOUT_FAILED_ATTEMPT_THRESHOLD` | `LOCKOUT_FAILED_ATTEMPT_WINDOW` 内に誤ったコードがこの回数に達すると、ユーザーを `LOCKOUT_DURATION` の間ロックします。`0` でこのカウントを無効化 | `15` | いいえ |
+| `LOCKOUT_FAILED_ATTEMPT_WINDOW` | `LOCKOUT_FAILED_ATTEMPT_THRESHOLD` の集計期間（最初の誤ったコードから起算） | `1h` | いいえ |
 | `SERVICE_NAME` | HMAC 認証用のサービス識別子 | `herald` | いいえ |
 | `SMTP_HOST` | SMTP サーバーホスト | `` | 電子メール用（組み込み） |
 | `SMTP_PORT` | SMTP サーバーポート | `587` | 電子メール用 |
@@ -57,12 +59,12 @@ go build -o herald main.go
 | `SMS_PROVIDER` | SMS プロバイダー（ログ用など） | `` | SMS 用 |
 | `SMS_API_BASE_URL` | SMS HTTP API ベース URL | `` | SMS（HTTP API）用 |
 | `SMS_API_KEY` | SMS API キー | `` | SMS 用（オプション） |
-| `HERALD_DINGTALK_API_URL` | [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) のベース URL（例：`http://herald-dingtalk:8083`） | `` | DingTalk チャネル用 |
+| `HERALD_DINGTALK_API_URL` | [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) のベース URL（例：`https://herald-dingtalk.internal:8083`） | `` | DingTalk チャネル用 |
 | `HERALD_DINGTALK_API_KEY` | オプションの API キー；herald-dingtalk の `API_KEY` と一致させる必要あり（設定時） | `` | なし |
-| `HERALD_SMTP_API_URL` | [herald-smtp](https://github.com/soulteary/herald-smtp) のベース URL（例：`http://herald-smtp:8084`）；設定時は組み込み SMTP は使用されない | `` | 電子メールチャネル用（オプション） |
+| `HERALD_SMTP_API_URL` | [herald-smtp](https://github.com/soulteary/herald-smtp) のベース URL（例：`https://herald-smtp.internal:8084`）；設定時は組み込み SMTP は使用されない | `` | 電子メールチャネル用（オプション） |
 | `HERALD_SMTP_API_KEY` | オプションの API キー；herald-smtp の `API_KEY` と一致させる必要あり（設定時） | `` | なし |
 | `HERALD_TOTP_ENABLED` | TOTP プロキシを有効化 | `false` | いいえ |
-| `HERALD_TOTP_BASE_URL` | [herald-totp](https://github.com/soulteary/herald-totp) のベース URL（例：`http://herald-totp:8085`） | `` | TOTP 有効時 |
+| `HERALD_TOTP_BASE_URL` | [herald-totp](https://github.com/soulteary/herald-totp) のベース URL（例：`https://herald-totp.internal:8085`） | `` | TOTP 有効時 |
 | `HERALD_TOTP_API_KEY` | Herald→herald-totp 用 API キー（オプション） | `` | いいえ |
 | `HERALD_TOTP_HMAC_SECRET` | Herald→herald-totp 用 HMAC シークレット（オプション） | `` | いいえ |
 | `HERALD_TEST_MODE` | `true` の場合：Redis/レスポンスに debug 用コード。**テスト専用；本番では必ず `false`。** | `false` | いいえ |

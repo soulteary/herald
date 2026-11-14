@@ -48,6 +48,8 @@ go build -o herald main.go
 | `RATE_LIMIT_PER_IP` | IP당/분 속도 제한 | `5` | 아니오 |
 | `RATE_LIMIT_PER_DESTINATION` | 대상당/시간 속도 제한 | `10` | 아니오 |
 | `LOCKOUT_DURATION` | 최대 시도 횟수 후 사용자 잠금 기간 | `10m` | 아니오 |
+| `LOCKOUT_FAILED_ATTEMPT_THRESHOLD` | `LOCKOUT_FAILED_ATTEMPT_WINDOW` 내에 잘못된 코드가 이 횟수에 도달하면 사용자를 `LOCKOUT_DURATION` 동안 잠급니다. `0`은 이 카운트를 비활성화 | `15` | 아니오 |
+| `LOCKOUT_FAILED_ATTEMPT_WINDOW` | `LOCKOUT_FAILED_ATTEMPT_THRESHOLD`의 집계 기간(첫 번째 잘못된 코드부터 계산) | `1h` | 아니오 |
 | `SERVICE_NAME` | HMAC 인증용 서비스 식별자 | `herald` | 아니오 |
 | `SMTP_HOST` | SMTP 서버 호스트 | `` | 이메일용(내장) |
 | `SMTP_PORT` | SMTP 서버 포트 | `587` | 이메일용 |
@@ -57,12 +59,12 @@ go build -o herald main.go
 | `SMS_PROVIDER` | SMS 제공자(로그 등) | `` | SMS용 |
 | `SMS_API_BASE_URL` | SMS HTTP API 기본 URL | `` | SMS(HTTP API)용 |
 | `SMS_API_KEY` | SMS API 키 | `` | SMS용(선택) |
-| `HERALD_DINGTALK_API_URL` | [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) 기본 URL (예: `http://herald-dingtalk:8083`) | `` | DingTalk 채널용 |
+| `HERALD_DINGTALK_API_URL` | [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) 기본 URL (예: `https://herald-dingtalk.internal:8083`) | `` | DingTalk 채널용 |
 | `HERALD_DINGTALK_API_KEY` | 선택적 API 키; herald-dingtalk의 `API_KEY`와 일치해야 함 (설정 시) | `` | 아니오 |
-| `HERALD_SMTP_API_URL` | [herald-smtp](https://github.com/soulteary/herald-smtp) 기본 URL (예: `http://herald-smtp:8084`); 설정 시 내장 SMTP 미사용 | `` | 이메일 채널용 (선택) |
+| `HERALD_SMTP_API_URL` | [herald-smtp](https://github.com/soulteary/herald-smtp) 기본 URL (예: `https://herald-smtp.internal:8084`); 설정 시 내장 SMTP 미사용 | `` | 이메일 채널용 (선택) |
 | `HERALD_SMTP_API_KEY` | 선택적 API 키; herald-smtp의 `API_KEY`와 일치해야 함 (설정 시) | `` | 아니오 |
 | `HERALD_TOTP_ENABLED` | TOTP 프록시 활성화 | `false` | 아니오 |
-| `HERALD_TOTP_BASE_URL` | [herald-totp](https://github.com/soulteary/herald-totp) 기본 URL (예: `http://herald-totp:8085`) | `` | TOTP 사용 시 |
+| `HERALD_TOTP_BASE_URL` | [herald-totp](https://github.com/soulteary/herald-totp) 기본 URL (예: `https://herald-totp.internal:8085`) | `` | TOTP 사용 시 |
 | `HERALD_TOTP_API_KEY` | Herald→herald-totp API 키 (선택) | `` | 아니오 |
 | `HERALD_TOTP_HMAC_SECRET` | Herald→herald-totp HMAC 시크릿 (선택) | `` | 아니오 |
 | `HERALD_TEST_MODE` | `true`일 때 Redis/응답에 디버그 코드. **테스트 전용; 프로덕션에서는 반드시 `false`.** | `false` | 아니오 |
