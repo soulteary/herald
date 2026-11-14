@@ -56,7 +56,7 @@ func TestVerificationBackendFailures(t *testing.T) {
 					req = httptest.NewRequest("POST", "/verify", bytes.NewBufferString(`{"challenge_id":"id","code":"123456","client_ip":"203.0.113.5"}`))
 				}
 				req.Header.Set("Content-Type", "application/json")
-				resp, err := app.Test(req)
+				resp, err := app.Test(req, requestAllowance)
 				if err != nil {
 					t.Fatal(err)
 				}

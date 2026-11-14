@@ -82,7 +82,7 @@ func (f *userLockFixture) post(t *testing.T, path string, body any) (int, map[st
 	require.NoError(t, err)
 	req := httptest.NewRequest("POST", path, bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := f.app.Test(req, fiber.TestConfig{Timeout: 30 * time.Second})
+	resp, err := f.app.Test(req, requestAllowance)
 	require.NoError(t, err)
 	raw, _ := io.ReadAll(resp.Body)
 	var decoded map[string]any

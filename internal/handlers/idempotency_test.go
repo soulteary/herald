@@ -91,7 +91,7 @@ func idemRequest(app *fiber.App, key, body string) (*fiberTestResp, error) {
 	if key != "" {
 		req.Header.Set("Idempotency-Key", key)
 	}
-	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +182,7 @@ func TestIdempotency_DifferentPrincipalsIsolated(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Idempotency-Key", "shared-key")
 		req.Header.Set("X-Service", service)
-		resp, _ := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
+		resp, _ := app.Test(req, requestAllowance)
 		b, _ := io.ReadAll(resp.Body)
 		return &fiberTestResp{status: resp.StatusCode, body: b}
 	}

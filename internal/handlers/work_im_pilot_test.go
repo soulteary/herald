@@ -103,7 +103,7 @@ func TestWorkIMPilotServeLocalBridge(t *testing.T) {
 			once.Do(func() { close(stop) })
 			return
 		}
-		resp, err := app.Test(r, fiber.TestConfig{Timeout: 5 * time.Second})
+		resp, err := app.Test(r, requestAllowance)
 		if err != nil {
 			http.Error(w, "fixture failure", 500)
 			return

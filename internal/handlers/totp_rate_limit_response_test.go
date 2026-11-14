@@ -31,7 +31,7 @@ func TestTOTPConfirmPreservesBoundedUpstreamRateLimit(t *testing.T) {
 			app := newTOTPSecurityApp(t, upstream.URL, 256)
 			request := httptest.NewRequest(http.MethodPost, "/enroll/confirm", strings.NewReader(`{"enroll_id":"synthetic-enrollment","code":"123456"}`))
 			request.Header.Set("Content-Type", "application/json")
-			response, err := app.Test(request)
+			response, err := app.Test(request, requestAllowance)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -50,7 +50,7 @@ func TestTOTPConfirmPreservesBoundedUpstreamRateLimit(t *testing.T) {
 			if scenario == "complete" {
 				bridge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					r.URL.Path = "/enroll/confirm"
-					proxied, err := app.Test(r)
+					proxied, err := app.Test(r, requestAllowance)
 					if err != nil {
 						t.Error(err)
 						w.WriteHeader(500)

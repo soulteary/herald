@@ -33,7 +33,7 @@ func TestStrictBody_RejectsWrongContentType(t *testing.T) {
 	app := newCreateApp(t)
 	req := httptest.NewRequest("POST", "/v1/otp/challenges", bytes.NewBufferString(`{"user_id":"u","channel":"email","destination":"a@b.com","purpose":"login"}`))
 	req.Header.Set("Content-Type", "text/plain")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestStrictBody_RejectsUnknownField(t *testing.T) {
 	app := newCreateApp(t)
 	req := httptest.NewRequest("POST", "/v1/otp/challenges", bytes.NewBufferString(`{"user_id":"u","channel":"email","destination":"a@b.com","purpose":"login","evil":"x"}`))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestStrictBody_RejectsTrailingData(t *testing.T) {
 	app := newCreateApp(t)
 	req := httptest.NewRequest("POST", "/v1/otp/challenges", bytes.NewBufferString(`{"user_id":"u","channel":"email","destination":"a@b.com","purpose":"login"}{}`))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestStrictBody_AcceptsCharsetParam(t *testing.T) {
 	app := newCreateApp(t)
 	req := httptest.NewRequest("POST", "/v1/otp/challenges", bytes.NewBufferString(`{"user_id":"u","channel":"email","destination":"a@b.com","purpose":"login"}`))
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}

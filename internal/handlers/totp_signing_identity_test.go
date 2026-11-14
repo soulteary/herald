@@ -58,7 +58,7 @@ func TestTOTPProxyConfiguredSigningIdentity(t *testing.T) {
 			}))
 			defer upstream.Close()
 			app := newTOTPSecurityApp(t, upstream.URL, 1024)
-			response, err := app.Test(httptest.NewRequest(http.MethodGet, "/status?subject=user", nil))
+			response, err := app.Test(httptest.NewRequest(http.MethodGet, "/status?subject=user", nil), requestAllowance)
 			if err != nil {
 				t.Fatal(err)
 			}

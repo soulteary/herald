@@ -27,7 +27,7 @@ func TestChallengeRateLimitResponse(t *testing.T) {
 				_, err := challengeRateLimitResponse(c, "resend_cooldown", test.reset)
 				return err
 			})
-			response, err := app.Test(httptest.NewRequest("GET", "/", nil))
+			response, err := app.Test(httptest.NewRequest("GET", "/", nil), requestAllowance)
 			if err != nil {
 				t.Fatal(err)
 			}

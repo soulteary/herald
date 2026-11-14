@@ -177,7 +177,7 @@ func checkAuditVerificationAndRevoke(t *testing.T, app *fiber.App, h *Handlers, 
 		require.NoError(t, err)
 		req := httptest.NewRequest("POST", path, bytes.NewReader(payload))
 		req.Header.Set("Content-Type", "application/json")
-		r, err := app.Test(req)
+		r, err := app.Test(req, requestAllowance)
 		require.NoError(t, err)
 		_ = r.Body.Close()
 		want := 503

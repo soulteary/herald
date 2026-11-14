@@ -57,7 +57,7 @@ func TestSpansCarryUserDigestNotRawUserID(t *testing.T) {
 		t.Helper()
 		req := httptest.NewRequest("POST", path, bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
-		resp, err := app.Test(req)
+		resp, err := app.Test(req, requestAllowance)
 		require.NoError(t, err)
 		raw, _ := io.ReadAll(resp.Body)
 		require.Equal(t, fiber.StatusOK, resp.StatusCode, string(raw))

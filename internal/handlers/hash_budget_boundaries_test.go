@@ -60,7 +60,7 @@ func budgetVerifyRequest(t *testing.T, app *fiber.App, path, id, code string) (i
 	require.NoError(t, err)
 	req := httptest.NewRequest("POST", path, bytes.NewReader(data))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
+	resp, err := app.Test(req, requestAllowance)
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
 	payload, err := io.ReadAll(resp.Body)

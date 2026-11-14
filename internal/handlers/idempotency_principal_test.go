@@ -64,7 +64,7 @@ func TestIdempotencyPrincipalCannotAliasDifferentHMACKeys(t *testing.T) {
 			Method: http.MethodPost, Path: "/v1/otp/challenges", Timestamp: timestamp,
 			Nonce: nonce, Service: credential.service, KeyID: credential.keyID, Body: []byte(body),
 		}))
-		resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
+		resp, err := app.Test(req, requestAllowance)
 		require.NoError(t, err)
 		data, err := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
@@ -124,7 +124,7 @@ func TestIdempotencyPrincipalRetainsExistingOrdinaryRecords(t *testing.T) {
 			req.Header.Set(auth.HeaderService, "caller")
 			req.Header.Set(auth.HeaderKeyID, "key")
 			req.Header.Set("Idempotency-Key", key)
-			resp, err := app.Test(req)
+			resp, err := app.Test(req, requestAllowance)
 			require.NoError(t, err)
 			data, err := io.ReadAll(resp.Body)
 			_ = resp.Body.Close()
