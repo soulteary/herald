@@ -235,7 +235,7 @@ Possible error codes:
 - `rate_limit_exceeded`: Rate limit exceeded
 - `resend_cooldown`: Resend cooldown period not expired
 - `user_locked`: User is temporarily locked: `LOCKOUT_CHALLENGE_THRESHOLD` challenges were exhausted within `LOCKOUT_DURATION`, or `LOCKOUT_FAILED_ATTEMPT_THRESHOLD` wrong codes were submitted within `LOCKOUT_FAILED_ATTEMPT_WINDOW`. An exhausted challenge alone answers `locked`
-- `send_failed`: Failed to send verification code via provider
+- `send_failed`: Failed to send verification code via provider. The request's quota stays spent. An immediate retry is answered `429/resend_cooldown` unless the failure proved that nothing was accepted; see [Rate Limiting](#rate-limiting)
 - `channel_not_configured`: No provider is configured for the requested channel and `PROVIDER_FAILURE_POLICY=strict`. The request is refused before the idempotency claim, the limits and the cooldowns, so nothing is spent; retrying does not help until the operator configures a provider
 - `internal_error`: Internal server error
 
@@ -506,7 +506,11 @@ one atomic step. If any of them rejects the request, none of the counters is
 incremented and no cooldown starts; the response reports the gate that rejected
 it (`rate_limit_exceeded` for a limit, `resend_cooldown` for a cooldown; user,
 IP and destination limits take precedence in that order). A request that passes
-this step keeps its quota spent even if the provider then fails.
+this step keeps its quota spent even if the provider then fails. The cooldown
+it started is released only when the answer is `500/send_failed` and the
+failure proves that no provider accepted the message (for example the provider
+could not be connected to); after any other failed send it stays in place. See
+[channels without a provider](DEPLOYMENT.md#channels-without-a-provider).
 
 ## Error Codes
 

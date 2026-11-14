@@ -309,7 +309,10 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 		h.releaseCreationClaim(spanCtx, principal, idempotencyKey, fingerprint, idempotencyOwner)
 	}
 
-	ch, code, handled, err := h.prepareChallenge(c, spanCtx, req, peerIP, failIdem)
+	// Filled at admission; lets a send that provably reached no provider
+	// give back the resend cooldowns it started.
+	hold := &cooldownHold{}
+	ch, code, handled, err := h.prepareChallenge(c, spanCtx, req, peerIP, failIdem, hold)
 	if handled {
 		return err
 	}
@@ -347,7 +350,7 @@ func (h *Handlers) CreateChallenge(c fiber.Ctx) error {
 		return err
 	}
 
-	softDeliveryFailed, delivered, err := h.deliverChallenge(c, spanCtx, req, ch, msg, providerName, peerIP)
+	softDeliveryFailed, delivered, err := h.deliverChallenge(c, spanCtx, req, ch, msg, providerName, peerIP, hold)
 	if !delivered {
 		return err
 	}
@@ -791,7 +794,7 @@ func (h *Handlers) validateCreateRequest(c fiber.Ctx, req *CreateChallengeReques
 // and both resend cooldowns in one atomic step. A request denied by any of
 // them consumes nothing, so a caller cannot drain another user's or
 // destination's quota with requests that are never sent.
-func (h *Handlers) checkCreationLimits(c fiber.Ctx, spanCtx context.Context, req CreateChallengeRequest, peerIP string, failIdem func()) (bool, error) {
+func (h *Handlers) checkCreationLimits(c fiber.Ctx, spanCtx context.Context, req CreateChallengeRequest, peerIP string, failIdem func(), hold *cooldownHold) (bool, error) {
 	// All identities are peppered digests so raw values never land in a Redis
 	// key. The IP is the trusted peer IP, never the self-reported one. The
 	// destination identity collapses equivalent spellings of one SMS number
@@ -799,18 +802,21 @@ func (h *Handlers) checkCreationLimits(c fiber.Ctx, spanCtx context.Context, req
 	// is still what gets stored and sent to the provider.
 	limitDest := destination.LimitKey(req.Channel, req.Destination)
 	destDigest := h.digester.Digest(limitDest)
+	// The user+destination key keeps its existing format. The
+	// destination-only key stops a caller from bypassing the cooldown by
+	// rotating user_id against one destination.
+	cooldownKeys := []string{
+		h.digester.DigestParts(req.UserID, limitDest),
+		ratelimit.DestinationCooldownPrefix + destDigest,
+	}
+	cooldownToken := newCooldownToken()
 	denied, resetTime, err := h.rateLimitManager.AdmitCreation(spanCtx, ratelimit.CreationAdmission{
 		UserID: h.digester.Digest(req.UserID), UserLimit: config.RateLimitPerUser, UserWindow: time.Hour,
 		IP: h.digester.Digest(peerIP), IPLimit: config.RateLimitPerIP, IPWindow: time.Minute,
 		Destination: destDigest, DestinationLimit: config.RateLimitPerDestination, DestinationWindow: time.Hour,
-		// The user+destination key keeps its existing format. The
-		// destination-only key stops a caller from bypassing the cooldown by
-		// rotating user_id against one destination.
-		CooldownKeys: []string{
-			h.digester.DigestParts(req.UserID, limitDest),
-			ratelimit.DestinationCooldownPrefix + destDigest,
-		},
-		Cooldown: config.ResendCooldown,
+		CooldownKeys:  cooldownKeys,
+		Cooldown:      config.ResendCooldown,
+		CooldownToken: cooldownToken,
 	})
 	if err != nil {
 		h.log.Error().Err(err).Msg("Rate limit check failed")
@@ -821,6 +827,9 @@ func (h *Handlers) checkCreationLimits(c fiber.Ctx, spanCtx context.Context, req
 		})
 	}
 	if denied == "" {
+		if hold != nil {
+			hold.keys, hold.token = cooldownKeys, cooldownToken
+		}
 		return true, nil
 	}
 	metrics.RecordRateLimitHit(denied)
@@ -831,7 +840,7 @@ func (h *Handlers) checkCreationLimits(c fiber.Ctx, spanCtx context.Context, req
 	return challengeLimitResponse(c, "rate_limit_exceeded", denied, resetTime)
 }
 
-func (h *Handlers) deliverChallenge(c fiber.Ctx, spanCtx context.Context, req CreateChallengeRequest, ch *challengekit.Challenge, msg *provider.Message, providerName, peerIP string) (bool, bool, error) {
+func (h *Handlers) deliverChallenge(c fiber.Ctx, spanCtx context.Context, req CreateChallengeRequest, ch *challengekit.Challenge, msg *provider.Message, providerName, peerIP string, hold *cooldownHold) (bool, bool, error) {
 	softDeliveryFailed := false
 	channel := provider.Channel(req.Channel)
 	// Start provider observability only after the send boundary is persisted.
@@ -845,7 +854,10 @@ func (h *Handlers) deliverChallenge(c fiber.Ctx, spanCtx context.Context, req Cr
 	sendStart := time.Now()
 
 	// Send using provider-kit Registry (returns *SendResult, error)
-	sendResult, err := h.providerRegistry.Send(providerCtx, channel, msg)
+	// The wire trace records whether an HTTP provider's request was written
+	// to a connection; see sendProvablyAcceptedNothing.
+	wire := &requestWireTrace{}
+	sendResult, err := h.providerRegistry.Send(wire.attach(providerCtx), channel, msg)
 	sendDuration := time.Since(sendStart)
 
 	if err != nil || (sendResult != nil && !sendResult.OK) {
@@ -854,7 +866,16 @@ func (h *Handlers) deliverChallenge(c fiber.Ctx, spanCtx context.Context, req Cr
 		errorReason := providerFailureReason(sendResult, err)
 		tracing.RecordError(providerSpan, errors.New("provider send failed: "+errorReason))
 		providerSpan.End()
-		failure := h.log.Error().Str("reason", errorReason)
+		// Under the strict policy the caller gets send_failed. When the
+		// failure proves that no provider accepted anything, the resend
+		// cooldowns this request started are given back so the caller is
+		// not held off for a message that was never sent. The user, IP and
+		// destination counters stay spent and keep bounding retries.
+		cooldownReleased := false
+		if config.NormalizedProviderFailurePolicy() == "strict" && h.sendProvablyAcceptedNothing(channel, sendResult, err, wire) {
+			cooldownReleased = h.releaseCooldown(spanCtx, hold)
+		}
+		failure := h.log.Error().Str("reason", errorReason).Bool("cooldown_released", cooldownReleased)
 		if builtInSMTPDelivers(req.Channel) {
 			// Where the SMTP attempt stopped, from error types only.
 			category, smtpCode := smtpFailureCategory(sendResult, err)
