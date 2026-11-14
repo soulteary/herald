@@ -319,11 +319,12 @@ Herald builds the OTLP/HTTP exporter with the host, path and scheme of `OTLP_END
 | `OTEL_EXPORTER_OTLP_COMPRESSION` | `gzip` compresses request bodies; any other value means no compression (the default) |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/json` sends JSON instead of protobuf. `grpc` does not switch the transport: Herald exports over HTTP only |
 
-Three limits apply:
+Two limits apply:
 
 - `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` do not change where spans go. The host and path always come from `OTLP_ENDPOINT`.
 - The certificate and client-certificate variables require an `https://` `OTLP_ENDPOINT`. With a `host:port` or `http://` endpoint and one of them set to a usable file, the exporter is not created: Herald logs `Failed to initialize OpenTelemetry tracing` and exports nothing.
-- Do not set `OTEL_EXPORTER_OTLP_INSECURE` or `OTEL_EXPORTER_OTLP_TRACES_INSECURE` to `true`, and do not set either `..._ENDPOINT` variable to an `http://` URL, in the environment of a Herald whose `OTLP_ENDPOINT` is `https://`. The exporter takes its scheme from these variables in that case and posts spans, and any configured headers, to the `OTLP_ENDPOINT` host in plain HTTP, while the startup log still shows the `https://` endpoint.
+
+The scheme always comes from `OTLP_ENDPOINT` as well. `OTEL_EXPORTER_OTLP_INSECURE`, `OTEL_EXPORTER_OTLP_TRACES_INSECURE` and an `http://` value of either `..._ENDPOINT` variable do not make an `https://` `OTLP_ENDPOINT` export in plain HTTP, and an `https://` value does not make a `host:port` or `http://` endpoint use TLS.
 
 The exporter also follows `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY`.
 
