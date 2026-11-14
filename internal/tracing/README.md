@@ -18,7 +18,7 @@ Herald 的 OpenTelemetry 分布式追踪支持。
 # 启用 OpenTelemetry
 OTLP_ENABLED=true
 
-# OTLP 端点（例如：http://localhost:4318）
+# OTLP/HTTP 端点：host:port，或 http(s)://host:port[/path]
 OTLP_ENDPOINT=http://localhost:4318
 ```
 

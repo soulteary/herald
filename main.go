@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/soulteary/herald/internal/config"
 	"github.com/soulteary/herald/internal/router"
 	"github.com/soulteary/herald/internal/server"
+	heraldtracing "github.com/soulteary/herald/internal/tracing"
 	rediskit "github.com/soulteary/redis-kit/client"
 	tracing "github.com/soulteary/tracing-kit/v2"
 	otlp "github.com/soulteary/tracing-kit/v2/otlp"
@@ -201,11 +203,7 @@ func runWithContext(parent context.Context) error {
 
 	// Initialize OpenTelemetry tracing if enabled
 	if config.OTLPEnabled {
-		if _, err := otlp.InitTracer(config.ServiceName, version.Version, config.OTLPEndpoint); err != nil {
-			log.Warn().Err(err).Msg("Failed to initialize OpenTelemetry tracing")
-		} else {
-			log.Info().Msg("OpenTelemetry tracing initialized")
-		}
+		initTracing(log)
 	}
 
 	// Initialize Redis client for router
@@ -272,4 +270,32 @@ func runWithContext(parent context.Context) error {
 	}
 
 	return srv.Run(ctx)
+}
+
+// initTracing sets up span export for OTLP_ENABLED=true. It reports whether
+// an exporter was installed. "OpenTelemetry tracing initialized" is logged
+// only in that case: with an empty or unusable OTLP_ENDPOINT no span leaves
+// the process, and the log must not say otherwise.
+func initTracing(log *logger.Logger) bool {
+	if strings.TrimSpace(config.OTLPEndpoint) == "" {
+		// Install the provider that records nothing, as before, so shutdown
+		// and instrumentation have a provider to talk to.
+		if _, err := otlp.InitTracer(config.ServiceName, version.Version, ""); err != nil {
+			log.Warn().Err(err).Msg("Failed to initialize OpenTelemetry tracing")
+		}
+		log.Info().Msg("OTLP_ENDPOINT is empty: no trace exporter is configured and no spans are exported")
+		return false
+	}
+	endpoint, err := heraldtracing.ParseEndpoint(config.OTLPEndpoint)
+	if err != nil {
+		log.Warn().Err(err).Str("check", "config.otlp_endpoint").
+			Msg("OTLP_ENDPOINT cannot be used: tracing is not initialized and no spans are exported; set it to host:port or to http(s)://host:port[/path]")
+		return false
+	}
+	if _, err := heraldtracing.InitTracer(config.ServiceName, version.Version, endpoint); err != nil {
+		log.Warn().Err(err).Msg("Failed to initialize OpenTelemetry tracing")
+		return false
+	}
+	log.Info().Str("endpoint", endpoint.String()).Msg("OpenTelemetry tracing initialized")
+	return true
 }
