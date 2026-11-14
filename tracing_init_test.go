@@ -21,6 +21,7 @@ import (
 // step for OTLP_ENABLED=true with an endpoint in the documented URL form, in
 // the host:port form, empty and unusable. Only the first two may log
 // "OpenTelemetry tracing initialized", and both must reach the collector.
+// The empty case logs nothing here.
 func TestInitTracingLogsInitializedOnlyWhenSpansCanBeExported(t *testing.T) {
 	var hits atomic.Int64
 	collector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -63,8 +64,17 @@ func TestInitTracingLogsInitializedOnlyWhenSpansCanBeExported(t *testing.T) {
 		}
 	}
 
+	// The empty endpoint is reported by the config.otlp startup advisory, so
+	// initTracing itself must stay silent about it; it used to repeat the
+	// advisory as an info line.
+	if exporting, logs := run(""); exporting || logs != "" {
+		t.Errorf("OTLP_ENDPOINT empty: exporting=%v, want no log line from initTracing, got: %s", exporting, logs)
+	}
+	if hits.Load() != 0 {
+		t.Errorf("OTLP_ENDPOINT empty: the collector received %d exports", hits.Load())
+	}
+
 	for _, tc := range []struct{ endpoint, wantLog string }{
-		{"", "OTLP_ENDPOINT is empty"},
 		{"grpc://collector:4317", "OTLP_ENDPOINT cannot be used"},
 		{"http://user:secret-password@collector:4318", "OTLP_ENDPOINT cannot be used"},
 	} {
