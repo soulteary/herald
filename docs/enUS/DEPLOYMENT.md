@@ -131,11 +131,13 @@ A missing credential does not disable authentication. With `REQUEST_AUTH_MODE=hm
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
 | `SMTP_HOST` | SMTP server host | (empty) | When using built-in |
-| `SMTP_PORT` | SMTP port | `587` | No |
+| `SMTP_PORT` | SMTP port; the server must accept STARTTLS on it | `587` | No |
 | `SMTP_USER` | SMTP username | (empty) | No |
 | `SMTP_PASSWORD` | SMTP password | (empty) | No |
 | `SMTP_FROM` | From address | (empty) | Recommended |
 | `PROVIDER_FAILURE_POLICY` | On send failure: `soft` (still create challenge) or `strict` (do not create) | `soft`; `strict` when `ENVIRONMENT=production` | No |
+
+The built-in SMTP provider always upgrades the connection with STARTTLS before it authenticates or sends, in every environment, and verifies the server certificate against `SMTP_HOST` (TLS 1.2 or later). There is no setting to turn this off. If the server does not offer STARTTLS, refuses it, or presents a certificate that is not trusted for `SMTP_HOST`, the send fails (`failure_category` `rejected` or `tls`) and neither the password nor the message is sent. Implicit TLS (the SMTPS port 465) and plain SMTP without TLS are not supported by the built-in provider.
 
 Production forbids `soft`. When the variable is unset or empty in production, Herald uses `strict` and logs `Production default: PROVIDER_FAILURE_POLICY=strict`; an explicit `soft` still fails startup.
 

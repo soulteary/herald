@@ -255,7 +255,7 @@ Herald maintains complete audit logs for:
 
 ### Email Provider Security
 
-- Use secure SMTP connections (TLS/SSL)
+- The built-in SMTP provider requires STARTTLS with a verified server certificate; it does not fall back to an unencrypted connection when STARTTLS is missing or refused, so `SMTP_PASSWORD` and the message are never sent in clear
 - Authenticate with provider using secure credentials
 - Store provider credentials securely (environment variables or secrets management)
 - Monitor provider communication for failures
