@@ -112,6 +112,7 @@ HTTP ステータスコード：
 - `401 Unauthorized`：認証に失敗
 - `403 Forbidden`：ユーザーがロックされています
 - `429 Too Many Requests`：レート制限を超過
+- `503 Service Unavailable`：`channel_not_configured`
 - `500 Internal Server Error`：内部サーバーエラー
 
 ### チャレンジの検証
@@ -158,13 +159,13 @@ HTTP ステータスコード：
 - `invalid`：無効な検証コード
 - `locked`：試行回数が多すぎるため、チャレンジがロックされています
 - `verification_failed`：一般的な検証失敗
-- `internal_error`：内部サーバーエラー
 
 HTTP ステータスコード：
 - `400 Bad Request`：無効なリクエストパラメータ
-- `401 Unauthorized`：検証に失敗
-- `403 Forbidden`：ユーザーがロックされています
-- `500 Internal Server Error`：内部サーバーエラー
+- `401 Unauthorized`：検証に失敗（`expired`, `invalid`, `locked`, `user_locked`, `not_active`, `verification_failed`）
+- `409 Conflict`：`lock_contention`（`Retry-After: 1`）
+- `415 Unsupported Media Type`：`unsupported_media_type`
+- `503 Service Unavailable`：`backend_unavailable`（`Retry-After: 1`）, `audit_unavailable`
 
 ### チャレンジの取り消し
 

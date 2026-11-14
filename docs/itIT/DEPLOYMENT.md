@@ -48,6 +48,8 @@ go build -o herald main.go
 | `RATE_LIMIT_PER_IP` | Limite di velocità per IP/minuto | `5` | No |
 | `RATE_LIMIT_PER_DESTINATION` | Limite di velocità per destinazione/ora | `10` | No |
 | `LOCKOUT_DURATION` | Durata del blocco utente dopo il numero massimo di tentativi | `10m` | No |
+| `LOCKOUT_FAILED_ATTEMPT_THRESHOLD` | Numero di codici errati entro `LOCKOUT_FAILED_ATTEMPT_WINDOW` raggiunto il quale l'utente viene bloccato per `LOCKOUT_DURATION`; `0` disattiva il conteggio | `15` | No |
+| `LOCKOUT_FAILED_ATTEMPT_WINDOW` | Finestra per `LOCKOUT_FAILED_ATTEMPT_THRESHOLD`, calcolata a partire dal primo codice errato | `1h` | No |
 | `SERVICE_NAME` | Identificatore del servizio per l'autenticazione HMAC | `herald` | No |
 | `SMTP_HOST` | Host del server SMTP | `` | Per e-mail (integrato) |
 | `SMTP_PORT` | Porta del server SMTP | `587` | Per e-mail |
@@ -57,12 +59,12 @@ go build -o herald main.go
 | `SMS_PROVIDER` | Fornitore SMS (es. nome per i log) | `` | Per SMS |
 | `SMS_API_BASE_URL` | URL base API HTTP SMS | `` | Per SMS (API HTTP) |
 | `SMS_API_KEY` | Chiave API SMS | `` | Per SMS (opzionale) |
-| `HERALD_DINGTALK_API_URL` | URL base di [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) (es. `http://herald-dingtalk:8083`) | `` | Per il canale DingTalk |
+| `HERALD_DINGTALK_API_URL` | URL base di [herald-dingtalk](https://github.com/soulteary/herald-dingtalk) (es. `https://herald-dingtalk.internal:8083`) | `` | Per il canale DingTalk |
 | `HERALD_DINGTALK_API_KEY` | Chiave API opzionale; deve corrispondere a `API_KEY` di herald-dingtalk se impostata | `` | No |
-| `HERALD_SMTP_API_URL` | URL base di [herald-smtp](https://github.com/soulteary/herald-smtp) (es. `http://herald-smtp:8084`); se impostata, SMTP integrato non usato | `` | Per canale e-mail (opzionale) |
+| `HERALD_SMTP_API_URL` | URL base di [herald-smtp](https://github.com/soulteary/herald-smtp) (es. `https://herald-smtp.internal:8084`); se impostata, SMTP integrato non usato | `` | Per canale e-mail (opzionale) |
 | `HERALD_SMTP_API_KEY` | Chiave API opzionale; deve corrispondere a `API_KEY` di herald-smtp se impostata | `` | No |
 | `HERALD_TOTP_ENABLED` | Abilita proxy TOTP | `false` | No |
-| `HERALD_TOTP_BASE_URL` | URL base di [herald-totp](https://github.com/soulteary/herald-totp) (es. `http://herald-totp:8085`) | `` | Se TOTP abilitato |
+| `HERALD_TOTP_BASE_URL` | URL base di [herald-totp](https://github.com/soulteary/herald-totp) (es. `https://herald-totp.internal:8085`) | `` | Se TOTP abilitato |
 | `HERALD_TOTP_API_KEY` | Chiave API per Herald→herald-totp (opzionale) | `` | No |
 | `HERALD_TOTP_HMAC_SECRET` | Secret HMAC per Herald→herald-totp (opzionale) | `` | No |
 | `HERALD_TEST_MODE` | Se `true`: codice debug in Redis/risposta. **Solo per test; in produzione sempre `false`.** | `false` | No |

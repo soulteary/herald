@@ -112,6 +112,7 @@ HTTP 상태 코드:
 - `401 Unauthorized`: 인증 실패
 - `403 Forbidden`: 사용자 잠금
 - `429 Too Many Requests`: 속도 제한 초과
+- `503 Service Unavailable`: `channel_not_configured`
 - `500 Internal Server Error`: 내부 서버 오류
 
 ### 챌린지 검증
@@ -158,13 +159,13 @@ HTTP 상태 코드:
 - `invalid`: 잘못된 인증 코드
 - `locked`: 시도 횟수가 너무 많아 챌린지가 잠김
 - `verification_failed`: 일반 인증 실패
-- `internal_error`: 내부 서버 오류
 
 HTTP 상태 코드:
 - `400 Bad Request`: 잘못된 요청 매개변수
-- `401 Unauthorized`: 검증 실패
-- `403 Forbidden`: 사용자 잠금
-- `500 Internal Server Error`: 내부 서버 오류
+- `401 Unauthorized`: 검증 실패 (`expired`, `invalid`, `locked`, `user_locked`, `not_active`, `verification_failed`)
+- `409 Conflict`: `lock_contention` (`Retry-After: 1`)
+- `415 Unsupported Media Type`: `unsupported_media_type`
+- `503 Service Unavailable`: `backend_unavailable` (`Retry-After: 1`), `audit_unavailable`
 
 ### 챌린지 취소
 
