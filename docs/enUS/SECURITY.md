@@ -312,6 +312,44 @@ After an upgrade, a number previously sent with `+` or `00` starts a new
 per-destination counter and cooldown key; the old keys expire with their
 original TTL.
 
+## User lockout
+
+A user is locked for `LOCKOUT_DURATION` (default `10m`) in two independent
+ways. While locked, verification answers `user_locked` without comparing the
+code and challenge creation answers `403/user_locked`.
+
+1. **Exhausted challenges.** `LOCKOUT_CHALLENGE_THRESHOLD` (default `3`)
+   challenges each used up all `MAX_ATTEMPTS` within `LOCKOUT_DURATION`.
+2. **Wrong codes.** `LOCKOUT_FAILED_ATTEMPT_THRESHOLD` (default `15`) wrong
+   codes within `LOCKOUT_FAILED_ATTEMPT_WINDOW` (default `1h`), on any of the
+   user's challenges and on either verification route.
+
+The second rule exists because the first can be avoided: a caller who submits
+`MAX_ATTEMPTS - 1` wrong codes and then requests a new challenge never exhausts
+one, so nothing was recorded and no number of wrong codes locked the user.
+Wrong codes are now counted per user. Only a wrong code that used an attempt
+counts; an expired or unknown challenge, a context mismatch, a refusal while
+the user is locked and a repeated probe of an exhausted challenge do not. A
+successful verification does not reset the count. When the threshold is
+reached the user is locked and the count starts again from zero. A lock
+already in effect is not extended. If the count cannot be stored the
+verification answers `503/backend_unavailable`.
+
+What this bounds, with the defaults: the number of codes a user can be issued
+(`RATE_LIMIT_PER_USER`, 10 per hour) times `MAX_ATTEMPTS` (5) already caps
+wrong codes at about 50 per hour per user, and a 10-minute lock every 15 wrong
+codes lowers that only slightly. The count makes such guessing lock the user
+and show up in `herald_failed_attempt_lock_total`, and it makes the lock
+settings effective: after a lock, at most `LOCKOUT_FAILED_ATTEMPT_THRESHOLD`
+further wrong codes are possible before the next one, so a longer
+`LOCKOUT_DURATION` or a lower threshold reduces the guess rate, which the
+exhausted-challenge rule alone could not do. Lower values also make it easier
+for someone who can trigger verifications to lock a user out; choose them with
+that in mind. Set `LOCKOUT_FAILED_ATTEMPT_THRESHOLD=0` to disable the count.
+
+The count is stored under `otp:lock:failed:<digest>`, keyed like the other
+lock keys by a peppered digest of the user ID.
+
 ## Error Handling
 
 ### Production Mode

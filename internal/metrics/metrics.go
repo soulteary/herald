@@ -27,6 +27,7 @@ var (
 	providerTimeoutTotal   *prometheus.CounterVec // label: channel
 	verificationContention *prometheus.CounterVec // label: result
 	nonceReplayTotal       prometheus.Counter
+	failedAttemptLockTotal prometheus.Counter
 	challengeStateTotal    *prometheus.CounterVec // label: state
 	auditDroppedTotal      prometheus.Counter
 	auditWriteFailureTotal prometheus.Counter
@@ -55,6 +56,8 @@ func Init() {
 		Help("Verification lock contention outcomes").Labels("result").BuildVec()
 	nonceReplayTotal = Registry.Counter("nonce_replay_total").
 		Help("Rejected replayed HMAC nonces").Build()
+	failedAttemptLockTotal = Registry.Counter("failed_attempt_lock_total").
+		Help("Users locked after repeated wrong verification codes within the failed-attempt window").Build()
 	challengeStateTotal = Registry.Counter("challenge_state_total").
 		Help("Challenge state transitions").Labels("state").BuildVec()
 	auditDroppedTotal = Registry.Counter("audit_dropped_total").
@@ -93,6 +96,14 @@ func RecordVerificationContention(result string) {
 func RecordNonceReplay() {
 	if nonceReplayTotal != nil {
 		nonceReplayTotal.Inc()
+	}
+}
+
+// RecordFailedAttemptLock records a user lock set because the user's wrong
+// codes reached LOCKOUT_FAILED_ATTEMPT_THRESHOLD.
+func RecordFailedAttemptLock() {
+	if failedAttemptLockTotal != nil {
+		failedAttemptLockTotal.Inc()
 	}
 }
 

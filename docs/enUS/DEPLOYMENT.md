@@ -107,6 +107,8 @@ A missing credential does not disable authentication. With `REQUEST_AUTH_MODE=hm
 | `MAX_ATTEMPTS` | Wrong codes a challenge accepts before it is exhausted and answers `locked` | `5` | No |
 | `LOCKOUT_DURATION` | How long a locked user stays locked, and the window in which exhausted challenges are counted (e.g. `10m`) | `10m` | No |
 | `LOCKOUT_CHALLENGE_THRESHOLD` | Number of challenges a user must exhaust (`MAX_ATTEMPTS` wrong codes each) within `LOCKOUT_DURATION`, counted from the first one, before the user is locked. `1` locks on the first exhausted challenge, as v1.6.0 did. Minimum `1` | `3` | No |
+| `LOCKOUT_FAILED_ATTEMPT_THRESHOLD` | Number of wrong codes a user may submit within `LOCKOUT_FAILED_ATTEMPT_WINDOW`, across all of the user's challenges and whether or not a challenge was exhausted, before the user is locked for `LOCKOUT_DURATION`. `0` disables this count. See [security](SECURITY.md#user-lockout) | `15` | No |
+| `LOCKOUT_FAILED_ATTEMPT_WINDOW` | Window for `LOCKOUT_FAILED_ATTEMPT_THRESHOLD`, counted from the first wrong code and not extended by later ones; must be positive unless the threshold is `0` | `1h` | No |
 | `RESEND_COOLDOWN` | Minimum interval between challenges for the same user and destination, and for the same destination regardless of user; must be positive | `60s` | No |
 | `CODE_LENGTH` | Verification code length (digits, minimum `4`; must also fit `HERALD_MAX_BODY_BYTES` after the compact context-bound V2 envelope, currently 136 bytes) | `6` | No |
 | `IDEMPOTENCY_KEY_TTL` | Pre-send claim and completed response TTL; unresolved sends use `IDEMPOTENCY_UNRESOLVED_TTL`; `0` = use `CHALLENGE_EXPIRY` | `0` | No |

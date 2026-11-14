@@ -45,6 +45,7 @@ type Handlers struct {
 	idempotencyStore *idempotency.Store  // Atomic, principal-namespaced idempotency store
 	totpClient       *totpProxyClient    // Optional: nil when TOTP is not enabled
 	digester         *security.Digester  // Peppered digester for privacy-preserving keys
+	failedAttempts   *failedAttemptGuard // Locks a user after repeated wrong codes; nil disables
 	log              *logger.Logger
 }
 
@@ -204,6 +205,7 @@ func NewHandlersWithError(redisClient *redis.Client, log *logger.Logger) (*Handl
 		idempotencyStore: idempotencyStore,
 		totpClient:       totpClient,
 		digester:         digester,
+		failedAttempts:   newFailedAttemptGuard(redisClient, digester, challengeMgr, log),
 		log:              log,
 	}, nil
 }
@@ -476,10 +478,14 @@ func (h *Handlers) VerifyChallenge(c fiber.Ctx) error {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"ok": false, "reason": "audit_unavailable"})
 	}
 
+	// The v1 request does not name the user, so the user a wrong code would
+	// count against is read from the challenge before it is verified.
+	subject := h.failedAttempts.subject(verifyCtx, req.ChallengeID)
+
 	// Verify challenge
 	result, err := h.verifyWithBudget(verifyCtx, req.ChallengeID, req.Code, peerIP, nil)
 	if err != nil || result == nil || !result.OK {
-		return h.writeVerificationFailure(c, verifyCtx, verifySpan, req.ChallengeID, peerIP, result, err, false)
+		return h.writeVerificationFailure(c, verifyCtx, verifySpan, req.ChallengeID, subject, peerIP, result, err, false)
 	}
 
 	// Set span attributes for success
@@ -567,7 +573,9 @@ func (h *Handlers) VerifyChallengeV2(c fiber.Ctx) error {
 
 	result, err := h.verifyWithBudget(verifyCtx, req.ChallengeID, req.Code, peerIP, &opts)
 	if err != nil || result == nil || !result.OK {
-		return h.writeVerificationFailure(c, verifyCtx, verifySpan, req.ChallengeID, peerIP, result, err, true)
+		// A wrong code implies the context matched, so the expected user is
+		// the challenge's user.
+		return h.writeVerificationFailure(c, verifyCtx, verifySpan, req.ChallengeID, req.ExpectedUserID, peerIP, result, err, true)
 	}
 
 	ch := result.Challenge
@@ -1095,7 +1103,15 @@ func (h *Handlers) persistSendBoundary(c fiber.Ctx, spanCtx context.Context, ch 
 	return true, nil
 }
 
-func (h *Handlers) writeVerificationFailure(c fiber.Ctx, verifyCtx context.Context, verifySpan trace.Span, challengeID, peerIP string, result *challengekit.VerifyResult, err error, bound bool) error {
+func (h *Handlers) writeVerificationFailure(c fiber.Ctx, verifyCtx context.Context, verifySpan trace.Span, challengeID, userID, peerIP string, result *challengekit.VerifyResult, err error, bound bool) error {
+	// Count a wrong code against the user before answering. If the count
+	// cannot be stored the request fails closed: the attempt on the challenge
+	// is already spent, and the caller is told to retry later rather than
+	// handed a result whose lockout accounting was lost.
+	if countErr := h.failedAttempts.record(verifyCtx, userID, challengeID, result); countErr != nil {
+		h.log.Error().Err(countErr).Msg("Failed to count a wrong verification code")
+		result, err = &challengekit.VerifyResult{OK: false, Reason: challengekit.ReasonBackendUnavailable}, countErr
+	}
 	reason := failedVerificationReason(result, err, bound)
 	tracing.RecordError(verifySpan, err)
 	h.log.Debug().Err(err).Msg("Challenge verification failed")

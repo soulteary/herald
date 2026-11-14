@@ -139,6 +139,13 @@ var (
 	// exhaust (MAX_ATTEMPTS wrong codes each) within LOCKOUT_DURATION before
 	// the user is locked. 1 locks on the first exhausted challenge.
 	LockoutChallengeThreshold = env.GetInt("LOCKOUT_CHALLENGE_THRESHOLD", 3)
+	// FailedAttemptLockThreshold is the number of wrong codes a user may
+	// submit within FailedAttemptLockWindow, across all of the user's
+	// challenges, before the user is locked for LOCKOUT_DURATION. It counts
+	// wrong codes whether or not their challenge was exhausted, which
+	// LOCKOUT_CHALLENGE_THRESHOLD does not. 0 disables the count.
+	FailedAttemptLockThreshold = env.GetInt("LOCKOUT_FAILED_ATTEMPT_THRESHOLD", 15)
+	FailedAttemptLockWindow    = env.GetDuration("LOCKOUT_FAILED_ATTEMPT_WINDOW", time.Hour)
 	// IdempotencyUnresolvedTTL bounds idempotency records whose delivery
 	// outcome is unknown (a request that stopped between the send boundary and
 	// its result). Until it elapses the key answers 409 delivery_unknown.
@@ -788,6 +795,7 @@ var integerEnvNames = []string{
 	"HERALD_MAX_BODY_BYTES",
 	"HERALD_MAX_CONCURRENT_HASH_OPERATIONS",
 	"LOCKOUT_CHALLENGE_THRESHOLD",
+	"LOCKOUT_FAILED_ATTEMPT_THRESHOLD",
 	"MAX_ATTEMPTS",
 	"PROVIDER_MAX_RESPONSE_BYTES",
 	"RATE_LIMIT_PER_DESTINATION",
@@ -807,6 +815,7 @@ var durationEnvNames = []string{
 	"IDEMPOTENCY_KEY_TTL",
 	"IDEMPOTENCY_UNRESOLVED_TTL",
 	"LOCKOUT_DURATION",
+	"LOCKOUT_FAILED_ATTEMPT_WINDOW",
 	"PROVIDER_TIMEOUT",
 	"RESEND_COOLDOWN",
 }

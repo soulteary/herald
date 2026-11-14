@@ -359,6 +359,7 @@ See [security](SECURITY.md#provider-failure-diagnostics) for compatibility detai
 - `herald_nonce_replay_total` counts rejected replayed nonces.
 - `herald_provider_timeout_total{channel}` counts provider timeouts.
 - `herald_verification_contention_total{result}` records `contended` or `acquired` where emitted by the verification path.
+- `herald_failed_attempt_lock_total` counts users locked because their wrong codes reached `LOCKOUT_FAILED_ATTEMPT_THRESHOLD`. Each lock also writes a warning with `user_id_digest`. A steady rate for one digest indicates code guessing against that user.
 - `herald_challenge_state_total{state}` records emitted transitions such as `activated`, `superseded`, and `revoked`.
 - `herald_redis_operations_total{operation,result}` uses `success` or `failure`; the duration histogram's count includes both outcomes and is not an error counter.
 
