@@ -397,7 +397,7 @@ See [security](SECURITY.md#provider-failure-diagnostics) for compatibility detai
 
 ## HMAC identity and CORS upgrade checks
 
-- `401/invalid_key_id`: with only `HMAC_SECRET`, omit the ID or use exactly `default`. Provision known custom IDs in `HERALD_HMAC_KEYS` without renaming callers. Do not change IDs to retry an uncertain send.
+- `401/invalid_signature` while `herald_auth_failure_total{reason="invalid_key_id"}` increases: the request names a key ID that is not configured (earlier releases answered `401/invalid_key_id`). With only `HMAC_SECRET`, omit the ID or use exactly `default`. Provision known custom IDs in `HERALD_HMAC_KEYS` without renaming callers. Do not change IDs to retry an uncertain send.
 - `409/idempotency_namespace_conflict`: an ambiguous historical empty-key-ID record exists. Preserve its bytes and TTL and reconcile it against provider/audit evidence; it is not a retryable delivery failure.
 - `409/delivery_unknown`: delivery may already have happened. Keep the same identity and client key; do not delete an unresolved sending record or force a replacement send. The record expires after `IDEMPOTENCY_UNRESOLVED_TTL` (default `24h`).
 - A production CORS startup error requires removing every standalone `*` entry from the origin list, or disabling CORS. Unlisted origins must not receive wildcard responses; API Key/HMAC authentication still applies.

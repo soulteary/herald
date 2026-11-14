@@ -24,6 +24,7 @@ var (
 	// are drawn from a small fixed allowlist of values to avoid cardinality
 	// blowups and to never carry PII.
 	idempotencyTotal       *prometheus.CounterVec // label: result
+	authFailureTotal       *prometheus.CounterVec // label: reason
 	providerTimeoutTotal   *prometheus.CounterVec // label: channel
 	verificationContention *prometheus.CounterVec // label: result
 	nonceReplayTotal       prometheus.Counter
@@ -50,6 +51,8 @@ func Init() {
 
 	idempotencyTotal = Registry.Counter("idempotency_total").
 		Help("Idempotency outcomes by result").Labels("result").BuildVec()
+	authFailureTotal = Registry.Counter("auth_failure_total").
+		Help("HMAC requests rejected with invalid_signature, by internal cause").Labels("reason").BuildVec()
 	providerTimeoutTotal = Registry.Counter("provider_timeout_total").
 		Help("Provider send timeouts by channel").Labels("channel").BuildVec()
 	verificationContention = Registry.Counter("verification_contention_total").
@@ -74,6 +77,15 @@ func Init() {
 func RecordIdempotency(result string) {
 	if idempotencyTotal != nil {
 		idempotencyTotal.WithLabelValues(result).Inc()
+	}
+}
+
+// RecordAuthFailure records why an HMAC request was answered
+// 401/invalid_signature (reason: invalid_key_id|invalid_signature). The
+// response is the same for both; this counter keeps them apart.
+func RecordAuthFailure(reason string) {
+	if authFailureTotal != nil {
+		authFailureTotal.WithLabelValues(reason).Inc()
 	}
 }
 

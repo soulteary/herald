@@ -226,7 +226,7 @@ func TestMiddleware_HMACV2Rejections(t *testing.T) {
 		{"key id required", func() Config { c := base; c.DefaultKeyID = ""; return c }(), func(h map[string]string) { delete(h, HeaderKeyID) }, "key_id_required"},
 		{"timestamp out of range", base, func(h map[string]string) { h[HeaderTimestamp] = "1" }, "timestamp_out_of_range"},
 		{"nil provider", func() Config { c := base; c.KeyProvider = nil; return c }(), func(h map[string]string) {}, "unauthorized"},
-		{"unknown key", base, func(h map[string]string) { h[HeaderKeyID] = "unknown" }, "invalid_key_id"},
+		{"unknown key", base, func(h map[string]string) { h[HeaderKeyID] = "unknown" }, "invalid_signature"},
 		{"nil nonce store", func() Config { c := base; c.NonceStore = nil; return c }(), func(h map[string]string) {}, "unauthorized"},
 	}
 	for i, tt := range tests {

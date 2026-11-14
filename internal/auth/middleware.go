@@ -1,8 +1,11 @@
 package auth
 
 import (
+	"crypto/rand"
 	"crypto/subtle"
+	"encoding/hex"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -182,9 +185,14 @@ func verifyHMACV2(c fiber.Ctx, cfg Config) error {
 	if cfg.KeyProvider == nil {
 		return deny(c, "unauthorized")
 	}
+	// An unknown key ID and a wrong signature get the same answer, so the
+	// response does not tell an unauthenticated caller which key IDs exist.
+	// The unknown-key path still computes a signature, against a secret no
+	// caller can hold, so the two do not differ in the work done either.
 	secret := cfg.KeyProvider(lookupKeyID)
-	if secret == "" {
-		return deny(c, "invalid_key_id")
+	knownKey := secret != ""
+	if !knownKey {
+		secret = unknownKeySecret()
 	}
 
 	canonical := CanonicalRequest{
@@ -207,7 +215,12 @@ func verifyHMACV2(c fiber.Ctx, cfg Config) error {
 	} else {
 		valid = VerifyV2(secret, signature, canonical)
 	}
+	if !knownKey {
+		metrics.RecordAuthFailure("invalid_key_id")
+		return deny(c, "invalid_signature")
+	}
 	if !valid {
+		metrics.RecordAuthFailure("invalid_signature")
 		return deny(c, "invalid_signature")
 	}
 
@@ -247,3 +260,14 @@ func effectiveHMACKeyID(keyID, defaultKeyID string) (string, bool) {
 	}
 	return keyID, keyID != "" && !strings.Contains(keyID, "|kid:")
 }
+
+// unknownKeySecret returns a random per-process secret used to verify
+// requests that name an unknown key ID. If the random source fails the value
+// is empty, and the caller rejects the request regardless of the comparison.
+var unknownKeySecret = sync.OnceValue(func() string {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return ""
+	}
+	return hex.EncodeToString(buf)
+})
