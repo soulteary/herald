@@ -125,6 +125,15 @@ var (
 	// API Key for service-to-service authentication
 	APIKey = env.Get("API_KEY", "")
 
+	// CodeHashKey keys the digest of each verification code stored in Redis.
+	// Empty keeps the unkeyed Argon2 hash. See codeHashKeyProblems for the
+	// length rule; the value is never logged.
+	CodeHashKey = env.Get("HERALD_CODE_HASH_KEY", "")
+	// CodeHashVerifyOnly keeps new challenges on the Argon2 hash while keyed
+	// digests are still verified. It is the first stage of a rolling change
+	// and of its rollback, and has no effect without CodeHashKey.
+	CodeHashVerifyOnly = env.GetBool("HERALD_CODE_HASH_VERIFY_ONLY", false)
+
 	// Hash work budget shared by creation and both verification routes.
 	MaxConcurrentHashOperations = env.GetInt("HERALD_MAX_CONCURRENT_HASH_OPERATIONS", 4)
 
@@ -344,6 +353,7 @@ func Initialize(l *logger.Logger) error {
 		Dur("challenge_expiry", ChallengeExpiry).
 		Int("max_attempts", MaxAttempts).
 		Int("code_length", CodeLength).
+		Str("code_hash", CodeHashMode()).
 		Msg("Configuration initialized")
 
 	// Fail-closed validation. In production, misconfiguration must prevent
@@ -791,6 +801,7 @@ func productionAuthProblems() []string {
 var booleanEnvNames = []string{
 	"AUDIT_ENABLED",
 	"AUDIT_MASK_DESTINATION",
+	"HERALD_CODE_HASH_VERIFY_ONLY",
 	"HERALD_RISK_ACK_PASSWORDLESS_REDIS",
 	"HERALD_TEST_MODE",
 	"HERALD_TOTP_ENABLED",

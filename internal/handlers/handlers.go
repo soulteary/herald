@@ -109,6 +109,15 @@ func NewHandlersWithError(redisClient *redis.Client, log *logger.Logger) (*Handl
 		CodeLength:         config.CodeLength,
 		ChallengeKeyPrefix: challengeRecordPrefix,
 	}
+	if config.CodeHashKey != "" {
+		hasher, err := challengekit.NewHMACCodeHasher([]byte(config.CodeHashKey))
+		if err != nil {
+			// The library error carries lengths only, never the key.
+			return nil, fmt.Errorf("HERALD_CODE_HASH_KEY cannot be used: %w", err)
+		}
+		challengeConfig.CodeHasher = hasher
+		challengeConfig.CodeHasherVerifyOnly = config.CodeHashVerifyOnly
+	}
 	digester := security.NewDigester([]byte(config.PIIPepper))
 	challengeMgr := newAtomicChallengeManager(redisClient, withUserLockPolicy(challengeConfig, digester))
 
