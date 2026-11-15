@@ -133,6 +133,11 @@ var (
 	// digests are still verified. It is the first stage of a rolling change
 	// and of its rollback, and has no effect without CodeHashKey.
 	CodeHashVerifyOnly = env.GetBool("HERALD_CODE_HASH_VERIFY_ONLY", false)
+	// CodeHashKeyPrevious is a comma-separated list of further keys under
+	// which keyed digests are verified but never written. It lets the key be
+	// changed while challenges created under another key are outstanding. See
+	// CodeHashPreviousKeys and codeHashKeyProblems; the value is never logged.
+	CodeHashKeyPrevious = env.Get("HERALD_CODE_HASH_KEY_PREVIOUS", "")
 
 	// Hash work budget shared by creation and both verification routes.
 	MaxConcurrentHashOperations = env.GetInt("HERALD_MAX_CONCURRENT_HASH_OPERATIONS", 4)
@@ -354,6 +359,7 @@ func Initialize(l *logger.Logger) error {
 		Int("max_attempts", MaxAttempts).
 		Int("code_length", CodeLength).
 		Str("code_hash", CodeHashMode()).
+		Int("code_hash_previous_keys", len(CodeHashPreviousKeys())).
 		Msg("Configuration initialized")
 
 	// Fail-closed validation. In production, misconfiguration must prevent
