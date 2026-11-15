@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Update the GitHub Actions used by the CI workflow to their current releases,
+  `govulncheck` to v1.9.0, and the pinned `redis:7-alpine` digest in
+  `docker-compose.yml` to Redis 7.4.12.
+- Update the GitHub Actions used by the release and report workflows. Release
+  images are now signed with cosign v3, which stores the signature as a
+  Sigstore bundle in an OCI referring artifact; verify them with cosign v3, or
+  v2.6 with `--new-bundle-format`.
+
 ## [1.9.0] - 2026-11-15
 
 ### Added
