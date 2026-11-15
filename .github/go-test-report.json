@@ -1,45 +1,45 @@
 {
   "schema_version": "1.0",
   "tests": {
-    "total": 414,
-    "passed": 410,
+    "total": 549,
+    "passed": 545,
     "failed": 0,
     "skipped": 4
   },
   "coverage": {
-    "covered_statements": 2624,
-    "total_statements": 2742,
-    "percentage": 95.7,
+    "covered_statements": 3172,
+    "total_statements": 3316,
+    "percentage": 95.66,
     "threshold": 95
   },
   "packages": [
     {
       "name": ".",
       "status": "pass",
-      "tests": 11,
+      "tests": 12,
       "failed": 0,
-      "coverage": 73.27
+      "coverage": 75
     },
     {
       "name": "internal/auditlog",
       "status": "pass",
-      "tests": 22,
+      "tests": 40,
       "failed": 0,
-      "coverage": 96.25
+      "coverage": 97
     },
     {
       "name": "internal/auth",
       "status": "pass",
-      "tests": 25,
+      "tests": 30,
       "failed": 0,
-      "coverage": 98.18
+      "coverage": 98.31
     },
     {
       "name": "internal/config",
       "status": "pass",
-      "tests": 65,
+      "tests": 88,
       "failed": 0,
-      "coverage": 98.07
+      "coverage": 97.77
     },
     {
       "name": "internal/destination",
@@ -51,37 +51,37 @@
     {
       "name": "internal/handlers",
       "status": "pass",
-      "tests": 124,
+      "tests": 177,
       "failed": 0,
-      "coverage": 95.21
+      "coverage": 94.71
     },
     {
       "name": "internal/idempotency",
       "status": "pass",
-      "tests": 19,
+      "tests": 21,
       "failed": 0,
-      "coverage": 97.08
+      "coverage": 97.14
     },
     {
       "name": "internal/metrics",
       "status": "pass",
-      "tests": 11,
+      "tests": 10,
       "failed": 0,
-      "coverage": 100
+      "coverage": 95.83
     },
     {
       "name": "internal/ratelimit",
       "status": "pass",
-      "tests": 12,
+      "tests": 23,
       "failed": 0,
-      "coverage": 100
+      "coverage": 96.39
     },
     {
       "name": "internal/router",
       "status": "pass",
-      "tests": 38,
+      "tests": 41,
       "failed": 0,
-      "coverage": 94.38
+      "coverage": 94.84
     },
     {
       "name": "internal/security",
@@ -107,9 +107,9 @@
     {
       "name": "internal/template",
       "status": "pass",
-      "tests": 14,
+      "tests": 23,
       "failed": 0,
-      "coverage": 99.15
+      "coverage": 98.63
     },
     {
       "name": "internal/testutil",
@@ -121,9 +121,9 @@
     {
       "name": "internal/tracing",
       "status": "pass",
-      "tests": 2,
+      "tests": 13,
       "failed": 0,
-      "coverage": 97.44
+      "coverage": 96.94
     },
     {
       "name": "pkg/herald",

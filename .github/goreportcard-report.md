@@ -4,8 +4,8 @@
 
 | Metric | Value |
 | ------ | ----- |
-| Files | 147 |
-| Issues | 12 |
+| Files | 198 |
+| Issues | 17 |
 
 ## Checks
 
@@ -22,30 +22,41 @@
 
 ### gocyclo
 
-- `pkg/herald/credential_selection_test.go`
-  - Line 14: cyclomatic complexity 20 for function TestSDKSelectsOneCredentialScheme
-- `pkg/herald/challenge_metadata_test.go`
-  - Line 56: cyclomatic complexity 16 for function TestCreateChallengeMetadataPreservesErrorsAndDoesNotRetry
-- `pkg/herald/challenge_metadata.go`
-  - Line 22: cyclomatic complexity 16 for function challengeRetryMetadata
-- `internal/serviceauth/policy.go`
-  - Line 27: cyclomatic complexity 16 for function ParseServicePolicies
-- `internal/auth/middleware.go`
-  - Line 148: cyclomatic complexity 20 for function verifyHMACV2
-- `version_cli_test.go`
-  - Line 26: cyclomatic complexity 18 for function TestVersionCLIActualMain
-- `internal/router/router.go`
-  - Line 205: cyclomatic complexity 17 for function NewRouterWithClientAndHandlersE
 - `internal/handlers/totp_security_test.go`
   - Line 121: cyclomatic complexity 17 for function TestTOTPSecurityPreservesSuccessfulWireContract
+- `internal/config/strict.go`
+  - Line 112: cyclomatic complexity 16 for function strictDeliveryProblems
+  - Line 79: cyclomatic complexity 16 for function strictHTTPProblems
+- `internal/handlers/smtp_failure_category.go`
+  - Line 47: cyclomatic complexity 22 for function smtpFailureCategory
+- `internal/auth/middleware.go`
+  - Line 144: cyclomatic complexity 21 for function verifyHMACV2
+- `internal/auditlog/quarantine_test.go`
+  - Line 21: cyclomatic complexity 18 for function TestJournalQuarantinesUndecodableEntry
+- `pkg/herald/challenge_metadata_test.go`
+  - Line 56: cyclomatic complexity 16 for function TestCreateChallengeMetadataPreservesErrorsAndDoesNotRetry
+- `internal/serviceauth/policy.go`
+  - Line 27: cyclomatic complexity 16 for function ParseServicePolicies
+- `internal/handlers/work_im_pilot_test.go`
+  - Line 138: cyclomatic complexity 29 for function TestWorkIMPilotHTTPProviderBindingAndVerify
+- `internal/config/config.go`
+  - Line 273: cyclomatic complexity 18 for function Initialize
+- `internal/router/router.go`
+  - Line 186: cyclomatic complexity 17 for function NewRouterWithClientAndHandlersE
+- `pkg/herald/challenge_metadata.go`
+  - Line 22: cyclomatic complexity 16 for function challengeRetryMetadata
 - `internal/handlers/totp_rate_limit_response_test.go`
   - Line 14: cyclomatic complexity 17 for function TestTOTPConfirmPreservesBoundedUpstreamRateLimit
 - `internal/handlers/handlers.go`
-  - Line 92: cyclomatic complexity 16 for function NewHandlersWithError
-- `internal/config/config.go`
-  - Line 254: cyclomatic complexity 16 for function Initialize
-- `internal/handlers/work_im_pilot_test.go`
-  - Line 138: cyclomatic complexity 29 for function TestWorkIMPilotHTTPProviderBindingAndVerify
+  - Line 93: cyclomatic complexity 17 for function NewHandlersWithError
+- `internal/auditlog/journal.go`
+  - Line 317: cyclomatic complexity 23 for function (*journalStorage).run
+- `internal/auditlog/group_commit_test.go`
+  - Line 126: cyclomatic complexity 21 for function TestJournalConcurrentWritesAreDurableBeforeTheyReturn
+- `pkg/herald/credential_selection_test.go`
+  - Line 14: cyclomatic complexity 20 for function TestSDKSelectsOneCredentialScheme
+- `version_cli_test.go`
+  - Line 36: cyclomatic complexity 18 for function TestVersionCLIActualMain
 
 ---
 
