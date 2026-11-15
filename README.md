@@ -2,7 +2,7 @@
 
 [![Go Test Coverage](./.github/coverage.svg)](./.github/go-test-report.md) [![Go Report Card](./.github/goreportcard.svg)](./.github/goreportcard-report.md) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go Version](https://img.shields.io/badge/go-1.27.4+-blue.svg)](https://golang.org)
 
-Herald v1.7.0 locks a user after `LOCKOUT_CHALLENGE_THRESHOLD` exhausted challenges (default `3`) or `LOCKOUT_FAILED_ATTEMPT_THRESHOLD` wrong codes (default `15`) instead of after the first exhausted challenge, applies the creation limits and cooldowns in one step, and expires unresolved idempotency records after `IDEMPOTENCY_UNRESOLVED_TTL`. Some error reasons, metric labels and span names change, and startup rejects an `IDEMPOTENCY_UNRESOLVED_TTL` that does not exceed the idempotency key TTL; see the [upgrade and rollback guidance](docs/enUS/DEPLOYMENT.md#upgrade-from-v160-to-v170).
+Herald v1.8.0 adds `HERALD_CODE_HASH_KEY`, which keys the digest of each verification code stored in Redis with HMAC-SHA-256 so that a stored value cannot be searched offline without the key. It is off by default and nothing changes unless it is set; `challenge-kit` moves to v1.13.0. Read the [upgrade and rollback guidance](docs/enUS/DEPLOYMENT.md#upgrade-from-v170-to-v180) before enabling the key on more than one instance. For the lock thresholds and creation limits introduced in v1.7.0, see [upgrade from v1.6.0 to v1.7.0](docs/enUS/DEPLOYMENT.md#upgrade-from-v160-to-v170).
 
 
 

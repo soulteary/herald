@@ -398,7 +398,7 @@ delivery. Restart Herald after changing templates.
 Pin `ghcr.io/soulteary/herald-dingtalk:1.2.8`,
 `ghcr.io/soulteary/herald-smtp:1.2.9`, and
 `ghcr.io/soulteary/herald-totp:2.0.4` (or verified immutable digests).
-Herald v1.7.0 imports `github.com/soulteary/herald-totp/v2` v2.0.4. SMTP and
+Herald v1.8.0 imports `github.com/soulteary/herald-totp/v2` v2.0.4. SMTP and
 DingTalk retain their existing patch-level interfaces. TOTP keeps its `/v1` HTTP
 routes and credential storage, but its HMAC protocol changes to operation-bound
 v2 with nonce protection. Upgrade the TOTP service and Herald proxy together;
@@ -903,6 +903,51 @@ under the canonical key are not read by v1.5.2 for numbers written with `+` or
 downgrading its module. For a Go application rebuilt from source, restore the
 pre-upgrade `go.mod` and `go.sum` and inspect `go list -m all` before building.
 Older migration requirements above still apply.
+
+## Upgrade from v1.7.0 to v1.8.0
+
+Herald v1.8.0 adds `HERALD_CODE_HASH_KEY` and `HERALD_CODE_HASH_VERIFY_ONLY`
+and moves `challenge-kit` to v1.13.0. HTTP routes, payloads, error reasons,
+authentication modes, metrics, the audit spool file format and the Go SDK
+(`pkg/herald`) are unchanged. `herald-totp/v2` stays at v2.0.4 and the
+provider services do not need to be upgraded. No data conversion or key
+migration is required. This is a minor release because it adds configuration.
+
+With `HERALD_CODE_HASH_KEY` unset, v1.8.0 stores and verifies codes exactly as
+v1.7.0 does, and v1.7.0 and v1.8.0 instances can serve the same Redis in any
+order during a rolling upgrade or rollback.
+
+Check the configuration before deploying:
+
+- Environment variables named `HERALD_CODE_HASH_KEY` or
+  `HERALD_CODE_HASH_VERIFY_ONLY` were ignored by v1.7.0 and take effect now.
+  Herald refuses to start in every environment when `HERALD_CODE_HASH_KEY` is
+  set and shorter than 32 bytes, or when `HERALD_CODE_HASH_VERIFY_ONLY` is not
+  a boolean.
+- The `Configuration initialized` log line gains the field `code_hash`.
+
+Enabling the key is a separate step after every instance runs v1.8.0. Follow
+[Verification code hash key](#verification-code-hash-key): on several
+instances, first run all of them with the key and
+`HERALD_CODE_HASH_VERIFY_ONLY=true`, then remove
+`HERALD_CODE_HASH_VERIFY_ONLY`. An instance without the key, with a different
+key, or running v1.7.0 answers the correct code of a keyed challenge
+`401/invalid` and consumes an attempt until the challenge expires.
+
+Rollback to v1.7.0:
+
+- If `HERALD_CODE_HASH_KEY` was never set, replace the image; nothing else is
+  needed.
+- If it is set, first set `HERALD_CODE_HASH_VERIFY_ONLY=true` on every
+  instance and wait `CHALLENGE_EXPIRY` (default `5m`) so that no keyed
+  challenge is outstanding, then downgrade. v1.7.0 ignores both variables.
+  Skipping the wait only causes the refusals described above for up to
+  `CHALLENGE_EXPIRY`.
+- No Redis data has to be changed or deleted in either direction.
+
+The Go SDK has no changes in this release. An application that selects
+`github.com/soulteary/herald@v1.8.0` works with a v1.7.0 service and the
+reverse.
 
 ## Upgrade from v1.6.0 to v1.7.0
 

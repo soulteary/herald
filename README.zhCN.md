@@ -2,7 +2,7 @@
 
 [![Go Test Coverage](./.github/coverage.svg)](./.github/go-test-report.md) [![Go Report Card](./.github/goreportcard.svg)](./.github/goreportcard-report.md) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go Version](https://img.shields.io/badge/go-1.27.4+-blue.svg)](https://golang.org)
 
-Herald v1.7.0 改为在耗尽 `LOCKOUT_CHALLENGE_THRESHOLD`（默认 `3`）个 challenge 或提交 `LOCKOUT_FAILED_ATTEMPT_THRESHOLD`（默认 `15`）次错误验证码后锁定用户，不再在第一个 challenge 耗尽时锁定；创建 challenge 的限额与冷却合并为一步执行；不确定的幂等记录在 `IDEMPOTENCY_UNRESOLVED_TTL` 后过期。部分错误原因码、指标标签和 span 名称有变化，且 `IDEMPOTENCY_UNRESOLVED_TTL` 不大于幂等键 TTL 时拒绝启动；参见[升级与回滚说明](docs/zhCN/DEPLOYMENT.md#从-v160-升级到-v170)。
+Herald v1.8.0 新增 `HERALD_CODE_HASH_KEY`：设置后，Redis 中保存的验证码摘要改用带密钥的 HMAC-SHA-256，没有密钥就无法离线穷举。该配置默认关闭，不设置时行为不变；`challenge-kit` 升级到 v1.13.0。在多个实例上启用密钥前，请阅读[升级与回滚说明](docs/zhCN/DEPLOYMENT.md#从-v170-升级到-v180)。v1.7.0 引入的锁定阈值与创建限额见[从 v1.6.0 升级到 v1.7.0](docs/zhCN/DEPLOYMENT.md#从-v160-升级到-v170)。
 
 
 

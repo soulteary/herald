@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-11-15
+
 ### Added
 
 - Add `HERALD_CODE_HASH_KEY`. When set, the digest of each verification code
@@ -30,6 +32,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Update challenge-kit from v1.12.0 to v1.13.0. Without `HERALD_CODE_HASH_KEY`
   codes are hashed and verified as before.
+
+### Compatibility and operations
+
+- HTTP routes, payloads, error reasons, authentication modes, metrics, the
+  audit spool file format and the Go SDK (`pkg/herald`) are unchanged. No data
+  conversion is required. `herald-totp/v2` stays at v2.0.4.
+- With `HERALD_CODE_HASH_KEY` unset, v1.7.0 and v1.8.0 instances can share one
+  Redis in any order during a rolling upgrade or rollback.
+- Environment variables named `HERALD_CODE_HASH_KEY` or
+  `HERALD_CODE_HASH_VERIFY_ONLY` were ignored by v1.7.0 and take effect now.
+  Herald refuses to start when the key is set and shorter than 32 bytes.
+- Enable the key only after every instance runs v1.8.0. On several instances,
+  run all of them with the key and `HERALD_CODE_HASH_VERIFY_ONLY=true` first,
+  then remove `HERALD_CODE_HASH_VERIFY_ONLY`. Before removing or changing the
+  key, or rolling back to v1.7.0 with the key set, set
+  `HERALD_CODE_HASH_VERIFY_ONLY=true` on every instance and wait
+  `CHALLENGE_EXPIRY`. See "Upgrade from v1.7.0 to v1.8.0" in
+  `docs/enUS/DEPLOYMENT.md`.
 
 ## [1.7.0] - 2026-11-15
 
@@ -968,7 +988,8 @@ and Redis key prefix of audit records all stay as they were.
 See `docs/enUS/MIGRATION_V2.md` and `docs/zhCN/MIGRATION_V2.md` for the v1→v2
 authentication diff, environment-variable migration, and rollback guidance.
 
-[Unreleased]: https://github.com/soulteary/herald/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/soulteary/herald/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/soulteary/herald/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/soulteary/herald/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/soulteary/herald/compare/v1.5.2...v1.6.0
 [1.5.2]: https://github.com/soulteary/herald/compare/v1.5.1...v1.5.2
