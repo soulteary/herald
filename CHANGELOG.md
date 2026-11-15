@@ -166,6 +166,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`HMAC_V1_ENABLED=true`). The reason `invalid_key_id` is no longer returned.
 - Stop exporting the client address and a partially masked destination on
   spans; the creation span carries `destination_digest`.
+- An `https://` `OTLP_ENDPOINT` is no longer exported to in plain HTTP when
+  `OTEL_EXPORTER_OTLP_INSECURE`, `OTEL_EXPORTER_OTLP_TRACES_INSECURE` or an
+  `http://` `OTEL_EXPORTER_OTLP_ENDPOINT` is set in the environment; the scheme
+  always comes from `OTLP_ENDPOINT`. A deployment that used one of them to
+  reach a plain-HTTP collector through an `https://` endpoint must set
+  `OTLP_ENDPOINT` to `http://` or `host:port`.
 
 ## [1.6.0] - 2026-11-13
 
