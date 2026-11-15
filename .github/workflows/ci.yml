@@ -20,8 +20,9 @@ env:
   # Pinned tool versions (do not use "latest" so runs are reproducible).
   GOLANGCI_LINT_VERSION: v2.14.0
   # v1.1.4 pins golang.org/x/tools@v0.29.0 whose SSA builder panics on Go 1.27
-  # AST nodes ("unexpected expr: *ast.KeyValueExpr"). v1.7.0 supports Go 1.27.
-  GOVULNCHECK_VERSION: v1.7.0
+  # AST nodes ("unexpected expr: *ast.KeyValueExpr"). v1.7.0 and later support
+  # Go 1.27.
+  GOVULNCHECK_VERSION: v1.9.0
 
 jobs:
   release-guard:
@@ -30,7 +31,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Test release guards against local Git and HTTP fixtures
@@ -43,12 +44,12 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Verify exact test-evidence parsing
         run: python3 -B -m unittest discover -s scripts -p test_pilot_rate_runner.py -v
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
       - name: Download dependencies
@@ -57,7 +58,7 @@ jobs:
         run: python3 -I -B scripts/test-pilot-rate-router.py --output-parent .github/test-results/pilot-rate
       - name: Upload synthetic test evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pilot-rate-router-evidence
           include-hidden-files: true
@@ -71,8 +72,8 @@ jobs:
     name: Code Formatting Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: 'go.mod'
       - name: Check code formatting
@@ -87,8 +88,8 @@ jobs:
     name: Code Static Analysis
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: 'go.mod'
       - name: Download dependencies
@@ -100,8 +101,8 @@ jobs:
     name: Code Testing
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: 'go.mod'
       - name: Download dependencies
@@ -134,7 +135,7 @@ jobs:
       - name: Go quality report (v1.1.4)
         if: "!cancelled() && (github.event_name == 'pull_request') && steps.report_cleanup.outcome == 'success'"
         id: go_report_card
-        uses: soulteary/goreportcard-action@d4669a9fbea514f5995d749177630ebfee755789  # v1.1.4
+        uses: soulteary/goreportcard-action@9744d0297ca0116cd4ef83e4ff6f3ba42a65a24d # v1.1.7
         with:
           directory: "."
           version: "v1.1.4"
@@ -167,7 +168,7 @@ jobs:
           awk -v total="$TOTAL" 'BEGIN { if (total + 0 < 95.0) exit 1 }'
       - name: Upload read-only PR quality evidence
         if: "always() && steps.report_cleanup.outcome == 'success' && ((github.event_name == 'pull_request'))"
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pr-go-quality-${{ github.job }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -186,12 +187,12 @@ jobs:
     name: Code Quality Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: 'go.mod'
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           args: --timeout=5m
@@ -201,8 +202,8 @@ jobs:
     name: Dependency Security Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: 'go.mod'
       - name: Download dependencies
@@ -217,16 +218,16 @@ jobs:
     runs-on: ubuntu-latest
     # Tests and container checks are independent gates; run them in parallel.
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Get version information
         id: version
         run: |
           VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "dev-$(git rev-parse --short HEAD)")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - name: Build Docker image
-        uses: docker/build-push-action@ca877d9245402d1537745e0e356eab47c3520991 # v6
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: ./docker/Dockerfile
@@ -241,29 +242,30 @@ jobs:
         run: |
           test "$(docker inspect --format '{{.Config.User}}' herald:test)" = "10001:10001"
       - name: Generate SBOM (SPDX)
-        uses: anchore/sbom-action@f325610c9f50a54015d37c8d16cb3b0e2c8f4de0 # v0
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           image: herald:test
           format: spdx-json
           output-file: sbom.spdx.json
       - name: Upload SBOM
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom
           path: sbom.spdx.json
       - name: Container vulnerability scan (Trivy)
-        uses: aquasecurity/trivy-action@dc5a429b52fcf669ce959baa2c2dd26090d2a6c4 # 0.32.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: herald:test
           format: table
           exit-code: '1'          # block HIGH/CRITICAL vulnerabilities
           ignore-unfixed: true
           severity: HIGH,CRITICAL
-          # Pin a Trivy version whose release assets exist. The action's own
-          # default (v0.64.1) — plus v0.66.0/v0.68.0 — have had their Linux
-          # binaries yanked upstream, so setup-trivy resolves the tag then dies
-          # with a bare "exit code 1" on the missing asset download
-          # (aquasecurity/trivy-action#516). v0.74.0 assets are present.
+          # Pin a Trivy version whose release assets exist. v0.64.1 (the
+          # default of trivy-action 0.32.0), v0.66.0 and v0.68.0 have had their
+          # Linux binaries yanked upstream, so setup-trivy resolves the tag then
+          # dies with a bare "exit code 1" on the missing asset download
+          # (aquasecurity/trivy-action#516). v0.74.0 assets are present; the
+          # default of trivy-action v0.36.0 is the older v0.70.0.
           version: v0.74.0
           # Authenticate setup-trivy's GitHub API/download calls to avoid the
           # anonymous shared-IP rate limiting that can also surface as exit 1.
@@ -275,7 +277,7 @@ jobs:
           set -euo pipefail
           docker save herald:test | gzip -1 > "$RUNNER_TEMP/herald-ci-image.tar.gz"
       - name: Upload scanned image
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: herald-ci-image
           path: ${{ runner.temp }}/herald-ci-image.tar.gz
@@ -292,11 +294,11 @@ jobs:
       REDIS_PASSWORD: ci_redis_password_0123456789012345
       HERALD_API_KEY: ci_api_key_012345678901234567890123
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Validate compose config
         run: docker compose config >/dev/null
       - name: Download scanned image
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: herald-ci-image
           path: ${{ runner.temp }}/herald-ci-image
@@ -359,8 +361,8 @@ jobs:
     name: Build Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: 'go.mod'
       - name: Download dependencies
