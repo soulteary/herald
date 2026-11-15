@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-11-15
+
 ### Added
 
 - Add `HERALD_CODE_HASH_KEY_PREVIOUS`, a comma-separated list of up to 4 keys
@@ -27,6 +29,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Update challenge-kit from v1.13.0 to v1.14.0. Without
   `HERALD_CODE_HASH_KEY_PREVIOUS` codes are hashed and verified as before.
+
+### Compatibility and operations
+
+- HTTP routes, payloads, error reasons, authentication modes, metrics, the
+  audit spool file format and the Go SDK (`pkg/herald`) are unchanged. No data
+  conversion is required. `herald-totp/v2` stays at v2.0.4.
+- With `HERALD_CODE_HASH_KEY_PREVIOUS` unset, v1.8.0 and v1.9.0 instances can
+  share one Redis in any order during a rolling upgrade or rollback, with or
+  without `HERALD_CODE_HASH_KEY`.
+- An environment variable named `HERALD_CODE_HASH_KEY_PREVIOUS` was ignored by
+  v1.8.0 and takes effect now. Herald refuses to start when it lists a key
+  shorter than 32 bytes or more than 4 keys.
+- Start a key change only after every instance runs v1.9.0, and finish it,
+  with the previous key removed, before rolling back to v1.8.0. See "Upgrade
+  from v1.8.0 to v1.9.0" in `docs/enUS/DEPLOYMENT.md`.
 
 ## [1.8.0] - 2026-11-15
 
@@ -1009,7 +1026,8 @@ and Redis key prefix of audit records all stay as they were.
 See `docs/enUS/MIGRATION_V2.md` and `docs/zhCN/MIGRATION_V2.md` for the v1→v2
 authentication diff, environment-variable migration, and rollback guidance.
 
-[Unreleased]: https://github.com/soulteary/herald/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/soulteary/herald/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/soulteary/herald/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/soulteary/herald/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/soulteary/herald/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/soulteary/herald/compare/v1.5.2...v1.6.0

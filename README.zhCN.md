@@ -2,7 +2,7 @@
 
 [![Go Test Coverage](./.github/coverage.svg)](./.github/go-test-report.md) [![Go Report Card](./.github/goreportcard.svg)](./.github/goreportcard-report.md) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go Version](https://img.shields.io/badge/go-1.27.4+-blue.svg)](https://golang.org)
 
-Herald v1.8.0 新增 `HERALD_CODE_HASH_KEY`：设置后，Redis 中保存的验证码摘要改用带密钥的 HMAC-SHA-256，没有密钥就无法离线穷举。该配置默认关闭，不设置时行为不变；`challenge-kit` 升级到 v1.13.0。在多个实例上启用密钥前，请阅读[升级与回滚说明](docs/zhCN/DEPLOYMENT.md#从-v170-升级到-v180)。v1.7.0 引入的锁定阈值与创建限额见[从 v1.6.0 升级到 v1.7.0](docs/zhCN/DEPLOYMENT.md#从-v160-升级到-v170)。
+Herald v1.9.0 新增 `HERALD_CODE_HASH_KEY_PREVIOUS`：列出的密钥只用于校验 Redis 中保存的验证码摘要，不用于写入，因此更换 `HERALD_CODE_HASH_KEY` 时不会拒绝尚未过期的 challenge。该配置默认为空，不设置时行为不变；`challenge-kit` 升级到 v1.14.0。在多个实例上更换密钥前，请阅读[升级与回滚说明](docs/zhCN/DEPLOYMENT.md#从-v180-升级到-v190)。v1.8.0 引入的密钥启用步骤见[从 v1.7.0 升级到 v1.8.0](docs/zhCN/DEPLOYMENT.md#从-v170-升级到-v180)。
 
 
 

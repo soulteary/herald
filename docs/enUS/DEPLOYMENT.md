@@ -400,7 +400,7 @@ delivery. Restart Herald after changing templates.
 Pin `ghcr.io/soulteary/herald-dingtalk:1.2.8`,
 `ghcr.io/soulteary/herald-smtp:1.2.9`, and
 `ghcr.io/soulteary/herald-totp:2.0.4` (or verified immutable digests).
-Herald v1.8.0 imports `github.com/soulteary/herald-totp/v2` v2.0.4. SMTP and
+Herald v1.9.0 imports `github.com/soulteary/herald-totp/v2` v2.0.4. SMTP and
 DingTalk retain their existing patch-level interfaces. TOTP keeps its `/v1` HTTP
 routes and credential storage, but its HMAC protocol changes to operation-bound
 v2 with nonce protection. Upgrade the TOTP service and Herald proxy together;
@@ -988,6 +988,53 @@ under the canonical key are not read by v1.5.2 for numbers written with `+` or
 downgrading its module. For a Go application rebuilt from source, restore the
 pre-upgrade `go.mod` and `go.sum` and inspect `go list -m all` before building.
 Older migration requirements above still apply.
+
+## Upgrade from v1.8.0 to v1.9.0
+
+Herald v1.9.0 adds `HERALD_CODE_HASH_KEY_PREVIOUS` and moves `challenge-kit`
+to v1.14.0. HTTP routes, payloads, error reasons, authentication modes,
+metrics, the audit spool file format and the Go SDK (`pkg/herald`) are
+unchanged. `herald-totp/v2` stays at v2.0.4 and the provider services do not
+need to be upgraded. No data conversion or key migration is required. This is
+a minor release because it adds configuration.
+
+With `HERALD_CODE_HASH_KEY_PREVIOUS` unset, v1.9.0 stores and verifies codes
+exactly as v1.8.0 does, with or without `HERALD_CODE_HASH_KEY`, and v1.8.0 and
+v1.9.0 instances can serve the same Redis in any order during a rolling
+upgrade or rollback.
+
+Check the configuration before deploying:
+
+- An environment variable named `HERALD_CODE_HASH_KEY_PREVIOUS` was ignored by
+  v1.8.0 and takes effect now. Herald refuses to start in every environment
+  when it lists a key shorter than 32 bytes or more than 4 keys.
+- The `Configuration initialized` log line gains the field
+  `code_hash_previous_keys`.
+- Startup logs a `config.code_hash_previous` warning when the list is set
+  without `HERALD_CODE_HASH_KEY` or lists a key equal to it.
+
+Changing the key is a separate step after every instance runs v1.9.0, because
+v1.8.0 ignores the variable. Follow [Changing the key](#changing-the-key): on
+instances that restart one at a time, first list the new key as previous on
+every instance, then make it the key with the old one as previous, and remove
+the previous key `CHALLENGE_EXPIRY` after the last instance was restarted.
+
+Rollback to v1.8.0:
+
+- If `HERALD_CODE_HASH_KEY_PREVIOUS` was never set, replace the image; nothing
+  else is needed.
+- If a key change is in progress, finish it or return to the old key first, so
+  that every instance has one key and no previous key, and wait
+  `CHALLENGE_EXPIRY` (default `5m`) after the last instance stopped writing
+  with the other key. Then downgrade. A v1.8.0 instance verifies under
+  `HERALD_CODE_HASH_KEY` only: it answers the correct code of a challenge
+  written under another key `401/invalid` and consumes an attempt until the
+  challenge expires.
+- No Redis data has to be changed or deleted in either direction.
+
+The Go SDK has no changes in this release. An application that selects
+`github.com/soulteary/herald@v1.9.0` works with a v1.8.0 service and the
+reverse.
 
 ## Upgrade from v1.7.0 to v1.8.0
 
