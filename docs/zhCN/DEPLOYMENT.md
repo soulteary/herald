@@ -146,7 +146,7 @@ Herald 从右向左解析转发 IP 链，仅跳过明确配置为可信的代理
 固定使用 `ghcr.io/soulteary/herald-dingtalk:1.2.8`、
 `ghcr.io/soulteary/herald-smtp:1.2.9`、
 `ghcr.io/soulteary/herald-totp:2.0.4`，或经过核验的不可变摘要。
-Herald v1.7.0 导入 `github.com/soulteary/herald-totp/v2` v2.0.4。SMTP 和钉钉
+Herald v1.8.0 导入 `github.com/soulteary/herald-totp/v2` v2.0.4。SMTP 和钉钉
 保留补丁版本接口。TOTP 保留 `/v1` HTTP 路由与凭据存储格式，但 HMAC 协议
 升级为绑定操作并带 nonce 防重放的 v2；必须协调升级 TOTP 服务和 Herald
 代理，旧 HMAC 签名不再接受。仅使用 API key 的模式仍可用。
@@ -808,6 +808,42 @@ Redis 端点。回滚后会重新注册 v1 验证路由，span 重新输出 `use
 的客户端须先移除该调用，再降低模块版本。从源码重建 Go 应用时，应恢复升级前的
 `go.mod` 和 `go.sum`，并在构建前用 `go list -m all` 核对实际选中的版本。上文更早的
 迁移要求仍然适用。
+
+## 从 v1.7.0 升级到 v1.8.0
+
+Herald v1.8.0 新增 `HERALD_CODE_HASH_KEY` 和 `HERALD_CODE_HASH_VERIFY_ONLY`，
+并将 `challenge-kit` 升级到 v1.13.0。HTTP 路由、请求与响应、错误原因码、认证方式、
+指标、审计 spool 文件格式和 Go SDK（`pkg/herald`）均无变化。`herald-totp/v2`
+保持 v2.0.4，各 provider 服务无需升级。无需数据转换或密钥迁移。因新增配置项，
+本次为次版本发布。
+
+未设置 `HERALD_CODE_HASH_KEY` 时，v1.8.0 保存和校验验证码的方式与 v1.7.0 完全
+相同；滚动升级或回滚期间，v1.7.0 与 v1.8.0 实例可以按任意顺序共用同一个 Redis。
+
+部署前请检查配置：
+
+- 名为 `HERALD_CODE_HASH_KEY` 或 `HERALD_CODE_HASH_VERIFY_ONLY` 的环境变量在
+  v1.7.0 中被忽略，现在会生效。`HERALD_CODE_HASH_KEY` 已设置但不足 32 字节，或
+  `HERALD_CODE_HASH_VERIFY_ONLY` 不是布尔值时，Herald 在任何环境下都拒绝启动。
+- `Configuration initialized` 日志行新增字段 `code_hash`。
+
+启用密钥是所有实例都运行 v1.8.0 之后的单独步骤，请按[验证码哈希密钥](#验证码哈希密钥)
+操作：多实例部署先让全部实例带上密钥并设置 `HERALD_CODE_HASH_VERIFY_ONLY=true`，
+然后再移除 `HERALD_CODE_HASH_VERIFY_ONLY`。没有密钥、密钥不同或仍运行 v1.7.0 的
+实例，会把带密钥 challenge 的正确验证码按 `401/invalid` 拒绝并消耗一次尝试，直到
+该 challenge 过期。
+
+回滚到 v1.7.0：
+
+- 从未设置过 `HERALD_CODE_HASH_KEY`：直接替换镜像即可。
+- 已设置：先在所有实例上设置 `HERALD_CODE_HASH_VERIFY_ONLY=true`，等待
+  `CHALLENGE_EXPIRY`（默认 `5m`），确保没有未过期的带密钥 challenge，然后再降级。
+  v1.7.0 会忽略这两个变量。跳过等待只会在最长 `CHALLENGE_EXPIRY` 的时间内出现
+  上述拒绝。
+- 两个方向都不需要修改或删除 Redis 数据。
+
+本次发布 Go SDK 没有变化。选用 `github.com/soulteary/herald@v1.8.0` 的应用可以
+与 v1.7.0 服务配合使用，反之亦然。
 
 ## 从 v1.6.0 升级到 v1.7.0
 
