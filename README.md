@@ -2,7 +2,7 @@
 
 [![Go Test Coverage](./.github/coverage.svg)](./.github/go-test-report.md) [![Go Report Card](./.github/goreportcard.svg)](./.github/goreportcard-report.md) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go Version](https://img.shields.io/badge/go-1.27.4+-blue.svg)](https://golang.org)
 
-Herald v1.6.0 adds optional Redis TLS and ACL username settings, `HERALD_VERIFY_V1_ENABLED` to disable the v1 verification route, and the SDK option `WithClientIPHeader`. Defaults are unchanged, but startup now rejects some invalid configuration values that previously fell back to a default; see the [upgrade and rollback guidance](docs/enUS/DEPLOYMENT.md#upgrade-from-v152-to-v160).
+Herald v1.7.0 locks a user after `LOCKOUT_CHALLENGE_THRESHOLD` exhausted challenges (default `3`) or `LOCKOUT_FAILED_ATTEMPT_THRESHOLD` wrong codes (default `15`) instead of after the first exhausted challenge, applies the creation limits and cooldowns in one step, and expires unresolved idempotency records after `IDEMPOTENCY_UNRESOLVED_TTL`. Some error reasons, metric labels and span names change, and startup rejects an `IDEMPOTENCY_UNRESOLVED_TTL` that does not exceed the idempotency key TTL; see the [upgrade and rollback guidance](docs/enUS/DEPLOYMENT.md#upgrade-from-v160-to-v170).
 
 
 
