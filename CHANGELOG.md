@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-15
+
 ### Added
 
 - Add `LOCKOUT_CHALLENGE_THRESHOLD` (integer, default `3`, minimum `1`): the
@@ -172,6 +174,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   always comes from `OTLP_ENDPOINT`. A deployment that used one of them to
   reach a plain-HTTP collector through an `https://` endpoint must set
   `OTLP_ENDPOINT` to `http://` or `host:port`.
+
+### Compatibility and operations
+
+- HTTP routes, success payloads, authentication modes, challenge and
+  idempotency record formats, the audit spool file format and the Go SDK
+  (`pkg/herald`) are unchanged. No data conversion or re-enrollment is
+  required. `herald-totp/v2` stays at v2.0.4.
+- Check the configuration before upgrading. Herald refuses to start in every
+  environment when `IDEMPOTENCY_UNRESOLVED_TTL` (default `24h`) is not greater
+  than `IDEMPOTENCY_KEY_TTL` (`CHALLENGE_EXPIRY` when that is `0`), so a
+  deployment whose pending TTL is 24h or longer must set it. Custom templates
+  in region-tagged directories and email templates saved with CRLF line
+  endings, which v1.6.0 did not deliver, are sent after the upgrade; review
+  `TEMPLATE_DIR`.
+- Defaults that change behaviour: a user is locked after
+  `LOCKOUT_CHALLENGE_THRESHOLD` (default `3`) exhausted challenges instead of
+  one, and after `LOCKOUT_FAILED_ATTEMPT_THRESHOLD` (default `15`) wrong codes
+  within `LOCKOUT_FAILED_ATTEMPT_WINDOW` (default `1h`); `RESEND_COOLDOWN` also
+  applies per destination; production uses `PROVIDER_FAILURE_POLICY=strict`
+  when the variable is unset; an `http://` or `https://` `OTLP_ENDPOINT`, which
+  exported nothing before, now exports spans.
+- Clients, dashboards and alerts need to follow the changed reasons
+  (`400/invalid_challenge_id`, `503/channel_not_configured`,
+  `503/hash_capacity_exceeded`, `401/invalid_signature` in place of
+  `invalid_key_id`, `403/user_locked` before `429`), the Redis metric label
+  `operation="ratelimit_create"`, the span names and the removed span
+  attributes.
+- User locks are not shared between v1.6.0 and v1.7.0 instances and a lock in
+  force during the upgrade is not carried over. Rate-limit counters, cooldowns,
+  challenges and idempotency records are shared. Rollback to v1.6.0 keeps
+  Redis data and the audit spool; set `PROVIDER_FAILURE_POLICY=strict`
+  explicitly in production first, because v1.6.0 refuses to start without it.
+  See the
+  [upgrade and rollback guidance](docs/enUS/DEPLOYMENT.md#upgrade-from-v160-to-v170).
 
 ## [1.6.0] - 2026-11-13
 
@@ -908,7 +944,8 @@ and Redis key prefix of audit records all stay as they were.
 See `docs/enUS/MIGRATION_V2.md` and `docs/zhCN/MIGRATION_V2.md` for the v1→v2
 authentication diff, environment-variable migration, and rollback guidance.
 
-[Unreleased]: https://github.com/soulteary/herald/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/soulteary/herald/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/soulteary/herald/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/soulteary/herald/compare/v1.5.2...v1.6.0
 [1.5.2]: https://github.com/soulteary/herald/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/soulteary/herald/compare/v1.5.0...v1.5.1

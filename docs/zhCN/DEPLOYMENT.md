@@ -144,7 +144,7 @@ Herald 从右向左解析转发 IP 链，仅跳过明确配置为可信的代理
 固定使用 `ghcr.io/soulteary/herald-dingtalk:1.2.8`、
 `ghcr.io/soulteary/herald-smtp:1.2.9`、
 `ghcr.io/soulteary/herald-totp:2.0.4`，或经过核验的不可变摘要。
-Herald v1.6.0 导入 `github.com/soulteary/herald-totp/v2` v2.0.4。SMTP 和钉钉
+Herald v1.7.0 导入 `github.com/soulteary/herald-totp/v2` v2.0.4。SMTP 和钉钉
 保留补丁版本接口。TOTP 保留 `/v1` HTTP 路由与凭据存储格式，但 HMAC 协议
 升级为绑定操作并带 nonce 防重放的 v2；必须协调升级 TOTP 服务和 Herald
 代理，旧 HMAC 签名不再接受。仅使用 API key 的模式仍可用。
@@ -739,38 +739,155 @@ Redis 端点。回滚后会重新注册 v1 验证路由，span 重新输出 `use
 `go.mod` 和 `go.sum`，并在构建前用 `go list -m all` 核对实际选中的版本。上文更早的
 迁移要求仍然适用。
 
-## 从 v1.6.0 升级
+## 从 v1.6.0 升级到 v1.7.0
 
-无需转换数据。限流计数器和既有的用户+destination 冷却保持原有的 Redis 键名、窗口和 TTL
-处理方式，因此进行中的计数和冷却继续生效，滚动升级期间新旧实例共用这些记录。
+Herald v1.7.0 调整了用户锁定的触发条件、创建 challenge 时限额与冷却的执行方式、若干错误原因码，
+以及指标、span 和日志输出。HTTP 路由、成功响应、认证模式、challenge 与幂等记录格式、审计
+spool 文件格式以及 Go SDK（`pkg/herald`）均不变，无需转换数据、迁移密钥或重新绑定。
+`challenge-kit` 升级到 v1.12.0；`herald-totp/v2` 仍为 v2.0.4，各 provider 服务无需升级。
+因新增配置项，本次为次版本更新。
 
-- 创建 challenge 时，用户、IP 和 destination 限额以及冷却在一次 Redis Lua 调用中执行，
-  该调用读写五个键。Herald 连接单一 Redis 端点；把键路由到不同分片的代理必须支持多键脚本。
-- 被限额、冷却或 `user_locked` 拒绝的请求不再消耗配额。被锁定且同时超出限额的用户现在
-  收到 `403/user_locked`，而不是 `429`。
-- 新增第二个冷却键 `ratelimit:cooldown:dest:<digest>`，按 destination 应用
-  `RESEND_COOLDOWN`，不区分 `user_id`。在冷却时间内以多个用户 ID 向同一 destination
-  正常发送的调用方，现在会收到 `429/resend_cooldown`。运行 v1.6.0 的实例不读取该键，
-  因此仅按 destination 的冷却要到所有实例升级后才完全生效。
-- `herald_redis_operation_duration_seconds` 和 `herald_redis_operations_total` 以
+部署前请检查配置。以下取值在 v1.6.0 可以启动，现在在所有环境都会阻止启动：
+
+- `IDEMPOTENCY_UNRESOLVED_TTL`（新增，默认 `24h`）必须为正值，且大于 `IDEMPOTENCY_KEY_TTL`
+  （该值为 `0` 时取 `CHALLENGE_EXPIRY`）。`IDEMPOTENCY_KEY_TTL` 为 24h 或更长的部署，或该值
+  保持 `0` 且 `CHALLENGE_EXPIRY` 为 24h 或更长的部署，升级前必须把
+  `IDEMPOTENCY_UNRESOLVED_TTL` 设为更大的值。
+- 新增的锁定配置有各自的取值范围：`LOCKOUT_CHALLENGE_THRESHOLD` 至少为 `1`，
+  `LOCKOUT_FAILED_ATTEMPT_THRESHOLD` 不得为负，阈值不为 `0` 时
+  `LOCKOUT_FAILED_ATTEMPT_WINDOW` 必须为正值。v1.6.0 没有这些配置，只有环境中已经定义了
+  这些变量时才需要关注。
+
+有一种此前会阻止启动的情况现在可以启动：生产环境中 `PROVIDER_FAILURE_POLICY` 未设置或为空时
+按 `strict` 处理，而 v1.6.0 在未设置该变量时拒绝启动。生产环境显式设置 `soft` 仍会被拒绝。
+
+升级检查清单。每一项说明变化内容、需要检查什么以及如何处理：
+
+- 用户锁定阈值。单个 challenge 耗尽（`MAX_ATTEMPTS` 次错误验证码）不再锁定其用户，须在
+  `LOCKOUT_DURATION` 内耗尽 `LOCKOUT_CHALLENGE_THRESHOLD`（默认 `3`）个 challenge 才会锁定。
+  已耗尽的 challenge 本身仍返回 `locked`。设置 `LOCKOUT_CHALLENGE_THRESHOLD=1` 可保持
+  v1.6.0 的行为。
+- 跨 challenge 的错误次数锁定。用户在 `LOCKOUT_FAILED_ATTEMPT_WINDOW`（默认 `1h`）内提交
+  `LOCKOUT_FAILED_ATTEMPT_THRESHOLD`（默认 `15`）次错误验证码后也会被锁定，不论这些验证码
+  针对哪个 challenge。v1.6.0 没有这项计数。请确认默认值适合确有频繁重试需求的调用方；设为
+  `0` 可关闭计数。因 Redis 故障而无法记录错误次数时，该次验证返回 503。
+- 锁定键。锁定键由 `otp:lock:<user_id>` 改为 `otp:lock:v2:<digest>`，并新增
+  `otp:lock:exhausted:<digest>`（已耗尽 challenge ID 的集合）和 `otp:lock:failed:<digest>`
+  （错误验证码计数器）。摘要依赖 `HERALD_PII_PEPPER`，轮换 pepper 会丢弃当前的锁定和计数。
+  旧锁定键不再读取，会在 `LOCKOUT_DURATION` 内过期。升级时正在生效的锁定不会延续。
+- 创建限额。创建 challenge 时先检查用户锁定，再在一次 Redis Lua 调用中执行用户、IP 和
+  destination 限额以及冷却，该调用读写五个键。Herald 连接单一 Redis 端点；把键路由到不同
+  分片的代理必须支持多键脚本。被限额、冷却或 `user_locked` 拒绝的请求不再消耗配额。
+  被锁定且同时超出限额的用户现在收到 `403/user_locked`，而不是 `429`；依据 `429`
+  安排重试的调用方需要处理 `403`。
+- destination 冷却。新增第二个冷却键 `ratelimit:cooldown:dest:<digest>`，按 destination
+  应用 `RESEND_COOLDOWN`，不区分 `user_id`。在冷却时间内以多个用户 ID 向同一 destination
+  正常发送的调用方，现在会收到 `429/resend_cooldown`。
+- 冷却释放。在 `PROVIDER_FAILURE_POLICY=strict` 下，创建请求返回 `500/send_failed`
+  且失败能够证明没有任何 provider 接受该消息时（见[没有 provider 的通道](#没有-provider-的通道)），
+  重发冷却会被释放，立即重试不再返回 `429/resend_cooldown`；配额仍然计入。为此冷却键的值由
+  `1` 改为随机令牌；两个版本都只读取冷却键是否存在及其 TTL。
+- Redis 权限。Redis ACL 用户如果按命令限制，需要允许 `EVAL`，以及脚本中使用的 `GET`、`SET`、
+  `DEL`、`EXISTS`、`INCR`、`PTTL`、`PEXPIRE`、`SADD` 和 `SCARD`。如果按键模式限制，现有的
+  `ratelimit:*` 和 `otp:lock:*` 模式已覆盖新增的键。创建 challenge 不再发送 `PING`。
+- 新增和变更的错误响应。按这些响应做判断的客户端和告警需要更新：
+  - `challenge_id` 不是 1-64 字节的 `A-Za-z0-9_-` 时，两个验证路由和撤销路由返回
+    `400/invalid_challenge_id`。Herald 签发的 ID 始终符合要求。
+  - strict 策略下，针对没有 provider 的通道的创建请求返回 `503/channel_not_configured`，
+    此时不使用任何配额、冷却或幂等键。请查看 Herald 启动时记录的 provider 覆盖情况日志，
+    为缺少 provider 的通道补上配置。
+  - 哈希槽位全部占用时，创建和验证返回 `503/hash_capacity_exceeded`。v1.6.0 返回
+    `503/backend_unavailable`；把 `backend_unavailable` 视为 Redis 故障的告警不会再收到
+    这种情况。
+  - `429/rate_limit_exceeded` 新增 `limit` 字段（`user`、`ip` 或 `destination`）。
+    `429/resend_cooldown` 没有该字段。
+  - 未知的 HMAC 密钥 ID 在 v2/v3 签名方案和旧的 v1 签名方案下都返回
+    `401/invalid_signature`，不再返回原因码 `invalid_key_id`。可通过
+    `herald_auth_failure_total{reason="invalid_key_id"}` 区分这两种情况。
+  - 仅结果记录在操作完成后写入失败时，创建、验证和撤销不再返回 `503/audit_unavailable`，
+    应改为对 `herald_audit_post_action_failure_total` 配置告警。
+  - 非生产环境中，nonce 无法记录的 HMAC 请求现在与生产环境一样返回
+    `503/nonce_store_unavailable`，此前会被放行。
+- 不确定的幂等记录。`sending` 记录现在会在 `IDEMPOTENCY_UNRESOLVED_TTL` 后过期。过期前该键
+  仍返回 `409/delivery_unknown`；过期后同一个键会发起新的请求。旧版本写入的无 TTL 记录保持
+  原样。
+- 指标。`herald_redis_operation_duration_seconds` 和 `herald_redis_operations_total` 以
   `operation="ratelimit_create"` 报告创建 challenge 时的限流操作。创建 challenge 不再输出
-  `ratelimit_user`、`ratelimit_ip`、`ratelimit_dest` 和 `cooldown` 这些取值；筛选这些取值的
-  看板需要更新。
-- `24h` 不合适时请设置 `IDEMPOTENCY_UNRESOLVED_TTL`。它必须大于 `IDEMPOTENCY_KEY_TTL`
-  （该值为 `0` 时取 `CHALLENGE_EXPIRY`）；发送前占位 TTL 为 24h 或更长的部署必须显式设置，
-  否则启动失败。新的不确定 `sending` 记录在该时长后过期，已存储的无 TTL 记录保持原样。
-- 仅结果记录在操作完成后写入失败时，创建、验证和撤销不再返回 `503/audit_unavailable`。
-  应对 `herald_audit_post_action_failure_total` 配置告警。
+  `ratelimit_user`、`ratelimit_ip`、`ratelimit_dest` 和 `cooldown` 这些取值，筛选这些取值的
+  看板需要更新。新增 `operation="cooldown_release"`，以及计数器
+  `herald_audit_post_action_failure_total{operation}`、`herald_audit_quarantined_total`、
+  `herald_audit_spool_missing_total`、`herald_auth_failure_total{reason}` 和
+  `herald_failed_attempt_lock_total`。
+- 追踪。请求 span 的名称由 `/` 改为 `<METHOD> <路由模板>`（例如
+  `POST /v1/otp/challenges`）。不再输出 `http.target`、客户端地址（`http.remote_addr`）
+  和部分掩码的 `destination` 属性；创建 span 改为携带 `destination_digest`。带有 W3C
+  `traceparent` 请求头的请求现在会加入调用方的 trace。使用旧名称或旧属性的追踪查询和看板
+  需要更新。
+- OTLP 端点。`OTLP_ENDPOINT` 除 `host:port` 外，也接受 `http://` 和 `https://` URL。
+  v1.6.0 对 URL 形式不导出任何数据，因此这样配置的部署在升级后会开始导出 span，请确认
+  collector 可达且容量足够。协议始终取自 `OTLP_ENDPOINT`：此前通过
+  `OTEL_EXPORTER_OTLP_INSECURE`、`OTEL_EXPORTER_OTLP_TRACES_INSECURE` 或 `http://` 形式的
+  `OTEL_EXPORTER_OTLP_ENDPOINT`，让 `https://` 端点以明文 HTTP 连接 collector 的部署，必须把
+  `OTLP_ENDPOINT` 改为 `http://` 或 `host:port`。只有在导出器建立成功时才会输出
+  `OpenTelemetry tracing initialized`。
+- 启动日志。新增的警告带有 `check` 字段：`config.environment`（未设置 `ENVIRONMENT`；
+  后续版本将在未设置时拒绝启动）、`config.rate_limit_ip`（启用按 IP 限额但未配置
+  `HERALD_TRUSTED_PROXY_HEADER` 和 `HERALD_TRUSTED_PROXIES`）、`config.listener_tls`
+  （生产环境监听端口未启用 TLS）、`config.code_length`（`CODE_LENGTH` 小于 6）、
+  `config.test_mode`、`config.totp`、`config.otlp`、`config.otlp_endpoint` 和
+  `config.secrets`。这些警告都不会阻止启动。对启动阶段任何警告都触发的日志告警需要调整。
+- 发送失败日志。内置 SMTP provider 的失败日志带有 `failure_category`，服务器返回状态码时还带有
+  `smtp_code`；strict 策略下的发送失败日志带有 `cooldown_released`。
+- 审计 spool。连续 5 次无法解码的待投递文件会被重命名为 `<id>.json.quarantined`，不再重试；
+  无法读取的文件按最长 5 分钟的间隔重试；从 `AUDIT_SPOOL_DIR` 中被删除的待投递文件会被丢弃，
+  并记录一次日志。应对 `herald_audit_quarantined_total` 和
+  `herald_audit_spool_missing_total` 配置告警。并发的审计记录共用 spool 的 sync 操作；
+  每条记录仍然只在其文件和目录项都已 sync 之后才确认。文件格式不变。
+- 模板。带地区标记的目录（如 `zh-CN`）中的自定义模板现在会被选用，v1.6.0 对这类目录发送的是
+  内置文案。以 CRLF 换行保存的邮件模板现在可以发送，v1.6.0 中由这类模板生成的邮件全部发送
+  失败。升级前请检查 `TEMPLATE_DIR` 下的文件，因为其内容将开始对外发送。主题行仍含回车符或
+  NUL 的模板不会被加载，并在启动时报告；无法加载或永远不会被选用的模板文件同样会在启动时
+  报告。
+- 非生产环境的密钥。固定的回退密钥已移除。`HERALD_IDEMPOTENCY_SECRET`、`HMAC_SECRET` 和
+  `API_KEY` 均未设置的部署（仅非生产环境可能出现）改为从 `HERALD_HMAC_KEYS` 派生密钥；没有
+  密钥映射时，每次启动生成随机密钥。以旧密钥为键的幂等和 nonce 记录将无法再找到；完全没有
+  密钥材料时，这些记录既不在实例之间共享，也不会跨重启保留。设置
+  `HERALD_IDEMPOTENCY_SECRET` 可避免这一情况。已设置密钥的部署和生产环境不受影响。
 
-回滚到 v1.6.0 会保留全部 Redis 数据。v1.6.0 忽略仅按 destination 的冷却键和
-`IDEMPOTENCY_UNRESOLVED_TTL`；新版本写入的 `sending` 记录保留其 TTL，仍会过期。
+滚动升级。两个版本的副本可以同时对外提供服务，副本之间没有先后顺序要求。请先完成上述配置
+调整，再替换全部副本，并尽量缩短新旧版本并存的时间：
 
-用户锁定：
+- 两个版本共用：challenge、限流计数器、既有的用户+destination 冷却、幂等记录和 nonce 记录。
+  计数器和冷却的键名、窗口和 TTL 均未改变。v1.7.0 写入的冷却键保存随机令牌，v1.6.0 写入的
+  保存 `1`；两个版本都认可这两种值，v1.7.0 只会释放仍保存着自身令牌的冷却。
+- 不共用：用户锁定。v1.6.0 实例读写 `otp:lock:<user_id>`，v1.7.0 实例读写
+  `otp:lock:v2:<digest>`，因此经一个版本锁定的用户仍可通过另一个版本创建和验证 challenge。
+  由 v1.6.0 实例处理的 challenge 耗尽和错误验证码不计入 v1.7.0 的阈值。
+- v1.6.0 实例不读取 `ratelimit:cooldown:dest:<digest>`，仅按 destination 的冷却要到所有
+  实例升级后才完全生效。
+- 两个版本并存期间，客户端收到哪一套错误原因码、Redis 指标带有哪一套 `operation` 取值，
+  取决于处理请求的实例。
 
-- 单个 challenge 耗尽不再锁定其用户。锁定需要在 `LOCKOUT_DURATION` 内耗尽
-  `LOCKOUT_CHALLENGE_THRESHOLD`（默认 `3`）个 challenge。设置
-  `LOCKOUT_CHALLENGE_THRESHOLD=1` 可恢复此前的行为。
-- 锁定键由 `otp:lock:<user_id>` 改为 `otp:lock:v2:<digest>`。无需迁移：旧键会在
-  `LOCKOUT_DURATION` 内过期。升级时正在生效的锁定不会延续，滚动升级期间两个版本的实例
-  不共用锁定。
-- 摘要依赖 `HERALD_PII_PEPPER`。轮换 pepper 会丢弃当前的锁定和计数。
+回滚到 v1.6.0 会保留全部 Redis 数据和审计 spool，无需删除任何内容：
+
+- 在生产环境启动 v1.6.0 之前，须显式设置 `PROVIDER_FAILURE_POLICY=strict`；v1.6.0 在未设置
+  该变量时拒绝启动。v1.6.0 忽略新增的 `LOCKOUT_*` 配置和 `IDEMPOTENCY_UNRESOLVED_TTL`。
+  `OTLP_ENDPOINT` 写成 URL 时 v1.6.0 不导出 span；连接明文 HTTP 的 collector 请使用
+  `host:port`。
+- v1.6.0 不读取 `otp:lock:v2:<digest>`、`otp:lock:exhausted:<digest>`、
+  `otp:lock:failed:<digest>` 和 `ratelimit:cooldown:dest:<digest>`。这些键会自行过期
+  （分别取决于 `LOCKOUT_DURATION`、`LOCKOUT_FAILED_ATTEMPT_WINDOW` 和 `RESEND_COOLDOWN`）。
+  因此 v1.7.0 设置的锁定在回滚后不再生效，v1.6.0 重新在第一个 challenge 耗尽时锁定用户，
+  并写入 `otp:lock:<user_id>`。
+- 保存令牌的冷却键在过期前会被 v1.6.0 视为生效中的冷却。限流计数器和待处理的 challenge
+  继续有效。
+- v1.7.0 写入的 `sending` 幂等记录保留其 TTL，仍会过期；v1.6.0 写入的这类记录重新变为没有
+  TTL。
+- v1.7.0 写入的待投递审计 spool 文件由 v1.6.0 继续投递。`<id>.json.quarantined` 文件会被
+  v1.6.0 忽略并留在 `AUDIT_SPOOL_DIR` 中；对无法解码或已被删除的待投递文件，v1.6.0 重新
+  每秒重试一次。
+- 错误原因码、指标标签、span 名称与属性以及模板选用规则恢复为 v1.6.0 的行为。非生产环境且
+  未配置密钥时，v1.6.0 重新使用固定的回退密钥，找不到 v1.7.0 写入的相关记录。
+
+本次发布未改动 Go SDK。选择 `github.com/soulteary/herald@v1.7.0` 的应用可以调用 v1.6.0
+的服务，反之亦然，只是错误原因码以上文所列为准。上文更早的迁移要求仍然适用。

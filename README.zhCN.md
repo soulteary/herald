@@ -2,7 +2,7 @@
 
 [![Go Test Coverage](./.github/coverage.svg)](./.github/go-test-report.md) [![Go Report Card](./.github/goreportcard.svg)](./.github/goreportcard-report.md) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go Version](https://img.shields.io/badge/go-1.27.4+-blue.svg)](https://golang.org)
 
-Herald v1.6.0 新增可选的 Redis TLS 与 ACL 用户名配置、用于关闭 v1 验证路由的 `HERALD_VERIFY_V1_ENABLED`，以及 SDK 选项 `WithClientIPHeader`。默认行为不变，但启动时会拒绝部分此前回退到默认值的无效配置；参见[升级与回滚说明](docs/zhCN/DEPLOYMENT.md#从-v152-升级到-v160)。
+Herald v1.7.0 改为在耗尽 `LOCKOUT_CHALLENGE_THRESHOLD`（默认 `3`）个 challenge 或提交 `LOCKOUT_FAILED_ATTEMPT_THRESHOLD`（默认 `15`）次错误验证码后锁定用户，不再在第一个 challenge 耗尽时锁定；创建 challenge 的限额与冷却合并为一步执行；不确定的幂等记录在 `IDEMPOTENCY_UNRESOLVED_TTL` 后过期。部分错误原因码、指标标签和 span 名称有变化，且 `IDEMPOTENCY_UNRESOLVED_TTL` 不大于幂等键 TTL 时拒绝启动；参见[升级与回滚说明](docs/zhCN/DEPLOYMENT.md#从-v160-升级到-v170)。
 
 
 

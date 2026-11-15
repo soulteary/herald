@@ -395,7 +395,7 @@ delivery. Restart Herald after changing templates.
 Pin `ghcr.io/soulteary/herald-dingtalk:1.2.8`,
 `ghcr.io/soulteary/herald-smtp:1.2.9`, and
 `ghcr.io/soulteary/herald-totp:2.0.4` (or verified immutable digests).
-Herald v1.6.0 imports `github.com/soulteary/herald-totp/v2` v2.0.4. SMTP and
+Herald v1.7.0 imports `github.com/soulteary/herald-totp/v2` v2.0.4. SMTP and
 DingTalk retain their existing patch-level interfaces. TOTP keeps its `/v1` HTTP
 routes and credential storage, but its HMAC protocol changes to operation-bound
 v2 with nonce protection. Upgrade the TOTP service and Herald proxy together;
@@ -820,53 +820,217 @@ downgrading its module. For a Go application rebuilt from source, restore the
 pre-upgrade `go.mod` and `go.sum` and inspect `go list -m all` before building.
 Older migration requirements above still apply.
 
-## Upgrade from v1.6.0
+## Upgrade from v1.6.0 to v1.7.0
 
-No data conversion is required. Rate-limit counters and the existing
-user+destination cooldown keep their Redis key names, window and TTL handling,
-so counters and cooldowns in progress continue to apply, and old and new
-instances share them during a rolling upgrade.
+Herald v1.7.0 changes when a user is locked, how challenge creation applies its
+limits and cooldowns, several error reasons, and metric, span and log output.
+HTTP routes, success payloads, authentication modes, challenge and idempotency
+record formats, the audit spool file format and the Go SDK (`pkg/herald`) are
+unchanged. No data conversion, key migration or re-enrollment is required.
+`challenge-kit` moves to v1.12.0; `herald-totp/v2` stays at v2.0.4 and the
+provider services do not need to be upgraded. This is a minor release because
+it adds configuration.
 
-- Challenge creation applies the user, IP and destination limits and the
-  cooldowns in one Redis Lua call that reads and writes five keys. Herald
-  connects to a single Redis endpoint; a proxy that routes keys to different
-  shards must support multi-key scripts.
-- A request rejected by a limit, a cooldown or `user_locked` no longer consumes
+Check the configuration before deploying. These values were accepted by v1.6.0
+and now stop startup in every environment:
+
+- `IDEMPOTENCY_UNRESOLVED_TTL` (new, default `24h`) must be positive and
+  greater than `IDEMPOTENCY_KEY_TTL` (`CHALLENGE_EXPIRY` when that is `0`). A
+  deployment whose `IDEMPOTENCY_KEY_TTL` is 24h or longer, or that leaves it at
+  `0` with a `CHALLENGE_EXPIRY` of 24h or longer, must set
+  `IDEMPOTENCY_UNRESOLVED_TTL` to a larger value before upgrading.
+- The new lock settings have their own bounds: `LOCKOUT_CHALLENGE_THRESHOLD`
+  must be at least `1`, `LOCKOUT_FAILED_ATTEMPT_THRESHOLD` must not be
+  negative, and `LOCKOUT_FAILED_ATTEMPT_WINDOW` must be positive unless the
+  threshold is `0`. They did not exist in v1.6.0, so this matters only if the
+  environment already defines them.
+
+One value that stopped startup is now accepted: in production an unset or empty
+`PROVIDER_FAILURE_POLICY` means `strict`. v1.6.0 refused to start without the
+variable. An explicit `soft` is still refused in production.
+
+Upgrade checklist. Each item names what changed, what to check and what to do:
+
+- User lock threshold. One exhausted challenge (`MAX_ATTEMPTS` wrong codes) no
+  longer locks its user. The lock needs `LOCKOUT_CHALLENGE_THRESHOLD` (default
+  `3`) exhausted challenges within `LOCKOUT_DURATION`. The exhausted challenge
+  itself still answers `locked`. Set `LOCKOUT_CHALLENGE_THRESHOLD=1` to keep the
+  v1.6.0 behaviour.
+- Lock on wrong codes across challenges. A user is also locked after
+  `LOCKOUT_FAILED_ATTEMPT_THRESHOLD` (default `15`) wrong codes within
+  `LOCKOUT_FAILED_ATTEMPT_WINDOW` (default `1h`), whichever challenges they
+  were submitted against. v1.6.0 had no such count. Check that the defaults fit
+  callers that legitimately retry often; `0` disables the count. A verification
+  whose wrong code cannot be counted because Redis failed is answered 503.
+- Lock keys. Locks moved from `otp:lock:<user_id>` to `otp:lock:v2:<digest>`.
+  The new keys `otp:lock:exhausted:<digest>` (a set of exhausted challenge IDs)
+  and `otp:lock:failed:<digest>` (the wrong-code counter) are added. The digest
+  depends on `HERALD_PII_PEPPER`; rotating the pepper drops current locks and
+  counts. Old lock keys are no longer read and expire within
+  `LOCKOUT_DURATION`. A lock in force at the moment of the upgrade is not
+  carried over.
+- Creation limits. Challenge creation checks the user lock first, then applies
+  the user, IP and destination limits and the cooldowns in one Redis Lua call
+  that reads and writes five keys. Herald connects to a single Redis endpoint;
+  a proxy that routes keys to different shards must support multi-key scripts.
+  A request rejected by a limit, a cooldown or `user_locked` no longer consumes
   quota. A locked user who is also over a limit now receives `403/user_locked`
-  instead of `429`.
-- A second cooldown key, `ratelimit:cooldown:dest:<digest>`, applies
-  `RESEND_COOLDOWN` per destination regardless of `user_id`. Callers that
-  legitimately send to one destination for several user IDs within the cooldown
-  now receive `429/resend_cooldown`. Instances running v1.6.0 do not read this
-  key, so the destination-only cooldown is fully effective once every instance
-  is upgraded.
-- `herald_redis_operation_duration_seconds` and
-  `herald_redis_operations_total` report challenge creation limits under
-  `operation="ratelimit_create"`. The `ratelimit_user`, `ratelimit_ip`,
-  `ratelimit_dest` and `cooldown` values are no longer emitted by challenge
-  creation; update dashboards that select them.
-- Set `IDEMPOTENCY_UNRESOLVED_TTL` if `24h` is not suitable. It must exceed
-  `IDEMPOTENCY_KEY_TTL` (`CHALLENGE_EXPIRY` when that is `0`); a deployment with
-  a pending TTL of 24h or more must set it explicitly or startup fails. New
-  unresolved `sending` records expire after it. Records already stored without a
-  TTL are left as they are.
-- Create, verify and revoke no longer return `503/audit_unavailable` when only
-  the result record fails after the action completed. Alert on
-  `herald_audit_post_action_failure_total`.
+  instead of `429`. Callers that used the `429` to pace retries must handle the
+  `403`.
+- Destination cooldown. A second cooldown key,
+  `ratelimit:cooldown:dest:<digest>`, applies `RESEND_COOLDOWN` per destination
+  regardless of `user_id`. Callers that legitimately send to one destination for
+  several user IDs within the cooldown now receive `429/resend_cooldown`.
+- Cooldown release. Under `PROVIDER_FAILURE_POLICY=strict`, a create answered
+  `500/send_failed` releases the resend cooldowns when the failure proves that
+  no provider accepted the message (see
+  [channels without a provider](#channels-without-a-provider)), so an immediate
+  retry is no longer answered `429/resend_cooldown`. The quotas stay spent. To
+  make this possible the cooldown keys hold a random token instead of `1`; only
+  the existence and TTL of a cooldown key are read, by both versions.
+- Redis permissions. If the Redis ACL user is restricted by command, it needs
+  `EVAL` and, for the scripts, `GET`, `SET`, `DEL`, `EXISTS`, `INCR`, `PTTL`,
+  `PEXPIRE`, `SADD` and `SCARD`. If it is restricted by key pattern, the
+  existing `ratelimit:*` and `otp:lock:*` patterns cover the new keys. Challenge
+  creation no longer sends `PING`.
+- New and changed error responses. Update clients and alerts that match on
+  them:
+  - `400/invalid_challenge_id` for a `challenge_id` outside 1-64 bytes of
+    `A-Za-z0-9_-`, on both verification routes and on revoke. IDs issued by
+    Herald always pass.
+  - `503/channel_not_configured` for a create request on a channel without a
+    provider under the strict policy, before any quota, cooldown or
+    idempotency key is used. Read the provider coverage line Herald logs at
+    startup and configure the missing providers.
+  - `503/hash_capacity_exceeded` when every hash slot is busy, on creation and
+    verification. v1.6.0 answered `503/backend_unavailable`; alerts that treat
+    `backend_unavailable` as a Redis outage no longer see this case.
+  - `429/rate_limit_exceeded` carries a new `limit` field (`user`, `ip` or
+    `destination`). `429/resend_cooldown` has no such field.
+  - An unknown HMAC key ID is answered `401/invalid_signature` on the v2/v3
+    schemes and on the legacy v1 scheme. The reason `invalid_key_id` is no
+    longer returned; use `herald_auth_failure_total{reason="invalid_key_id"}`
+    to tell the two cases apart.
+  - Create, verify and revoke no longer return `503/audit_unavailable` when
+    only the result record fails after the action completed. Alert on
+    `herald_audit_post_action_failure_total` instead.
+  - Outside production, an HMAC request whose nonce cannot be recorded is
+    answered `503/nonce_store_unavailable`, as in production. It was let
+    through before.
+- Unresolved idempotency records. A `sending` record now expires after
+  `IDEMPOTENCY_UNRESOLVED_TTL`. Until then the key answers
+  `409/delivery_unknown` as before; afterwards the same key starts a new
+  request. Records stored without a TTL by earlier versions are left as they
+  are.
+- Metrics. `herald_redis_operation_duration_seconds` and
+  `herald_redis_operations_total` report the creation limits under
+  `operation="ratelimit_create"`. The values `ratelimit_user`, `ratelimit_ip`,
+  `ratelimit_dest` and `cooldown` are no longer emitted by challenge creation;
+  update dashboards that select them. `operation="cooldown_release"` is new,
+  as are the counters `herald_audit_post_action_failure_total{operation}`,
+  `herald_audit_quarantined_total`, `herald_audit_spool_missing_total`,
+  `herald_auth_failure_total{reason}` and `herald_failed_attempt_lock_total`.
+- Traces. Request spans are named `<METHOD> <route template>` (for example
+  `POST /v1/otp/challenges`) instead of `/`. `http.target`, the client address
+  (`http.remote_addr`) and the masked `destination` attribute are no longer
+  exported; the creation span carries `destination_digest`. A request with a
+  W3C `traceparent` header now joins the caller's trace. Update trace queries
+  and dashboards that use the old name or attributes.
+- OTLP endpoint. `OTLP_ENDPOINT` accepts `http://` and `https://` URLs in
+  addition to `host:port`. v1.6.0 exported nothing for the URL form, so a
+  deployment configured that way starts exporting spans after the upgrade;
+  check that the collector is reachable and sized for it. The scheme always
+  comes from `OTLP_ENDPOINT`: a deployment that reached a plain-HTTP collector
+  through an `https://` endpoint with `OTEL_EXPORTER_OTLP_INSECURE`,
+  `OTEL_EXPORTER_OTLP_TRACES_INSECURE` or an `http://`
+  `OTEL_EXPORTER_OTLP_ENDPOINT` must set `OTLP_ENDPOINT` to `http://` or
+  `host:port`. `OpenTelemetry tracing initialized` is logged only when an
+  exporter was set up.
+- Startup log. New warnings carry a `check` field: `config.environment`
+  (`ENVIRONMENT` unset; a later release will refuse to start without it),
+  `config.rate_limit_ip` (per-IP limit without `HERALD_TRUSTED_PROXY_HEADER`
+  and `HERALD_TRUSTED_PROXIES`), `config.listener_tls` (production listener
+  without TLS), `config.code_length` (`CODE_LENGTH` below 6),
+  `config.test_mode`, `config.totp`, `config.otlp`, `config.otlp_endpoint` and
+  `config.secrets`. None of them stops startup. Adjust log alerts that fire on
+  any warning during startup.
+- Delivery failure log. The failure line for the built-in SMTP provider carries
+  `failure_category` and, when the server sent one, `smtp_code`; failed sends
+  under the strict policy carry `cooldown_released`.
+- Audit spool. A pending file that cannot be decoded 5 times in a row is
+  renamed to `<id>.json.quarantined` and no longer retried; a file that cannot
+  be read is retried with a delay of up to 5 minutes; a pending file deleted
+  from `AUDIT_SPOOL_DIR` is dropped and logged once. Alert on
+  `herald_audit_quarantined_total` and `herald_audit_spool_missing_total`.
+  Concurrent records share spool syncs; each record is still acknowledged only
+  after its file and directory entry are synced. The file format is unchanged.
+- Templates. Custom templates in region-tagged directories (for example
+  `zh-CN`) are now selected; v1.6.0 sent the built-in text for them. Email
+  templates saved with CRLF line endings are now sent; with v1.6.0 every
+  message built from such a template failed. Review the files under
+  `TEMPLATE_DIR` before upgrading, because their content starts to be sent. A
+  subject line that still contains a carriage return or NUL is reported at
+  startup and the template is not loaded, as are template files that cannot be
+  loaded or can never be selected.
+- Secrets outside production. The fixed fallback secret is gone. A deployment
+  that sets none of `HERALD_IDEMPOTENCY_SECRET`, `HMAC_SECRET` and `API_KEY`
+  (possible only outside production) derives the secret from
+  `HERALD_HMAC_KEYS`, or generates a random one at each start when there is no
+  key map. Idempotency and nonce records keyed by the old value are no longer
+  found, and without any secret material they are not shared between instances
+  or kept across restarts. Set `HERALD_IDEMPOTENCY_SECRET` to avoid this.
+  Deployments that set a secret, and production, are unchanged.
 
-Rolling back to v1.6.0 keeps all Redis data. v1.6.0 ignores the
-destination-only cooldown key and `IDEMPOTENCY_UNRESOLVED_TTL`; `sending`
-records written by the newer version keep their TTL and still expire.
+Rolling upgrade. Replicas of both versions can serve traffic at the same time
+and no order between replicas is required. Apply the configuration changes
+above first, then replace all replicas and keep the mixed period short:
 
-User lock:
+- Shared between versions: challenges, rate-limit counters, the existing
+  user+destination cooldown, idempotency and nonce records. Counter and
+  cooldown key names, windows and TTLs are unchanged. A cooldown key written by
+  v1.7.0 holds a random token and one written by v1.6.0 holds `1`; both
+  versions honour either, and v1.7.0 releases only a cooldown that still holds
+  its own token.
+- Not shared: user locks. v1.6.0 instances read and write
+  `otp:lock:<user_id>`, v1.7.0 instances `otp:lock:v2:<digest>`, so a user
+  locked through one version can still create and verify challenges through
+  the other. Exhausted challenges and wrong codes handled by a v1.6.0 instance
+  are not counted towards the v1.7.0 thresholds.
+- v1.6.0 instances do not read `ratelimit:cooldown:dest:<digest>`, so the
+  destination-only cooldown is complete once every instance is upgraded.
+- While both versions run, clients see either set of error reasons and the
+  Redis metrics carry either set of `operation` values, depending on the
+  instance that served the request.
 
-- One exhausted challenge no longer locks its user. The lock needs
-  `LOCKOUT_CHALLENGE_THRESHOLD` (default `3`) exhausted challenges within
-  `LOCKOUT_DURATION`. Set `LOCKOUT_CHALLENGE_THRESHOLD=1` for the previous
-  behaviour.
-- Lock keys moved from `otp:lock:<user_id>` to `otp:lock:v2:<digest>`. No
-  migration is needed: the old keys expire within `LOCKOUT_DURATION`. A lock in
-  force at the moment of the upgrade is not carried over, and instances of the
-  two versions do not share locks during a rolling upgrade.
-- The digest depends on `HERALD_PII_PEPPER`. Rotating the pepper drops current
-  locks and counts.
+Rolling back to v1.6.0 keeps all Redis data and the audit spool. Nothing has to
+be deleted:
+
+- Before starting v1.6.0 in production, set `PROVIDER_FAILURE_POLICY=strict`
+  explicitly; v1.6.0 refuses to start when it is unset. v1.6.0 ignores the new
+  `LOCKOUT_*` settings and `IDEMPOTENCY_UNRESOLVED_TTL`. It exports no spans
+  for an `OTLP_ENDPOINT` written as a URL; use `host:port` for a plain-HTTP
+  collector.
+- v1.6.0 does not read `otp:lock:v2:<digest>`, `otp:lock:exhausted:<digest>`,
+  `otp:lock:failed:<digest>` or `ratelimit:cooldown:dest:<digest>`. These keys
+  expire on their own (`LOCKOUT_DURATION`, `LOCKOUT_FAILED_ATTEMPT_WINDOW` and
+  `RESEND_COOLDOWN`). Locks set by v1.7.0 therefore stop applying at the
+  rollback, and v1.6.0 again locks a user on the first exhausted challenge
+  under `otp:lock:<user_id>`.
+- Cooldown keys that hold a token are read by v1.6.0 as cooldowns in force
+  until they expire. Rate-limit counters and pending challenges continue to
+  apply.
+- `sending` idempotency records written by v1.7.0 keep their TTL and still
+  expire. Records v1.6.0 writes have no TTL again.
+- Pending audit spool files written by v1.7.0 are delivered by v1.6.0.
+  `<id>.json.quarantined` files are ignored by v1.6.0 and stay in
+  `AUDIT_SPOOL_DIR`; v1.6.0 again retries an undecodable or deleted pending
+  file every second.
+- Error reasons, metric labels, span names and attributes, and template
+  selection return to the v1.6.0 behaviour. Outside production without a
+  configured secret, v1.6.0 uses the fixed fallback secret again and does not
+  find records keyed by v1.7.0.
+
+The Go SDK has no changes in this release. An application that selects
+`github.com/soulteary/herald@v1.7.0` works with a v1.6.0 service and the
+reverse, apart from the changed error reasons listed above. Older migration
+requirements above still apply.
