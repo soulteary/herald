@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `HERALD_CODE_HASH_KEY_PREVIOUS`, a comma-separated list of up to 4 keys
+  under which keyed code digests are verified but never written, so
+  `HERALD_CODE_HASH_KEY` can be changed without refusing outstanding
+  challenges. Each listed key must be at least 32 bytes in every environment;
+  Herald refuses to start otherwise, or when more than 4 are listed. On
+  instances that restart one at a time, list the new key as previous on every
+  instance first, then make it the key with the old one as previous, and
+  remove the previous key one `CHALLENGE_EXPIRY` later. v1.8.0 and earlier
+  ignore the variable. A key that contains a comma cannot be listed.
+- The `Configuration initialized` log line carries `code_hash_previous_keys`,
+  the number of listed keys. Startup logs a `config.code_hash_previous`
+  warning when the list is set without `HERALD_CODE_HASH_KEY` or lists a key
+  equal to it.
+
+### Changed
+
+- Update challenge-kit from v1.13.0 to v1.14.0. Without
+  `HERALD_CODE_HASH_KEY_PREVIOUS` codes are hashed and verified as before.
+
 ## [1.8.0] - 2026-11-15
 
 ### Added
