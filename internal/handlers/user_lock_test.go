@@ -354,7 +354,27 @@ func TestUserLock_RedisOutageFailsClosed(t *testing.T) {
 	require.Equal(t, "backend_unavailable", body["reason"])
 }
 
-// Parallel wrong guesses consume at most MAX_ATTEMPTS per challenge, and the
+// verifyWhenFree calls the challenge manager until the call is decided.
+//
+// Herald configures the manager to make one attempt at a challenge's
+// verification lock per call (VerifyLockWait is one nanosecond), so a call
+// that meets another verifier returns lock_contention at once, having
+// compared nothing. A fixed number of such calls is used up in a few
+// milliseconds, while the verifier holding the lock is still hashing; the
+// retries are therefore bounded by time, with a pause between them, and not
+// by count. The allowance only stops a lock that is never released.
+func (f *userLockFixture) verifyWhenFree(ctx context.Context, challengeID, code string) (*challengekit.VerifyResult, error) {
+	deadline := time.Now().Add(time.Minute)
+	for {
+		result, err := f.h.challengeManager.Verify(ctx, challengeID, code, "192.0.2.1")
+		if result.Reason != challengekit.ReasonLockContention || time.Now().After(deadline) {
+			return result, err
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// Parallel wrong guesses consume exactly MAX_ATTEMPTS per challenge, and the
 // lock set by them is not bypassed by a correct code on another challenge.
 func TestUserLock_ConcurrentWrongGuesses(t *testing.T) {
 	const threshold, workers = 2, 6
@@ -375,13 +395,24 @@ func TestUserLock_ConcurrentWrongGuesses(t *testing.T) {
 
 	var wg sync.WaitGroup
 	var accepted atomic.Int64
+	// A result the test does not expect, for example a backend error, ends
+	// the worker and fails the test; it is not retried as if nothing happened.
+	var unexpectedMu sync.Mutex
+	var unexpected []string
+	report := func(challengeID string, result *challengekit.VerifyResult, err error) {
+		unexpectedMu.Lock()
+		defer unexpectedMu.Unlock()
+		unexpected = append(unexpected, fmt.Sprintf("%s: reason %q, error %v", challengeID, result.Reason, err))
+	}
 	for _, tg := range targets {
 		for w := 0; w < workers; w++ {
 			wg.Add(1)
 			go func(tg *target) {
 				defer wg.Done()
-				for try := 0; try < 200; try++ {
-					result, _ := f.h.challengeManager.Verify(ctx, tg.ch.ID, wrongCode(tg.code), "192.0.2.1")
+				// Every pass either counts a compared code, of which there
+				// are at most MAX_ATTEMPTS, or returns.
+				for {
+					result, err := f.verifyWhenFree(ctx, tg.ch.ID, wrongCode(tg.code))
 					switch {
 					case result.OK:
 						accepted.Add(1)
@@ -389,7 +420,10 @@ func TestUserLock_ConcurrentWrongGuesses(t *testing.T) {
 					case result.RemainingAttempts != nil:
 						// A wrong code was compared and counted.
 						tg.consumed.Add(1)
-					case result.Reason == challengekit.ReasonLocked, result.Reason == challengekit.ReasonUserLocked, result.Reason == challengekit.ReasonExpired:
+					case result.Reason == challengekit.ReasonLocked, result.Reason == challengekit.ReasonUserLocked:
+						return
+					default:
+						report(tg.ch.ID, result, err)
 						return
 					}
 				}
@@ -398,17 +432,14 @@ func TestUserLock_ConcurrentWrongGuesses(t *testing.T) {
 	}
 	wg.Wait()
 
+	require.Empty(t, unexpected)
 	require.Zero(t, accepted.Load())
-	exhausted := 0
 	for _, tg := range targets {
-		require.LessOrEqual(t, tg.consumed.Load(), int64(config.MaxAttempts), "more than MAX_ATTEMPTS guesses were compared")
-		if tg.consumed.Load() == int64(config.MaxAttempts) {
-			exhausted++
-		}
+		// The lock is set by the attempt that exhausts the last of the
+		// `threshold` challenges, so every worker keeps guessing until its
+		// challenge has no attempts left.
+		require.EqualValues(t, config.MaxAttempts, tg.consumed.Load(), "each challenge has exactly MAX_ATTEMPTS guesses compared")
 	}
-	// The lock can land while the last challenge still has attempts left; it
-	// is set as soon as `threshold` challenges are exhausted, never later.
-	require.Equal(t, exhausted >= threshold, f.mr.Exists(f.lockKey(lockTestUser)))
 	require.True(t, f.mr.Exists(f.lockKey(lockTestUser)), "exhausting the threshold number of challenges must lock the user")
 
 	// Parallel correct codes on an untouched challenge are all refused.
@@ -417,20 +448,19 @@ func TestUserLock_ConcurrentWrongGuesses(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for try := 0; try < 200; try++ {
-				result, _ := f.h.challengeManager.Verify(ctx, spare.ID, spareCode, "192.0.2.1")
-				if result.OK {
-					accepted.Add(1)
-					return
-				}
-				if result.Reason == challengekit.ReasonUserLocked {
-					refused.Add(1)
-					return
-				}
+			result, err := f.verifyWhenFree(ctx, spare.ID, spareCode)
+			switch {
+			case result.OK:
+				accepted.Add(1)
+			case result.Reason == challengekit.ReasonUserLocked:
+				refused.Add(1)
+			default:
+				report(spare.ID, result, err)
 			}
 		}()
 	}
 	wg.Wait()
+	require.Empty(t, unexpected)
 	require.Zero(t, accepted.Load(), "a locked user's challenge was verified")
 	require.EqualValues(t, workers, refused.Load())
 }
