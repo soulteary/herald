@@ -42,3 +42,11 @@ repository/organization settings.
   keyless-signs it with cosign (Sigstore/Fulcio via OIDC).
 - Consumers should verify checksums and, verify the
   cosign signature by digest.
+- Images of v1.9.0 and earlier were signed with cosign v2; the signature is
+  the registry tag `sha256-<digest>.sig`. Later images are signed with cosign
+  v3, which stores a Sigstore bundle as an OCI referring artifact (on GHCR the
+  tag `sha256-<digest>`, without `.sig`). Verify those with cosign v3, or with
+  cosign v2.6 and `--new-bundle-format`; older cosign releases report no
+  signature for them. The signing identity is unchanged:
+  `https://github.com/soulteary/herald/.github/workflows/release.yml@refs/tags/vX.Y.Z`,
+  issued by `https://token.actions.githubusercontent.com`.
