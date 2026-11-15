@@ -31,9 +31,11 @@ type codeHashFixture struct {
 
 func newCodeHashFixture(t *testing.T) *codeHashFixture {
 	t.Helper()
-	oldKey, oldVerifyOnly := config.CodeHashKey, config.CodeHashVerifyOnly
-	t.Cleanup(func() { config.CodeHashKey, config.CodeHashVerifyOnly = oldKey, oldVerifyOnly })
-	config.CodeHashKey, config.CodeHashVerifyOnly = "", false
+	oldKey, oldVerifyOnly, oldPrevious := config.CodeHashKey, config.CodeHashVerifyOnly, config.CodeHashKeyPrevious
+	t.Cleanup(func() {
+		config.CodeHashKey, config.CodeHashVerifyOnly, config.CodeHashKeyPrevious = oldKey, oldVerifyOnly, oldPrevious
+	})
+	config.CodeHashKey, config.CodeHashVerifyOnly, config.CodeHashKeyPrevious = "", false, ""
 	return &codeHashFixture{base: newUserLockFixture(t, 3)}
 }
 
@@ -41,7 +43,13 @@ func newCodeHashFixture(t *testing.T) *codeHashFixture {
 // restarted or second instance would be.
 func (f *codeHashFixture) instance(t *testing.T, key string, verifyOnly bool) *codeHashInstance {
 	t.Helper()
-	config.CodeHashKey, config.CodeHashVerifyOnly = key, verifyOnly
+	return f.instanceWithPrevious(t, key, "", verifyOnly)
+}
+
+// instanceWithPrevious is instance with a HERALD_CODE_HASH_KEY_PREVIOUS value.
+func (f *codeHashFixture) instanceWithPrevious(t *testing.T, key, previous string, verifyOnly bool) *codeHashInstance {
+	t.Helper()
+	config.CodeHashKey, config.CodeHashVerifyOnly, config.CodeHashKeyPrevious = key, verifyOnly, previous
 	rc := redis.NewClient(&redis.Options{Addr: f.base.mr.Addr()})
 	t.Cleanup(func() { _ = rc.Close() })
 	h := newIdemHandlers(t, rc)
@@ -244,4 +252,109 @@ func TestCodeHashKey_ShortKeyFailsHandlerConstruction(t *testing.T) {
 	require.Nil(t, h)
 	require.Contains(t, err.Error(), "HERALD_CODE_HASH_KEY")
 	require.NotContains(t, err.Error(), short)
+}
+
+// The documented key change on instances that restart one at a time. Stage 1
+// is "key A, previous B", stage 2 is "key B, previous A", stage 3 is "key B".
+// At every step of the rollout, each instance verifies what any instance of
+// the same or the neighbouring stage created, and refuses a wrong code.
+func TestCodeHashKeyPrevious_RotationStages(t *testing.T) {
+	f := newCodeHashFixture(t)
+	stages := []struct {
+		name string
+		i    *codeHashInstance
+	}{
+		{"key A", f.instance(t, codeHashKeyA, false)},
+		{"key A, previous B", f.instanceWithPrevious(t, codeHashKeyA, codeHashKeyB, false)},
+		{"key B, previous A", f.instanceWithPrevious(t, codeHashKeyB, " "+codeHashKeyA+" ,", false)},
+		{"key B", f.instance(t, codeHashKeyB, false)},
+	}
+	hasher := map[string]challengekit.CodeHasher{}
+	for name, key := range map[string]string{"A": codeHashKeyA, "B": codeHashKeyB} {
+		h, err := challengekit.NewHMACCodeHasher([]byte(key))
+		require.NoError(t, err)
+		hasher[name] = h
+	}
+	writesWith := []string{"A", "A", "B", "B"}
+
+	user := 0
+	for s := 0; s+1 < len(stages); s++ {
+		for _, pair := range [][2]int{{s, s + 1}, {s + 1, s}, {s + 1, s + 1}} {
+			creator, verifier := stages[pair[0]], stages[pair[1]]
+			user++
+			ch, code := creator.i.newChallenge(t, "user-rotation-"+string(rune('a'+user)))
+
+			// The stored value is the single-key digest under the creator's
+			// primary key: the format carries no trace of the previous keys.
+			want, err := hasher[writesWith[pair[0]]].Hash(context.Background(), ch.ID, code)
+			require.NoError(t, err)
+			require.Equal(t, want, creator.i.stored(t, ch.ID).CodeHash, "created by %q", creator.name)
+
+			requireWrongCode(t, verifier.i, ch.ID, wrongCode(code), 1)
+			status, body := verifier.i.verify(t, ch.ID, code)
+			require.Equal(t, fiber.StatusOK, status, "created by %q, verified by %q: %v", creator.name, verifier.name, body)
+			require.Equal(t, true, body["ok"], body)
+		}
+	}
+}
+
+// Without stage 1 the change is not safe on a mixed fleet: an instance that
+// still has only key A refuses the right code of a challenge created by an
+// instance that already writes with key B. In the other direction it works.
+func TestCodeHashKeyPrevious_SkippingTheFirstStageFailsOneWay(t *testing.T) {
+	f := newCodeHashFixture(t)
+	onlyA := f.instance(t, codeHashKeyA, false)
+	switched := f.instanceWithPrevious(t, codeHashKeyB, codeHashKeyA, false)
+
+	ch, code := switched.newChallenge(t, "user-skip-new")
+	requireWrongCode(t, onlyA, ch.ID, code, 1)
+	requireVerified(t, switched, ch.ID, code)
+
+	ch, code = onlyA.newChallenge(t, "user-skip-old")
+	requireVerified(t, switched, ch.ID, code)
+}
+
+// A key that is neither the primary nor a listed one is still refused.
+func TestCodeHashKeyPrevious_UnlistedKeyIsRefused(t *testing.T) {
+	f := newCodeHashFixture(t)
+	const keyC = "code-hash-key-C-0123456789abcdef"
+	writer := f.instance(t, keyC, false)
+	ch, code := writer.newChallenge(t, "user-unlisted")
+
+	requireWrongCode(t, f.instanceWithPrevious(t, codeHashKeyB, codeHashKeyA, false), ch.ID, code, 1)
+	requireVerified(t, f.instanceWithPrevious(t, codeHashKeyB, codeHashKeyA+","+keyC, false), ch.ID, code)
+}
+
+// Verify-only together with previous keys: Argon2 is written, and digests
+// under the primary key and under a previous key are both verified.
+func TestCodeHashKeyPrevious_VerifyOnlyStage(t *testing.T) {
+	f := newCodeHashFixture(t)
+	plain := f.instance(t, "", false)
+	verifyOnly := f.instanceWithPrevious(t, codeHashKeyB, codeHashKeyA, true)
+
+	ch, code := verifyOnly.newChallenge(t, "user-vo-argon2")
+	require.True(t, isArgon2CodeHash(verifyOnly.stored(t, ch.ID).CodeHash))
+	requireVerified(t, plain, ch.ID, code)
+
+	for name, key := range map[string]string{"primary": codeHashKeyB, "previous": codeHashKeyA} {
+		ch, code := f.instance(t, key, false).newChallenge(t, "user-vo-"+name)
+		requireWrongCode(t, verifyOnly, ch.ID, wrongCode(code), 1)
+		requireVerified(t, verifyOnly, ch.ID, code)
+	}
+}
+
+// NewHandlersWithError refuses a previous key challenge-kit cannot use, and
+// names the variable without repeating a value.
+func TestCodeHashKeyPrevious_ShortKeyFailsHandlerConstruction(t *testing.T) {
+	f := newCodeHashFixture(t)
+	const short = "short-previous-code-hash-key"
+	config.CodeHashKey, config.CodeHashKeyPrevious = codeHashKeyA, codeHashKeyB+","+short
+
+	h, err := NewHandlersWithError(f.base.rc, testLogger())
+	require.Error(t, err)
+	require.Nil(t, h)
+	require.Contains(t, err.Error(), "HERALD_CODE_HASH_KEY_PREVIOUS")
+	require.NotContains(t, err.Error(), short)
+	require.NotContains(t, err.Error(), codeHashKeyA)
+	require.NotContains(t, err.Error(), codeHashKeyB)
 }

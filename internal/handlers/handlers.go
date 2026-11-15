@@ -110,10 +110,16 @@ func NewHandlersWithError(redisClient *redis.Client, log *logger.Logger) (*Handl
 		ChallengeKeyPrefix: challengeRecordPrefix,
 	}
 	if config.CodeHashKey != "" {
-		hasher, err := challengekit.NewHMACCodeHasher([]byte(config.CodeHashKey))
+		// Keys in HERALD_CODE_HASH_KEY_PREVIOUS are verified but never written,
+		// so the key can be changed while challenges are outstanding.
+		var previous [][]byte
+		for _, key := range config.CodeHashPreviousKeys() {
+			previous = append(previous, []byte(key))
+		}
+		hasher, err := challengekit.NewHMACCodeHasherWithPrevious([]byte(config.CodeHashKey), previous...)
 		if err != nil {
-			// The library error carries lengths only, never the key.
-			return nil, fmt.Errorf("HERALD_CODE_HASH_KEY cannot be used: %w", err)
+			// The library error carries lengths and positions only, never a key.
+			return nil, fmt.Errorf("HERALD_CODE_HASH_KEY or HERALD_CODE_HASH_KEY_PREVIOUS cannot be used: %w", err)
 		}
 		challengeConfig.CodeHasher = hasher
 		challengeConfig.CodeHasherVerifyOnly = config.CodeHashVerifyOnly

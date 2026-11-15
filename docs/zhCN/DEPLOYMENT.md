@@ -120,6 +120,7 @@ Herald 从右向左解析转发 IP 链，仅跳过明确配置为可信的代理
 | `HERALD_MAX_CONCURRENT_HASH_OPERATIONS` | 每个 handler 实例中创建与 v1/v2 验证共享的并发预算，必须为正整数 | `4` | 否 |
 | `HERALD_CODE_HASH_KEY` | 为 Redis 中保存的验证码摘要加密钥（HMAC-SHA-256）的密钥。留空则继续使用不带密钥的 Argon2 哈希。在任何环境下都至少 32 字节，否则启动失败。所有实例必须使用同一个值；参见[验证码哈希密钥](#验证码哈希密钥) | （空） | 建议 |
 | `HERALD_CODE_HASH_VERIFY_ONLY` | 已设置 `HERALD_CODE_HASH_KEY` 时：新 challenge 仍保存 Argon2 哈希，同时可以验证带密钥的摘要。用于滚动变更密钥设置及其回滚的第一阶段 | `false` | 否 |
+| `HERALD_CODE_HASH_KEY_PREVIOUS` | 以逗号分隔的密钥列表，最多 4 个：这些密钥只用于验证带密钥的摘要，从不用于写入。用于更换 `HERALD_CODE_HASH_KEY` 而不拒绝未完成的 challenge，见[更换密钥](#更换密钥)。在任何环境下每个密钥都至少 32 字节，否则启动失败。未设置 `HERALD_CODE_HASH_KEY` 时不起作用 | （空） | 否 |
 | `CHALLENGE_EXPIRY` | Challenge 过期时间（如 `5m`、`300s`）。内置消息以整分钟表示该时间，向下取整；不足一分钟时显示为 1 分钟 | `5m` | 否 |
 | `MAX_ATTEMPTS` | 单个 challenge 可接受的错误验证码次数，达到后该 challenge 耗尽并返回 `locked` | `5` | 否 |
 | `LOCKOUT_DURATION` | 被锁定用户保持锁定的时长，也是统计已耗尽 challenge 的时间窗口（如 `10m`） | `10m` | 否 |
@@ -261,6 +262,7 @@ HTTPS。请配置最终服务地址：包括同源跳转在内的所有重定向
 | `config.totp` | `HERALD_TOTP_ENABLED=true` 且 `HERALD_TOTP_BASE_URL` 为空 | TOTP 代理未配置；所有 `/v1/totp` 请求返回 `503/totp_not_configured` |
 | `config.otlp` | `OTLP_ENABLED=true` 且 `OTLP_ENDPOINT` 为空 | 没有配置 trace 导出器，不会导出任何 span |
 | `config.code_hash` | `HERALD_CODE_HASH_VERIFY_ONLY=true` 且 `HERALD_CODE_HASH_KEY` 为空 | 该开关单独设置不起作用：验证码仍以不带密钥的 Argon2 哈希保存，也无法验证带密钥的摘要 |
+| `config.code_hash_previous` | 设置了 `HERALD_CODE_HASH_KEY_PREVIOUS` 而 `HERALD_CODE_HASH_KEY` 为空，或列表中某个密钥与 `HERALD_CODE_HASH_KEY` 相同 | 没有主密钥时，任何密钥下的带密钥摘要都无法验证。与主密钥相同的列表项不增加任何密钥，通常说明两个变量没有按预期对调 |
 
 #### 审计日志
 
@@ -569,7 +571,8 @@ scrape_configs:
   中会写明 `HERALD_CODE_HASH_KEY`。没有 `HERALD_CODE_HASH_KEY_FILE`；与其他密钥一样，只从
   环境变量读取。
 - Herald 不会把密钥写入日志。启动日志 `Configuration initialized` 一行以 `code_hash` 字段
-  报告当前方案：`argon2`、`hmac-sha256` 或 `argon2 (hmac-sha256 verify-only)`。
+  报告当前方案：`argon2`、`hmac-sha256` 或 `argon2 (hmac-sha256 verify-only)`，并以
+  `code_hash_previous_keys` 字段报告从 `HERALD_CODE_HASH_KEY_PREVIOUS` 读到的密钥个数。
 - 尝试次数、用户锁定、限流和过期行为不变。创建与验证仍受
   `HERALD_MAX_CONCURRENT_HASH_OPERATIONS` 准入预算约束；计算带密钥的摘要不需要 Argon2
   所占用的内存。
@@ -583,11 +586,13 @@ challenge 从创建到验证成功或过期为止，一直保留创建时写入�
 |------|------------------------|
 | 首次设置密钥 | 继续可以验证。保存的 Argon2 哈希始终用 Argon2 比对 |
 | 移除密钥，或请求落到没有密钥的实例（包括 v1.7.0 及更早版本） | 正确的验证码会像错误验证码一样返回 `401/invalid`，并消耗一次尝试，直到 challenge 过期 |
-| 更换密钥，或各实例密钥不一致 | 同上：正确的验证码返回 `401/invalid` 并消耗一次尝试，直到 challenge 过期 |
+| 更换密钥，或各实例密钥不一致，且负责验证的实例没有把创建时所用的密钥列入 `HERALD_CODE_HASH_KEY_PREVIOUS` | 同上：正确的验证码返回 `401/invalid` 并消耗一次尝试，直到 challenge 过期 |
+| 更换密钥，且负责验证的实例已把创建时所用的密钥列入 `HERALD_CODE_HASH_KEY_PREVIOUS` | 继续可以验证 |
 
 以这种方式被拒绝的验证码与普通错误验证码同样计数：会减少 `remaining_attempts`，并计入
-`LOCKOUT_FAILED_ATTEMPT_THRESHOLD`。用户需要重新申请验证码。Herald 只用一个密钥验证，没有
-“上一个密钥”的设置项。
+`LOCKOUT_FAILED_ATTEMPT_THRESHOLD`。用户需要重新申请验证码。Herald 只用一个密钥
+（`HERALD_CODE_HASH_KEY`）写入，验证时使用该密钥以及 `HERALD_CODE_HASH_KEY_PREVIOUS` 中
+列出的密钥。
 
 ### 单实例启用
 
@@ -608,13 +613,73 @@ challenge 从创建到验证成功或过期为止，一直保留创建时写入�
 如果可以接受重启期间最长 `CHALLENGE_EXPIRY` 内的验证码被拒绝，也可以跳过第一阶段，直接在
 所有实例上设置密钥。
 
-### 移除密钥、更换密钥或回滚
+### 更换密钥
+
+`HERALD_CODE_HASH_KEY_PREVIOUS` 列出的密钥只用于验证带密钥的摘要，从不用于写入。保存的值
+不记录它由哪个密钥写入，因此 Herald 会用 `HERALD_CODE_HASH_KEY` 和列表中的每个密钥分别比对
+提交的验证码；在所有密钥下都不匹配的验证码是错误验证码。每次验证为每个密钥计算一次
+HMAC-SHA-256。
+
+- 取值是以逗号分隔的列表，最多 4 个密钥。每一项两端的空白会被去掉，空项会被忽略。每个密钥
+  至少 32 字节；长度不足或出现第 5 个密钥时，在任何环境下启动都会失败，错误信息只给出位置和
+  长度，不包含密钥。
+- 包含逗号，或以空白开头或结尾的密钥无法列入。要更换这样的密钥，请使用
+  [移除密钥或回滚](#移除密钥或回滚)中的 verify-only 步骤。
+- 只要还有用某个列出的密钥写入的未完成 challenge，该密钥就与 `HERALD_CODE_HASH_KEY` 同样
+  敏感。同样不要把它放进 Redis，并按下面的步骤及时移除。
+- 所有实例都必须运行支持该变量的版本。v1.8.0 及更早版本会忽略它，开始之前请先升级全部实例。
+
+下文中 `A` 是当前使用的密钥，`B` 是新密钥。
+
+**单实例，或所有实例一起重启**
+
+1. 设置 `HERALD_CODE_HASH_KEY=B` 和 `HERALD_CODE_HASH_KEY_PREVIOUS=A` 并重启。新 challenge
+   用 `B` 写入；用 `A` 写入的 challenge 继续可以验证。
+2. 重启后至少等待 `CHALLENGE_EXPIRY`，再移除 `HERALD_CODE_HASH_KEY_PREVIOUS` 并重启。
+
+**多个实例逐个重启**
+
+验证请求可能落到任何实例，而不一定是创建该 challenge 的实例。如果一个实例已经开始用 `B`
+写入，而另一个实例还只知道 `A`，后者会对正确的验证码返回 `401/invalid` 并消耗一次尝试。
+在新实例上把 `A` 列为 previous 解决不了这个问题：它让新实例能验证旧 challenge，却不能让
+旧实例验证新 challenge。因此在任何实例用 `B` 写入之前，所有实例都必须已经能够验证 `B`，
+也就是说第一步里 `B` 才是“previous”密钥：
+
+1. 在所有实例上设置 `HERALD_CODE_HASH_KEY_PREVIOUS=B`，保持 `HERALD_CODE_HASH_KEY=A`，
+   逐个重启。保存的值没有任何变化。等到所有实例都以这种方式运行（每个实例启动时报告
+   `code_hash_previous_keys: 1`）。
+2. 在所有实例上设置 `HERALD_CODE_HASH_KEY=B` 和 `HERALD_CODE_HASH_KEY_PREVIOUS=A`，逐个
+   重启。已重启的实例用 `B` 写入，仍处于第 1 步的实例通过 previous 密钥验证这些 challenge；
+   仍处于第 1 步的实例用 `A` 写入，已重启的实例同样通过 previous 密钥验证它们。
+3. 第 2 步中最后一个实例重启后，至少等待 `CHALLENGE_EXPIRY`。此后不再有用 `A` 写入的未完成
+   challenge。
+4. 从所有实例上移除 `HERALD_CODE_HASH_KEY_PREVIOUS`，逐个重启。此时可以销毁 `A`。
+
+不要把第 1 步和第 2 步合并，也不要在第 3 步的等待结束之前开始第 4 步：这两种做法都会在最长
+`CHALLENGE_EXPIRY` 的时间内造成[对未完成 challenge 的影响](#对未完成-challenge-的影响)中
+所述的拒绝。
+
+在第 2 步期间回退时，把所有实例逐个改回第 1 步的设置（`HERALD_CODE_HASH_KEY=A`、
+`HERALD_CODE_HASH_KEY_PREVIOUS=B`），并在最后一个实例停止用 `B` 写入之后至少等待
+`CHALLENGE_EXPIRY`，再移除 `B`。从第 1 步回退不需要等待：还没有任何值是用 `B` 写入的。
+
+如果更换 `A` 是因为它可能已被他人获知，第一步会让切换推迟一轮滚动重启。按单步设置让所有
+实例一起重启更快。两种情况下，用 `A` 写入的 challenge 在过期之前，对同时持有 `A` 和保存值
+的人来说仍然可以穷举；把 `A` 列为 previous 不改变这一点。
+
+`HERALD_CODE_HASH_VERIFY_ONLY=true` 可以与该列表同时使用：新 challenge 以 Argon2 保存，
+带密钥的摘要在每个密钥下都能验证。
+
+### 移除密钥或回滚
 
 1. 在所有实例上设置 `HERALD_CODE_HASH_VERIFY_ONLY=true`，保留当前密钥并重启。
 2. 最后一个实例重启后至少等待 `CHALLENGE_EXPIRY`。此后不再有以带密钥摘要保存的未完成
    challenge。
-3. 在所有实例上移除或替换 `HERALD_CODE_HASH_KEY`，或降级到 v1.7.0。替换密钥后，待所有实例
-   都使用新密钥，再移除 `HERALD_CODE_HASH_VERIFY_ONLY`。
+3. 在所有实例上移除 `HERALD_CODE_HASH_KEY` 和 `HERALD_CODE_HASH_KEY_PREVIOUS`，或降级到
+   v1.7.0。
+
+同样的步骤也可用于更换无法列入 `HERALD_CODE_HASH_KEY_PREVIOUS` 的密钥：第 3 步中改为设置
+新密钥而不是移除，待所有实例都使用新密钥后，再移除 `HERALD_CODE_HASH_VERIFY_ONLY`。
 
 跳过这些步骤不会造成持久影响：未完成的带密钥 challenge 会按上文所述被拒绝，并在
 `CHALLENGE_EXPIRY` 内过期。两个方向都不需要修改或删除 Redis 数据。

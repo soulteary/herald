@@ -12,7 +12,7 @@ require (
 	github.com/pterm/pterm v0.12.84
 	github.com/redis/go-redis/v9 v9.23.0
 	github.com/soulteary/audit-kit/v2 v2.1.6
-	github.com/soulteary/challenge-kit v1.13.0
+	github.com/soulteary/challenge-kit v1.14.0
 	github.com/soulteary/cli-kit v1.9.4
 	github.com/soulteary/health-kit/v4 v4.0.7
 	github.com/soulteary/herald-totp/v2 v2.0.4

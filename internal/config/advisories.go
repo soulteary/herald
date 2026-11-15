@@ -36,6 +36,9 @@ func startupAdvisories() []advisory {
 	if message := codeHashVerifyOnlyAdvisory(); message != "" {
 		advisories = append(advisories, advisory{"config.code_hash", message})
 	}
+	if message := codeHashPreviousKeysAdvisory(); message != "" {
+		advisories = append(advisories, advisory{"config.code_hash_previous", message})
+	}
 	return advisories
 }
 
@@ -47,6 +50,26 @@ func codeHashVerifyOnlyAdvisory() string {
 		return ""
 	}
 	return "HERALD_CODE_HASH_VERIFY_ONLY=true has no effect because HERALD_CODE_HASH_KEY is not set: codes are stored with the unkeyed Argon2 hash and keyed digests cannot be verified; set HERALD_CODE_HASH_KEY as well, or remove HERALD_CODE_HASH_VERIFY_ONLY"
+}
+
+// codeHashPreviousKeysAdvisory warns when HERALD_CODE_HASH_KEY_PREVIOUS is
+// set but changes nothing: without a primary key no keyed digest is verified
+// at all, and an entry equal to the primary key adds no key. The message
+// never carries a key.
+func codeHashPreviousKeysAdvisory() string {
+	previous := CodeHashPreviousKeys()
+	if len(previous) == 0 {
+		return ""
+	}
+	if CodeHashKey == "" {
+		return "HERALD_CODE_HASH_KEY_PREVIOUS has no effect because HERALD_CODE_HASH_KEY is not set: codes are stored with the unkeyed Argon2 hash and keyed digests cannot be verified, under any key; to keep verifying keyed digests while storing Argon2 hashes, set HERALD_CODE_HASH_KEY and HERALD_CODE_HASH_VERIFY_ONLY=true"
+	}
+	for i, key := range previous {
+		if key == CodeHashKey {
+			return fmt.Sprintf("HERALD_CODE_HASH_KEY_PREVIOUS key %d is the same as HERALD_CODE_HASH_KEY and has no effect: digests under that key are verified already; list the key that is being replaced, or the key that will replace it", i+1)
+		}
+	}
+	return ""
 }
 
 // testModeAdvisory warns when HERALD_TEST_MODE=true is set outside the test
