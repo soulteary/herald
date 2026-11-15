@@ -329,11 +329,12 @@ Herald 创建 OTLP/HTTP 导出器时，只传入 `OTLP_ENDPOINT` 中的主机、
 | `OTEL_EXPORTER_OTLP_COMPRESSION` | 取值 `gzip` 时压缩请求体；其他取值表示不压缩（默认） |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | 取值 `http/json` 时以 JSON 代替 protobuf 发送。`grpc` 不会切换传输方式：Herald 只通过 HTTP 导出 |
 
-有三点限制：
+有两点限制：
 
 - `OTEL_EXPORTER_OTLP_ENDPOINT` 和 `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` 不会改变 span 的发送目标。主机和路径始终取自 `OTLP_ENDPOINT`。
 - 证书和客户端证书变量要求 `OTLP_ENDPOINT` 为 `https://` 形式。如果端点是 `host:port` 或 `http://` 形式，而其中某个变量指向了可用的文件，导出器不会被创建：Herald 记录 `Failed to initialize OpenTelemetry tracing`，不导出任何 span。
-- 当 `OTLP_ENDPOINT` 为 `https://` 时，不要在 Herald 的环境中把 `OTEL_EXPORTER_OTLP_INSECURE` 或 `OTEL_EXPORTER_OTLP_TRACES_INSECURE` 设为 `true`，也不要把上述两个 `..._ENDPOINT` 变量设为 `http://` URL。这种情况下导出器会按这些变量决定协议，把 span 连同已配置的请求头以明文 HTTP 发送到 `OTLP_ENDPOINT` 的主机，而启动日志中显示的仍是 `https://` 端点。
+
+协议同样始终取自 `OTLP_ENDPOINT`。`OTEL_EXPORTER_OTLP_INSECURE`、`OTEL_EXPORTER_OTLP_TRACES_INSECURE`，以及把上述任一 `..._ENDPOINT` 变量设为 `http://` 地址，都不会让 `https://` 形式的 `OTLP_ENDPOINT` 以明文 HTTP 导出；把它们设为 `https://` 地址，也不会让 `host:port` 或 `http://` 形式的端点改用 TLS。
 
 导出器同样遵循 `HTTP_PROXY`、`HTTPS_PROXY` 和 `NO_PROXY`。
 

@@ -138,12 +138,15 @@ func InitTracer(serviceName, serviceVersion string, endpoint Endpoint) (*sdktrac
 		return nil, fmt.Errorf("failed to create resource: %w", err)
 	}
 
+	// WithEndpointURL sets the scheme together with the host, in both
+	// directions: https selects TLS and http selects plain HTTP. WithEndpoint
+	// alone leaves the scheme to the exporter's environment variables, where
+	// OTEL_EXPORTER_OTLP_INSECURE=true or an http:// OTEL_EXPORTER_OTLP_ENDPOINT
+	// would send an https:// OTLP_ENDPOINT's spans and headers in plain text.
+	// The path is set separately so that it is used exactly as configured.
 	opts := []otlptracehttp.Option{
-		otlptracehttp.WithEndpoint(endpoint.Host),
+		otlptracehttp.WithEndpointURL(endpoint.String()),
 		otlptracehttp.WithURLPath(endpoint.Path),
-	}
-	if endpoint.Insecure {
-		opts = append(opts, otlptracehttp.WithInsecure())
 	}
 	exporter, err := otlptrace.New(ctx, otlptracehttp.NewClient(opts...))
 	if err != nil {
