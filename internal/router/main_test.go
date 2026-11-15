@@ -1,8 +1,10 @@
 package router
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"sort"
 	"strings"
 	"testing"
@@ -17,9 +19,6 @@ import (
 // sourceTreeSpool is the default spool location, "./audit-spool", which for a
 // test binary is inside the package directory.
 const sourceTreeSpool = "audit-spool"
-
-// sourceTreeSpoolBefore is the state of that directory before any test ran.
-var sourceTreeSpoolBefore string
 
 // sourceTreeSpoolState describes ./audit-spool: "absent", or its modification
 // time and entry names. Opening a spool there creates and removes a probe
@@ -56,6 +55,12 @@ var requestAllowance = fiber.TestConfig{Timeout: time.Minute, FailOnTimeout: tru
 // "./audit-spool", is relative to the working directory, which for a test
 // binary is the package directory: every run left pending audit records in
 // the source tree, and the next run delivered them again.
+//
+// After the tests it fails the package when ./audit-spool in the package
+// directory was created or written to by any of them, in whatever order they
+// ran. A checkout that ran these tests before the spool was moved still holds
+// that directory; it is compared with its state at the start of the run
+// instead of being reported as created by this run.
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "herald-router-audit-spool-")
 	if err != nil {
@@ -63,33 +68,51 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	config.AuditSpoolDir = dir
-	sourceTreeSpoolBefore = sourceTreeSpoolState()
+	before := sourceTreeSpoolState()
 	code := m.Run()
 	_ = os.RemoveAll(dir)
+	if after := sourceTreeSpoolState(); after != before {
+		fmt.Fprintf(os.Stderr, "the router tests wrote to ./audit-spool in the package directory:\n before: %s\n after:  %s\n", before, after)
+		if code == 0 {
+			code = 1
+		}
+	}
 	os.Exit(code)
 }
 
-// TestRouterTestsDoNotSpoolIntoTheSourceTree builds a router with audit
-// logging enabled, which opens the spool, and checks that the package
-// directory's ./audit-spool was neither created nor written to. A checkout
-// that ran these tests before the spool was moved still holds that directory;
-// it is compared with its state at the start of the run instead of being
-// reported as created by this run.
-func TestRouterTestsDoNotSpoolIntoTheSourceTree(t *testing.T) {
+// spoolCheckEnv marks the process that TestRouterOpensTheConfiguredSpool
+// starts for itself.
+const spoolCheckEnv = "HERALD_ROUTER_SPOOL_CHECK"
+
+// TestRouterOpensTheConfiguredSpool builds a router with audit logging
+// enabled and checks that it opened the spool TestMain configured.
+//
+// The audit writer is created once per process, by the first router that is
+// built, with the configuration of that moment. A test that builds a router
+// with audit logging off can run first, and then no later router opens a
+// spool. The check therefore runs in a process of its own, where this test is
+// the only one.
+func TestRouterOpensTheConfiguredSpool(t *testing.T) {
 	if !config.AuditEnabled {
 		t.Skip("audit logging is disabled")
 	}
+	if os.Getenv(spoolCheckEnv) != "1" {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestRouterOpensTheConfiguredSpool$")
+		cmd.Env = append(os.Environ(), spoolCheckEnv+"=1")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("spool check subprocess: %v\n%s", err, out)
+		}
+		return
+	}
 	redisClient, _ := testutil.NewTestRedisClient()
 	defer func() { _ = redisClient.Close() }()
-	if app := NewRouterWithClient(redisClient, testLogger()); app == nil {
-		t.Fatal("NewRouterWithClient() returned nil")
+	rw := NewRouterWithClientAndHandlers(redisClient, testLogger())
+	if rw == nil || rw.App == nil {
+		t.Fatal("NewRouterWithClientAndHandlers() returned no router")
 	}
-	if after := sourceTreeSpoolState(); after != sourceTreeSpoolBefore {
-		t.Fatalf("the router tests wrote to ./audit-spool in the package directory:\n before: %s\n after:  %s", sourceTreeSpoolBefore, after)
-	}
-	if sourceTreeSpoolBefore != "absent" {
-		t.Log("./audit-spool in the package directory is left over from an earlier test run and was not touched; it can be deleted")
-	}
+	defer func() { _ = rw.Handlers.StopAuditWriter() }()
 	if entries, err := os.ReadDir(config.AuditSpoolDir); err != nil || len(entries) == 0 {
 		t.Fatalf("the temporary spool %q was not used: %v", config.AuditSpoolDir, err)
 	}

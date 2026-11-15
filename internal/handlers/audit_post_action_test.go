@@ -211,6 +211,7 @@ func TestPostActionAuditFailureDoesNotFailRequest(t *testing.T) {
 		return
 	}
 
+	isolateGlobalState(t)
 	config.AuditEnabled = true
 	config.AuditSpoolDir = t.TempDir()
 	config.AuditSpoolMaxBytes = 1 << 20

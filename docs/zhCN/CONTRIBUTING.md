@@ -98,6 +98,7 @@ sudo systemctl start redis
 - Provider 实现必须包含集成测试
 - 总语句覆盖率不得低于 95%（CI 强制检查）
 - 提交 PR 前运行 `go test -race ./...`
+- CI 以随机顺序运行每个包的测试（`-shuffle=on`）并打印种子；`go test -shuffle=<种子> ./internal/<包名>` 可重现同一顺序。`internal/handlers` 中给 `config` 包变量赋值的测试需先调用 `isolateGlobalState(t)`
 
 ## 提交规范
 
