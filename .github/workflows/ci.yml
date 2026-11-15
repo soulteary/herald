@@ -107,7 +107,7 @@ jobs:
       - name: Download dependencies
         run: go mod download
       - name: Run tests (race + coverage)
-        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+        run: go test -race -shuffle=on -coverprofile=coverage.out -covermode=atomic ./...
         if: "!(github.event_name == 'pull_request')"
       - name: Remove stale generated report evidence
         id: report_cleanup
@@ -126,7 +126,7 @@ jobs:
           packages: "./..."
           race: "true"
           coverage_threshold: "95"
-          test_args: "-count=1"
+          test_args: "-count=1 -shuffle=on"
           version: "v1.1.3"
           cover_mode: "atomic"
           commit: "false"

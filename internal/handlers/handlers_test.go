@@ -59,13 +59,7 @@ func testChallengeManager(t *testing.T, redisClient *redis.Client) challengekit.
 }
 
 func TestNewHandlers(t *testing.T) {
-	// Save original config
-	originalSMTPHost := config.SMTPHost
-	originalSMSProvider := config.SMSProvider
-	defer func() {
-		config.SMTPHost = originalSMTPHost
-		config.SMSProvider = originalSMSProvider
-	}()
+	isolateGlobalState(t)
 
 	redisClient := testRedisClient(t)
 	defer func() {

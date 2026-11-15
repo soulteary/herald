@@ -35,6 +35,7 @@ func (p *countingProvider) Validate() error           { return nil }
 
 func newIdemHandlers(t *testing.T, rc *redis.Client) *Handlers {
 	t.Helper()
+	isolateGlobalState(t)
 	config.CodeLength = 6
 	config.MaxAttempts = 5
 	config.ChallengeExpiry = 5 * time.Minute

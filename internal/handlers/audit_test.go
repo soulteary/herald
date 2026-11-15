@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/stretchr/testify/require"
 	"net/http/httptest"
 	"os"
@@ -21,9 +22,20 @@ import (
 	provider "github.com/soulteary/provider-kit"
 )
 
+// TestMain turns audit logging off for the package and fails the run when
+// the tests leave the configuration different from how they found it. A test
+// that assigns to a config variable calls isolateGlobalState first.
 func TestMain(m *testing.M) {
 	config.AuditEnabled = false
-	os.Exit(m.Run())
+	before := captureGlobalState()
+	code := m.Run()
+	if changes := globalStateChanges(before, captureGlobalState()); len(changes) > 0 {
+		fmt.Fprintf(os.Stderr, "package state changed by the tests (call isolateGlobalState in the test that assigns it):\n  %s\n", strings.Join(changes, "\n  "))
+		if code == 0 {
+			code = 1
+		}
+	}
+	os.Exit(code)
 }
 
 // Isolate the singleton audit lifecycle from ordinary OTP unit fixtures.
@@ -44,6 +56,7 @@ func TestAuditUnavailableRejectsBusinessSuccess(t *testing.T) {
 	}
 	healthy := os.Getenv("HERALD_AUDIT_CASE") == "healthy"
 
+	isolateGlobalState(t)
 	config.AuditEnabled = true
 	config.AuditSpoolDir = t.TempDir()
 	config.AuditSpoolMaxBytes = 1
@@ -111,6 +124,7 @@ func TestStrictRevocationSurvivesAuditFailure(t *testing.T) {
 		}
 		return
 	}
+	isolateGlobalState(t)
 	config.AuditEnabled = true
 	config.AuditSpoolDir = t.TempDir()
 	config.AuditSpoolMaxBytes = 1 << 20

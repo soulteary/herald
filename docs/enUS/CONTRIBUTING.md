@@ -99,6 +99,7 @@ Please follow these code standards:
 - Provider implementations must include integration tests
 - Aggregate statement coverage must remain at least 95% (enforced by CI)
 - Run `go test -race ./...` before submitting PRs
+- CI runs the tests of each package in random order (`-shuffle=on`) and prints the seed; `go test -shuffle=<seed> ./internal/<package>` repeats an order. A test in `internal/handlers` that assigns to a variable of the `config` package calls `isolateGlobalState(t)` first
 
 ## Commit Standards
 

@@ -26,6 +26,7 @@ func (p *okProvider) Validate() error           { return nil }
 
 func newClientIPApp(t *testing.T, perIP int) *fiber.App {
 	t.Helper()
+	isolateGlobalState(t)
 	config.CodeLength = 6
 	config.MaxAttempts = 5
 	config.ChallengeExpiry = 5 * time.Minute
