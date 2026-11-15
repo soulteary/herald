@@ -103,6 +103,8 @@ A missing credential does not disable authentication. With `REQUEST_AUTH_MODE=hm
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
 | `HERALD_MAX_CONCURRENT_HASH_OPERATIONS` | Shared creation/v1/v2 verification admission budget per handler instance; positive integer | `4` | No |
+| `HERALD_CODE_HASH_KEY` | Secret that keys the digest of each code stored in Redis (HMAC-SHA-256). Empty keeps the unkeyed Argon2 hash. At least 32 bytes in every environment, or startup fails. The same value on every instance; see [Verification code hash key](#verification-code-hash-key) | (empty) | Recommended |
+| `HERALD_CODE_HASH_VERIFY_ONLY` | With `HERALD_CODE_HASH_KEY` set: keep storing Argon2 hashes for new challenges while keyed digests are still verified. First stage of a rolling change of the key setting and of its rollback | `false` | No |
 | `CHALLENGE_EXPIRY` | Challenge expiry (e.g. `5m`, `300s`). Built-in messages state it in whole minutes, rounded down, and as 1 minute when it is under a minute | `5m` | No |
 | `MAX_ATTEMPTS` | Wrong codes a challenge accepts before it is exhausted and answers `locked` | `5` | No |
 | `LOCKOUT_DURATION` | How long a locked user stays locked, and the window in which exhausted challenges are counted (e.g. `10m`) | `10m` | No |
@@ -233,6 +235,7 @@ each at startup and keeps starting. The `check` field names the warning.
 | `config.test_mode` | `HERALD_TEST_MODE=true` while `ENVIRONMENT` is not `test` (production refuses to start instead) | The flag has no effect on its own: no `debug_code` is returned and the test-code endpoint is not started |
 | `config.totp` | `HERALD_TOTP_ENABLED=true` and `HERALD_TOTP_BASE_URL` is empty | The TOTP proxy is not configured; every `/v1/totp` request answers `503/totp_not_configured` |
 | `config.otlp` | `OTLP_ENABLED=true` and `OTLP_ENDPOINT` is empty | No trace exporter is configured, so no spans are exported |
+| `config.code_hash` | `HERALD_CODE_HASH_VERIFY_ONLY=true` and `HERALD_CODE_HASH_KEY` is empty | The flag has no effect on its own: codes are stored with the unkeyed Argon2 hash and keyed digests cannot be verified |
 
 #### Audit logging
 
@@ -571,6 +574,87 @@ retryable `409/lock_contention` result rather than polling while holding this bu
 Provider delivery starts after the creation slot is released, so a slow provider
 does not reserve hash capacity. Retry with the same idempotency key and a fresh
 HMAC timestamp/nonce. Existing Redis records and client signatures are unchanged.
+
+## Verification code hash key
+
+By default Herald stores an Argon2 hash of each verification code in the
+challenge record (`otp2:ch:*`). Argon2 takes no secret, and a 6-digit code has
+10^6 candidates, so anyone who can read the record while the challenge is
+outstanding (Redis access, a replica, a snapshot or a backup) can find the code
+by trying every candidate offline.
+
+`HERALD_CODE_HASH_KEY` replaces the stored value for new challenges with
+`hmac-sha256$v1$<digest>`, an HMAC-SHA-256 over the challenge ID and the code
+under that key. Without the key the stored value cannot be tested against
+candidate codes. This holds only while the key is unknown to whoever reads
+Redis: with both the key and a stored value the code is recovered at once.
+
+- Generate the key once, for example `openssl rand -hex 32`, keep it in a
+  secret manager and inject the same value into every instance. Do not store it
+  in the Redis instance that holds the challenges or in anything backed up with
+  it. Do not reuse another secret for it.
+- The key must be at least 32 bytes. This is checked in every environment, not
+  only in production: a shorter value stops startup with an error that names
+  `HERALD_CODE_HASH_KEY`. There is no `HERALD_CODE_HASH_KEY_FILE`; like the
+  other secrets it is read from the environment only.
+- Herald never logs the key. The `Configuration initialized` startup line
+  reports the scheme in use as `code_hash`: `argon2`, `hmac-sha256`, or
+  `argon2 (hmac-sha256 verify-only)`.
+- Attempt counting, user lockout, rate limits and expiry are unchanged.
+  Creation and verification still pass through
+  `HERALD_MAX_CONCURRENT_HASH_OPERATIONS`; computing a keyed digest does not
+  use the memory an Argon2 operation needs.
+
+### What happens to outstanding challenges
+
+A challenge keeps the stored value it was created with until it is verified or
+expires, at most `CHALLENGE_EXPIRY` (default `5m`) after creation.
+
+| Change | Challenges created before the change |
+|--------|--------------------------------------|
+| Key set for the first time | Keep verifying. A stored Argon2 hash is always compared with Argon2 |
+| Key removed, or an instance without the key (including v1.7.0 and earlier) receives the request | The correct code is answered `401/invalid` like a wrong code and consumes an attempt, until the challenge expires |
+| Key changed, or instances hold different keys | Same: the correct code is answered `401/invalid` and consumes an attempt, until the challenge expires |
+
+A code refused this way is counted like any wrong code: it reduces
+`remaining_attempts` and counts towards `LOCKOUT_FAILED_ATTEMPT_THRESHOLD`. The
+user has to request a new code. Herald verifies with one key; there is no
+setting for a previous key.
+
+### Enabling on one instance
+
+Set `HERALD_CODE_HASH_KEY` and restart. Challenges created before the restart
+keep verifying, and new ones are stored with the keyed digest.
+
+### Enabling on several instances
+
+During a rolling restart an instance that does not have the key yet (or still
+runs v1.7.0 or earlier) cannot verify a challenge created by an instance that
+has it. To avoid refused codes, change in two stages:
+
+1. Deploy this release to every instance with `HERALD_CODE_HASH_KEY` set and
+   `HERALD_CODE_HASH_VERIFY_ONLY=true`. New challenges are still stored with
+   Argon2, and every instance can verify both forms.
+2. When all instances run that way, remove `HERALD_CODE_HASH_VERIFY_ONLY` and
+   restart them. New challenges are stored with the keyed digest.
+
+Setting the key on all instances at once without the first stage is also
+possible if refused codes for up to `CHALLENGE_EXPIRY` during the restart are
+acceptable.
+
+### Removing the key, changing it, or rolling back
+
+1. Set `HERALD_CODE_HASH_VERIFY_ONLY=true` on every instance, keeping the
+   current key, and restart.
+2. Wait at least `CHALLENGE_EXPIRY` after the last instance restarted. No keyed
+   challenge is outstanding after that.
+3. Remove or replace `HERALD_CODE_HASH_KEY` on every instance, or downgrade to
+   v1.7.0. After replacing the key, remove `HERALD_CODE_HASH_VERIFY_ONLY` once
+   every instance has the new key.
+
+Skipping these steps does no lasting harm: outstanding keyed challenges are
+refused as described above and expire within `CHALLENGE_EXPIRY`. No Redis data
+needs to be changed or deleted in either direction.
 
 ## HMAC identity upgrade
 

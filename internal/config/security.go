@@ -1,6 +1,10 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+
+	challengekit "github.com/soulteary/challenge-kit"
+)
 
 const minimumProductionSecretBytes = 32
 
@@ -23,6 +27,33 @@ func validateProductionSecretMaterial() []string {
 		}
 	}
 	return problems
+}
+
+// CodeHashKeyMinBytes is the shortest HERALD_CODE_HASH_KEY Herald accepts. It
+// is the minimum of the HMAC code hasher in challenge-kit, and applies in
+// every environment: a shorter key cannot be used at all.
+const CodeHashKeyMinBytes = challengekit.HMACCodeHasherMinKeyLen
+
+// codeHashKeyProblems rejects a HERALD_CODE_HASH_KEY that is set but too
+// short. The message carries the length, never the value.
+func codeHashKeyProblems() []string {
+	if CodeHashKey == "" || len([]byte(CodeHashKey)) >= CodeHashKeyMinBytes {
+		return nil
+	}
+	return []string{fmt.Sprintf("HERALD_CODE_HASH_KEY must be at least %d bytes (got %d); unset it to store codes with the unkeyed Argon2 hash", CodeHashKeyMinBytes, len([]byte(CodeHashKey)))}
+}
+
+// CodeHashMode names how new verification codes are stored, for the startup
+// log: "argon2" without a key or in verify-only mode, "hmac-sha256" otherwise.
+func CodeHashMode() string {
+	switch {
+	case CodeHashKey == "":
+		return "argon2"
+	case CodeHashVerifyOnly:
+		return "argon2 (hmac-sha256 verify-only)"
+	default:
+		return "hmac-sha256"
+	}
 }
 
 // strictCredentialProblems prevents a read-only scraping credential from also

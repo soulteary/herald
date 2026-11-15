@@ -33,7 +33,20 @@ func startupAdvisories() []advisory {
 	if message := otlpEndpointAdvisory(); message != "" {
 		advisories = append(advisories, advisory{"config.otlp", message})
 	}
+	if message := codeHashVerifyOnlyAdvisory(); message != "" {
+		advisories = append(advisories, advisory{"config.code_hash", message})
+	}
 	return advisories
+}
+
+// codeHashVerifyOnlyAdvisory warns when the verify-only stage is requested
+// without a key. There is then no keyed digest to verify, and the flag
+// changes nothing.
+func codeHashVerifyOnlyAdvisory() string {
+	if !CodeHashVerifyOnly || CodeHashKey != "" {
+		return ""
+	}
+	return "HERALD_CODE_HASH_VERIFY_ONLY=true has no effect because HERALD_CODE_HASH_KEY is not set: codes are stored with the unkeyed Argon2 hash and keyed digests cannot be verified; set HERALD_CODE_HASH_KEY as well, or remove HERALD_CODE_HASH_VERIFY_ONLY"
 }
 
 // testModeAdvisory warns when HERALD_TEST_MODE=true is set outside the test

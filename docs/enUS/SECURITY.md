@@ -7,7 +7,7 @@ This document explains Herald's security features, security configuration, and b
 ## Implemented Security Features
 
 1. **Challenge-Based Verification**: Uses challenge-verify model to prevent replay attacks and ensure one-time use of verification codes
-2. **Secure Code Storage**: Verification codes are stored as Argon2 hashes, never in plaintext
+2. **Secure Code Storage**: Verification codes are stored as Argon2 hashes, or as HMAC-SHA-256 digests keyed with `HERALD_CODE_HASH_KEY`, never in plaintext
 3. **Multi-Dimensional Rate Limiting**: Rate limiting by user_id, destination (email/phone), and IP address to prevent abuse. The limits are consumed together or not at all, so a request that is rejected (by a limit, a cooldown or a user lock) does not use up another user's or destination's quota
 4. **Service Authentication**: Uses HMAC or API-key request authentication, with optional mTLS as an additional transport policy
 5. **Idempotency Protection**: Prevents duplicate challenge creation and code sending using idempotency keys
@@ -208,7 +208,8 @@ export CLIENT_CERT_MODE=require
 
 ### Verification Code Storage
 
-- **Never stored in plaintext**: All verification codes are hashed using Argon2
+- **Never stored in plaintext**: All verification codes are hashed using Argon2, or stored as a keyed HMAC-SHA-256 digest when `HERALD_CODE_HASH_KEY` is set
+- **Keyed digest (recommended)**: An Argon2 hash takes no secret, and a 6-digit code has only 10^6 candidates, so someone who can read a challenge record in Redis (or a replica, snapshot or backup of it) while the challenge is outstanding can recover the code by trying every candidate. With `HERALD_CODE_HASH_KEY` set, the stored value is an HMAC-SHA-256 over the challenge ID and the code and cannot be tested without the key. The key must be at least 32 bytes, identical on every instance, kept out of the Redis instance that holds the challenges and of its backups, and is never logged. The protection ends if the key is disclosed together with the Redis data. See [deployment](DEPLOYMENT.md#verification-code-hash-key) for enabling it on a running fleet and for what happens to outstanding challenges when the key is set, changed or removed
 - **One-time use**: Challenges are deleted immediately after successful verification
 - **Automatic expiration**: Challenges expire after TTL to prevent stale code usage
 
