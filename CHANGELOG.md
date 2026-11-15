@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `HERALD_CODE_HASH_KEY`. When set, the digest of each verification code
+  stored in Redis is an HMAC-SHA-256 keyed with this value, so a stored value
+  cannot be searched offline without the key. The key must be at least 32
+  bytes in every environment and the same on every instance; it is never
+  logged. Empty (the default) keeps the unkeyed Argon2 hash. Challenges
+  created before the key was set keep verifying. An instance without the key,
+  with a different key, or running v1.7.0 or earlier answers the correct code
+  of a keyed challenge `401/invalid` and consumes an attempt until the
+  challenge expires.
+- Add `HERALD_CODE_HASH_VERIFY_ONLY` (default `false`). With the key set, new
+  challenges are still stored with Argon2 while keyed digests are verified. It
+  is the first stage of enabling, changing or removing the key on several
+  instances without refused codes. Without a key it has no effect and startup
+  logs a `config.code_hash` warning.
+- The `Configuration initialized` log line carries `code_hash`: `argon2`,
+  `hmac-sha256` or `argon2 (hmac-sha256 verify-only)`.
+
+### Changed
+
+- Update challenge-kit from v1.12.0 to v1.13.0. Without `HERALD_CODE_HASH_KEY`
+  codes are hashed and verified as before.
+
 ## [1.7.0] - 2026-11-15
 
 ### Added
