@@ -52,7 +52,7 @@ services:
       - ALL
 
   redis:
-    image: redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+    image: redis:7-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
     # Redis is NOT published to the host by default. Uncomment only if you must
     # reach it from outside the compose network, and protect it with a password.
     # ports:
