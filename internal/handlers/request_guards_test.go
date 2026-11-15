@@ -27,7 +27,7 @@ func TestVerificationRequestGuards(t *testing.T) {
 		app.Post("/v2", h.VerifyChallengeV2)
 		req := httptest.NewRequest("POST", tc.path, bytes.NewBufferString(tc.body))
 		req.Header.Set("Content-Type", "application/json")
-		resp, err := app.Test(req)
+		resp, err := app.Test(req, requestAllowance)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -57,7 +57,7 @@ func TestVerificationChannelAMR(t *testing.T) {
 			}
 			req := httptest.NewRequest("POST", "/verify", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
-			resp, err := app.Test(req)
+			resp, err := app.Test(req, requestAllowance)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -86,7 +86,7 @@ func TestMissingRouteParametersAndRevokeBackend(t *testing.T) {
 		if path == "/code" {
 			method = "GET"
 		}
-		resp, err := app.Test(httptest.NewRequest(method, path, nil))
+		resp, err := app.Test(httptest.NewRequest(method, path, nil), requestAllowance)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -97,7 +97,7 @@ func TestMissingRouteParametersAndRevokeBackend(t *testing.T) {
 	}
 	h.challengeManager = revokeBackend{ManagerInterface: h.challengeManager}
 	app.Post("/revoke/:id", h.RevokeChallenge)
-	resp, err := app.Test(httptest.NewRequest("POST", "/revoke/ch", nil))
+	resp, err := app.Test(httptest.NewRequest("POST", "/revoke/ch", nil), requestAllowance)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -255,7 +255,7 @@ func totpSecurityRequest(t *testing.T, app *fiber.App, method, path, body string
 	t.Helper()
 	req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatal(err)
 	}

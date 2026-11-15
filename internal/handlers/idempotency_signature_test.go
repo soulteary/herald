@@ -48,7 +48,7 @@ func TestSignedIdempotencyKeyCannotBeRewrittenForSecondDelivery(t *testing.T) {
 		// The caller intends client-key for both requests. Only the first request's
 		// transport header is rewritten; the captured signature is unchanged.
 		req.Header.Set(auth.HeaderSignature, auth.SignV3("signing-secret", auth.CanonicalRequest{Method: http.MethodPost, Path: "/v1/otp/challenges", Timestamp: ts, Nonce: nonce, Service: "caller", KeyID: "key", IdempotencyKey: "client-key", Body: []byte(faultBody)}))
-		resp, err := app.Test(req)
+		resp, err := app.Test(req, requestAllowance)
 		if err != nil {
 			t.Fatal(err)
 		}

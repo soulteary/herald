@@ -39,7 +39,7 @@ func identityRequest(t *testing.T, app *fiber.App, keyID, secret, nonce string) 
 		req.Header.Set(auth.HeaderKeyID, keyID)
 	}
 	req.Header.Set("Idempotency-Key", canonical.IdempotencyKey)
-	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
+	resp, err := app.Test(req, requestAllowance)
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)

@@ -58,7 +58,7 @@ func newClientIPApp(t *testing.T, perIP int) *fiber.App {
 func postChallengeIP(app *fiber.App, body string) (int, []byte) {
 	req := httptest.NewRequest("POST", "/v1/otp/challenges", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
+	resp, _ := app.Test(req, requestAllowance)
 	b, _ := io.ReadAll(resp.Body)
 	return resp.StatusCode, b
 }

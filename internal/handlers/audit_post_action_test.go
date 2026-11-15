@@ -176,7 +176,7 @@ func auditTestRequest(t *testing.T, app *fiber.App, path string, body map[string
 	require.NoError(t, err)
 	req := httptest.NewRequest("POST", path, bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req, fiber.TestConfig{Timeout: 5 * time.Second})
+	resp, err := app.Test(req, requestAllowance)
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
 	var decoded map[string]interface{}

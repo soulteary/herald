@@ -195,7 +195,7 @@ func TestHandlers_CreateChallenge_DefaultPurpose(t *testing.T) {
 	req := httptest.NewRequest("POST", "/challenge", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -251,7 +251,7 @@ func TestHandlers_CreateChallenge_Success(t *testing.T) {
 	req := httptest.NewRequest("POST", "/challenge", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -295,7 +295,7 @@ func TestHandlers_CreateChallenge_RateLimitBackendFailureReturns503(t *testing.T
 	req := httptest.NewRequest("POST", "/challenge", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
@@ -358,7 +358,7 @@ func TestHandlers_CreateChallenge_TestMode_ReturnsDebugCode(t *testing.T) {
 	req := httptest.NewRequest("POST", "/challenge", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -429,7 +429,7 @@ func TestHandlers_CreateChallenge_TestModeFalse_NoDebugCode(t *testing.T) {
 	req := httptest.NewRequest("POST", "/challenge", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -504,7 +504,7 @@ func TestHandlers_CreateChallenge_InvalidRequest(t *testing.T) {
 			req := httptest.NewRequest("POST", "/challenge", bytes.NewBuffer(bodyBytes))
 			req.Header.Set("Content-Type", "application/json")
 
-			resp, err := app.Test(req)
+			resp, err := app.Test(req, requestAllowance)
 			if err != nil {
 				t.Fatalf("Test request failed: %v", err)
 			}
@@ -576,7 +576,7 @@ func TestHandlers_VerifyChallenge_Success(t *testing.T) {
 	req := httptest.NewRequest("POST", "/verify", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -707,7 +707,7 @@ func TestHandlers_VerifyChallenge_AMR_ByChannel(t *testing.T) {
 			req := httptest.NewRequest("POST", "/verify", bytes.NewBuffer(bodyBytes))
 			req.Header.Set("Content-Type", "application/json")
 
-			resp, err := app.Test(req)
+			resp, err := app.Test(req, requestAllowance)
 			if err != nil {
 				t.Fatalf("Test request failed: %v", err)
 			}
@@ -798,7 +798,7 @@ func TestHandlers_VerifyChallenge_InvalidRequest(t *testing.T) {
 			req := httptest.NewRequest("POST", "/verify", bytes.NewBuffer(bodyBytes))
 			req.Header.Set("Content-Type", "application/json")
 
-			resp, err := app.Test(req)
+			resp, err := app.Test(req, requestAllowance)
 			if err != nil {
 				t.Fatalf("Test request failed: %v", err)
 			}
@@ -907,7 +907,7 @@ func TestHandlers_RevokeChallenge(t *testing.T) {
 	app.Delete("/challenge/:id", handlers.RevokeChallenge)
 
 	req := httptest.NewRequest("DELETE", "/challenge/"+ch.ID, nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -945,7 +945,7 @@ func TestHandlers_RevokeChallenge_NotFound(t *testing.T) {
 
 	// Try to revoke non-existent challenge
 	req := httptest.NewRequest("DELETE", "/challenge/nonexistent_id", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -971,7 +971,7 @@ func TestHandlers_RevokeChallenge_EmptyID(t *testing.T) {
 	// Test with empty ID (Fiber routing may not match, but test the handler logic)
 	// We'll test by creating a route that can accept empty param
 	req := httptest.NewRequest("DELETE", "/challenge/", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -999,7 +999,7 @@ func TestHandlers_RevokeChallenge_MissingID(t *testing.T) {
 	// so /challenge/ doesn't match the route and returns 404
 	// This is acceptable framework behavior
 	req := httptest.NewRequest("DELETE", "/challenge/", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -1106,7 +1106,7 @@ func TestHandlers_CreateChallenge_IdempotencyCacheError(t *testing.T) {
 	req1.Header.Set("Content-Type", "application/json")
 	req1.Header.Set("Idempotency-Key", idempotencyKey)
 
-	resp1, err := app.Test(req1)
+	resp1, err := app.Test(req1, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -1168,7 +1168,7 @@ func TestHandlers_CreateChallenge_Idempotency(t *testing.T) {
 	req1.Header.Set("Content-Type", "application/json")
 	req1.Header.Set("Idempotency-Key", idempotencyKey)
 
-	resp1, err := app.Test(req1)
+	resp1, err := app.Test(req1, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -1190,7 +1190,7 @@ func TestHandlers_CreateChallenge_Idempotency(t *testing.T) {
 	req2.Header.Set("Content-Type", "application/json")
 	req2.Header.Set("Idempotency-Key", idempotencyKey)
 
-	resp2, err := app.Test(req2)
+	resp2, err := app.Test(req2, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -1258,7 +1258,7 @@ func TestHandlers_CreateChallenge_ClientIPFromRequest(t *testing.T) {
 	req := httptest.NewRequest("POST", "/challenge", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -1315,7 +1315,7 @@ func TestHandlers_CreateChallenge_RateLimit(t *testing.T) {
 		req := httptest.NewRequest("POST", "/challenge", bytes.NewBuffer(bodyBytes))
 		req.Header.Set("Content-Type", "application/json")
 
-		resp, err := app.Test(req)
+		resp, err := app.Test(req, requestAllowance)
 		if err != nil {
 			t.Fatalf("Test request failed: %v", err)
 		}
@@ -1342,7 +1342,7 @@ func TestHandlers_CreateChallenge_RateLimit(t *testing.T) {
 	req := httptest.NewRequest("POST", "/challenge", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -1408,7 +1408,7 @@ func TestHandlers_CreateChallenge_ResendCooldown(t *testing.T) {
 	req1 := httptest.NewRequest("POST", "/challenge", bytes.NewBuffer(bodyBytes))
 	req1.Header.Set("Content-Type", "application/json")
 
-	resp1, err := app.Test(req1)
+	resp1, err := app.Test(req1, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -1422,7 +1422,7 @@ func TestHandlers_CreateChallenge_ResendCooldown(t *testing.T) {
 	req2 := httptest.NewRequest("POST", "/challenge", bytes.NewBuffer(bodyBytes))
 	req2.Header.Set("Content-Type", "application/json")
 
-	resp2, err := app.Test(req2)
+	resp2, err := app.Test(req2, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -1479,7 +1479,7 @@ func TestHandlers_CreateChallenge_InvalidPurpose(t *testing.T) {
 	req := httptest.NewRequest("POST", "/challenge", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -1587,7 +1587,7 @@ func TestHandlers_CreateChallenge_UserLocked(t *testing.T) {
 	req := httptest.NewRequest("POST", "/challenge", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -1697,7 +1697,7 @@ func TestHandlers_CreateChallenge_TemplateErrorFallback(t *testing.T) {
 	req := httptest.NewRequest("POST", "/challenge", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -1756,7 +1756,7 @@ func TestHandlers_CreateChallenge_TemplateFallback(t *testing.T) {
 	req := httptest.NewRequest("POST", "/challenge", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -1819,7 +1819,7 @@ func TestHandlers_GetTestCode(t *testing.T) {
 	app.Get("/test/code/:challenge_id", handlers.GetTestCode)
 
 	req := httptest.NewRequest("GET", "/test/code/"+ch.ID, nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -1842,7 +1842,7 @@ func TestHandlers_GetTestCode(t *testing.T) {
 	// Test with test mode disabled
 	config.TestMode = false
 	req2 := httptest.NewRequest("GET", "/test/code/"+ch.ID, nil)
-	resp2, err := app.Test(req2)
+	resp2, err := app.Test(req2, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -1872,7 +1872,7 @@ func TestHandlers_GetTestCode_EmptyChallengeID(t *testing.T) {
 
 	// Request with path that may yield empty challenge_id (e.g. trailing slash or empty segment)
 	req := httptest.NewRequest("GET", "/test/code/", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -1901,7 +1901,7 @@ func TestHandlers_GetTestCode_CodeNotFound(t *testing.T) {
 	app.Get("/test/code/:challenge_id", handlers.GetTestCode)
 
 	req := httptest.NewRequest("GET", "/test/code/nonexistent_challenge_id_123", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -1962,7 +1962,7 @@ func TestHandlers_VerifyChallenge_RemainingAttempts(t *testing.T) {
 	req := httptest.NewRequest("POST", "/verify", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -2023,7 +2023,7 @@ func checkVerificationExpiredChallenge(t *testing.T, redisClient *redis.Client, 
 	req := httptest.NewRequest("POST", "/verify", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -2096,7 +2096,7 @@ func checkVerificationLockedChallenge(t *testing.T, redisClient *redis.Client, a
 	req := httptest.NewRequest("POST", "/verify", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}
@@ -2147,7 +2147,7 @@ func checkVerificationInvalidCode(t *testing.T, redisClient *redis.Client, app *
 	req := httptest.NewRequest("POST", "/verify", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("Test request failed: %v", err)
 	}

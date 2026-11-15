@@ -54,7 +54,7 @@ func doV2(t *testing.T, h *Handlers, body any) (int, map[string]interface{}) {
 	b, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v2/otp/verifications", bytes.NewBuffer(b))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestVerifyChallengeV1_StillAcceptsUnboundRequest(t *testing.T) {
 	}
 	req := httptest.NewRequest("POST", "/v1/otp/verifications", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, requestAllowance)
 	if err != nil {
 		t.Fatal(err)
 	}

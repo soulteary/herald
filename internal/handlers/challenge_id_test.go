@@ -58,7 +58,7 @@ func TestMalformedChallengeIDIsRefusedBeforeAnyBackendUse(t *testing.T) {
 		}
 		req := httptest.NewRequest("POST", path, bytes.NewReader(payload))
 		req.Header.Set("Content-Type", "application/json")
-		resp, err := f.app.Test(req)
+		resp, err := f.app.Test(req, requestAllowance)
 		require.NoError(t, err)
 		raw, _ := io.ReadAll(resp.Body)
 		var out struct {
@@ -118,7 +118,7 @@ func TestWellFormedChallengeIDsStillReachVerification(t *testing.T) {
 		require.NoError(t, err)
 		req := httptest.NewRequest("POST", "/v1/otp/verifications", bytes.NewReader(payload))
 		req.Header.Set("Content-Type", "application/json")
-		resp, err := f.app.Test(req)
+		resp, err := f.app.Test(req, requestAllowance)
 		require.NoError(t, err)
 		raw, _ := io.ReadAll(resp.Body)
 		var out struct {
@@ -144,7 +144,7 @@ func TestWellFormedChallengeIDsStillReachVerification(t *testing.T) {
 		require.Equal(t, "expired", reason, id)
 
 		req := httptest.NewRequest("POST", "/v1/otp/challenges/"+id+"/revoke", nil)
-		resp, err := f.app.Test(req)
+		resp, err := f.app.Test(req, requestAllowance)
 		require.NoError(t, err)
 		require.Equal(t, fiber.StatusOK, resp.StatusCode, id)
 	}
