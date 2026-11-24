@@ -170,7 +170,7 @@ jobs:
           rm -rf -- .github/test-results
       - name: Test, race and coverage (GTR v1.1.3)
         id: go_test_report
-        uses: soulteary/go-test-report-action@2760569379a1c95a195c602872ba00cd61495d89  # v1.1.3
+        uses: soulteary/go-test-report-action@2760569379a1c95a195c602872ba00cd61495d89 # v1.1.3
         with:
           directory: "."
           packages: "./..."
@@ -180,18 +180,18 @@ jobs:
           version: "v1.1.3"
           cover_mode: "atomic"
           commit: "false"
-      - name: Go quality report (v1.1.4)
+      - name: Go quality report (v1.1.7)
         if: "!cancelled() && steps.report_cleanup.outcome == 'success'"
         id: go_report_card
         uses: soulteary/goreportcard-action@9744d0297ca0116cd4ef83e4ff6f3ba42a65a24d # v1.1.7
         with:
           directory: "."
-          version: "v1.1.4"
+          version: "v1.1.7"
           threshold: "0"
           report: "true"
           commit: "false"
       - name: Restore project Go toolchain
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
           cache: false
