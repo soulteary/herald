@@ -3,7 +3,7 @@
 # Keep the builder aligned with the shared Stargate container baseline.
 # Compile on the build host; GOOS/GOARCH below select the target binary.
 # CGO is disabled, so the Go toolchain need not run under target emulation.
-FROM --platform=$BUILDPLATFORM golang:1.27.4-alpine3.24 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27.4-alpine3.24@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280 AS builder
 
 # Only the packages actually needed to build a CGO_ENABLED=0 static binary.
 # git is used by the Go toolchain for VCS stamping; ca-certificates lets module
@@ -49,7 +49,7 @@ RUN if [ "$USE_UPX" = "1" ]; then \
 # Runtime stage: distroless-style minimal Alpine. No curl/shell tools are added;
 # the container runs as a fixed non-root UID/GID and the healthcheck is defined
 # in docker-compose (or orchestrator) against the app's own /livez endpoint.
-FROM alpine:3.24
+FROM alpine:3.24.4@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
 
 # Create a dedicated non-root user with a fixed, well-known UID/GID so file
 # ownership and PodSecurity policies are predictable across environments.

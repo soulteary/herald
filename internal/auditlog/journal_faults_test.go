@@ -110,7 +110,10 @@ func TestJournalShutdownTimeoutRetainsPendingRecord(t *testing.T) {
 		_ = j.Close()
 		<-j.done
 		select {
-		case <-failures:
+		case err := <-failures:
+			if err == nil {
+				t.Error("backend failure callback received a nil error")
+			}
 		default:
 			t.Error("backend failure was not reported")
 		}
