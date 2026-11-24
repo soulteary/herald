@@ -224,7 +224,9 @@ func (s *Server) shutdown(serveErr <-chan error) error {
 
 	// Wait for the serve goroutine to return so we don't run hooks while the
 	// server is still touching shared resources.
-	<-serveErr
+	if err := <-serveErr; err != nil && s.cfg.Logger != nil {
+		s.cfg.Logger.Error().Err(err).Msg("HTTP listener stopped with an error")
+	}
 
 	// Run shutdown hooks (audit writer flush, tracer shutdown, ...) in order.
 	var firstErr error
