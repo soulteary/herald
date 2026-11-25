@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-11-26
+
+### Dependencies
+
+- `github.com/soulteary/health-kit/v4`: `v4.0.9` → `v4.0.10`.
+- `github.com/soulteary/metrics-kit/v3`: `v3.0.7` → `v3.0.8`.
+- `github.com/soulteary/middleware-kit/v3`: `v3.0.7` → `v3.0.8`.
+- `github.com/soulteary/i18n-kit/v4`: `v4.0.7` → `v4.0.8`.
+- `github.com/soulteary/logger-kit/v3`: `v3.0.7` → `v3.0.8`.
+- `github.com/soulteary/version-kit/v4`: `v4.0.6` → `v4.0.7`.
+
+- `github.com/soulteary/herald-totp/v2`: `v2.0.4` → `v2.0.5`.
+
+The service API, configuration keys and persisted record formats are unchanged by this dependency refresh. Go remains 1.27.4. The release also includes the already-merged HTTP-listener error logging fix and test/operational dependency updates since v1.9.0. middleware-kit v3.0.8 includes the Fiber rate-limit key ownership fix; request-buffer reuse no longer changes retained limiter keys. This does not change the net/http adapter API.
+
+See [upgrade and rollback notes](docs/releases/v1.9.1.md).
+
 ### Changed
 
 - Update the GitHub Actions used by the CI workflow to their current releases,
